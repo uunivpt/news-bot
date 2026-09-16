@@ -17,6 +17,29 @@ def _run_ffmpeg(args: list[str]) -> None:
         raise RuntimeError(f"FFmpeg failed (exit {exc.returncode}): {detail}") from exc
 
 
+def _video_codec_args() -> list[str]:
+    # Conservative H.264/AAC settings for Instagram's remote video fetcher.
+    return [
+        "-c:v", "libx264",
+        "-preset", "medium",
+        "-profile:v", "high",
+        "-level:v", "4.2",
+        "-crf", "20",
+        "-maxrate", "8M",
+        "-bufsize", "16M",
+        "-pix_fmt", "yuv420p",
+    ]
+
+
+def _audio_codec_args() -> list[str]:
+    return [
+        "-c:a", "aac",
+        "-b:a", "128k",
+        "-ar", "44100",
+        "-ac", "2",
+    ]
+
+
 def build_reel(image_paths: list[str], output_path: str, audio_path: str | None = None,
                duration_per_image: float = REEL_DURATION) -> str:
     """Build a vertical MP4 reel with an exact 18-second output duration."""
@@ -26,9 +49,6 @@ def build_reel(image_paths: list[str], output_path: str, audio_path: str | None 
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    # A single still image does not need the concat filter. Using concat with a
-    # looped still can fail on GitHub-hosted FFmpeg builds because the input has
-    # no natural end timestamp. Keep the simple path deterministic.
     if len(image_paths) == 1:
         args = [
             "ffmpeg", "-y",
@@ -44,17 +64,16 @@ def build_reel(image_paths: list[str], output_path: str, audio_path: str | None 
                 f"crop={REEL_WIDTH}:{REEL_HEIGHT},setsar=1,format=yuv420p"
             ),
             "-map", "0:v:0", "-r", str(DEFAULT_FPS),
-            "-c:v", "libx264", "-pix_fmt", "yuv420p",
         ]
+        args += _video_codec_args()
         if audio_path:
-            args += ["-map", "1:a:0", "-c:a", "aac", "-t", str(REEL_DURATION)]
+            args += ["-map", "1:a:0"] + _audio_codec_args() + ["-t", str(REEL_DURATION)]
         else:
             args += ["-an"]
         args += ["-movflags", "+faststart", str(output)]
         _run_ffmpeg(args)
         return str(output)
 
-    # Multi-image path: each input is finite, then concatenated.
     args = ["ffmpeg", "-y"]
     for image in image_paths:
         args += ["-loop", "1", "-t", str(duration_per_image), "-i", image]
@@ -72,11 +91,11 @@ def build_reel(image_paths: list[str], output_path: str, audio_path: str | None 
     args += [
         "-filter_complex", ";".join(filters), "-map", "[vout]",
         "-r", str(DEFAULT_FPS), "-t", str(REEL_DURATION),
-        "-c:v", "libx264", "-pix_fmt", "yuv420p",
     ]
+    args += _video_codec_args()
     if audio_path:
         audio_index = len(image_paths)
-        args += ["-map", f"{audio_index}:a", "-c:a", "aac", "-t", str(REEL_DURATION)]
+        args += ["-map", f"{audio_index}:a"] + _audio_codec_args() + ["-t", str(REEL_DURATION)]
     else:
         args += ["-an"]
     args += ["-movflags", "+faststart", str(output)]
