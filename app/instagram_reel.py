@@ -1,37 +1,26 @@
-"""Create Instagram-ready news reels from generated graphics.
-
-Audio is intentionally supplied as a local/licensed asset by the owner.
-No copyrighted/trending audio is fetched automatically.
-"""
-
+"""Create Instagram-ready news reels from generated graphics."""
 from __future__ import annotations
-
 import subprocess
 from pathlib import Path
-
 
 REEL_WIDTH = 1080
 REEL_HEIGHT = 1920
 DEFAULT_FPS = 30
+REEL_DURATION = 18
 
 
 def build_reel(image_paths: list[str], output_path: str, audio_path: str | None = None,
-               duration_per_image: float = 3.0) -> str:
-    """Build a vertical MP4 reel from one or more images and optional fixed audio."""
+               duration_per_image: float = REEL_DURATION) -> str:
+    """Build a vertical MP4 reel with an exact 18-second output duration."""
     if not image_paths:
         raise ValueError("At least one image is required")
-
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
-
-    # ffmpeg is used for video encoding; images are scaled/cropped to 9:16.
-    inputs: list[str] = []
     args = ["ffmpeg", "-y"]
     for image in image_paths:
         args += ["-loop", "1", "-t", str(duration_per_image), "-i", image]
-        inputs.append(image)
     if audio_path:
-        args += ["-i", audio_path]
+        args += ["-stream_loop", "-1", "-i", audio_path]
 
     filters = []
     for i in range(len(image_paths)):
@@ -41,16 +30,13 @@ def build_reel(image_paths: list[str], output_path: str, audio_path: str | None 
         )
     concat = "".join(f"[v{i}]" for i in range(len(image_paths)))
     filters.append(f"{concat}concat=n={len(image_paths)}:v=1:a=0[vout]")
-
     args += ["-filter_complex", ";".join(filters), "-map", "[vout]", "-r", str(DEFAULT_FPS),
-             "-c:v", "libx264", "-pix_fmt", "yuv420p"]
-
+             "-t", str(REEL_DURATION), "-c:v", "libx264", "-pix_fmt", "yuv420p"]
     if audio_path:
         audio_index = len(image_paths)
-        args += ["-map", f"{audio_index}:a", "-c:a", "aac", "-shortest"]
+        args += ["-map", f"{audio_index}:a", "-c:a", "aac", "-t", str(REEL_DURATION)]
     else:
         args += ["-an"]
-
     args += ["-movflags", "+faststart", str(output)]
     subprocess.run(args, check=True, capture_output=True, text=True)
     return str(output)
