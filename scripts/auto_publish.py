@@ -41,6 +41,7 @@ def audio_path():
 def main():
     db=NewsDatabase(); ai=AIService()
     publish_instagram=os.getenv("PUBLISH_TO_INSTAGRAM","false").strip().lower() in {"1","true","yes"}
+    require_instagram=os.getenv("REQUIRE_INSTAGRAM_PUBLISH","false").strip().lower() in {"1","true","yes"}
     try:
         max_items=max(1,int(os.getenv("MAX_ITEMS","100")))
     except ValueError:
@@ -51,6 +52,7 @@ def main():
         print("Instagram publishing is OFF (PUBLISH_TO_INSTAGRAM=false).")
     print(f"Processing up to {max_items} pending item(s).")
     processed=0
+    instagram_success=0
     for row in rows:
         if processed >= max_items: break
         source=row.get("summary") or row["title"]; ai_summary=row.get("ai_summary"); ai_article=row.get("ai_article")
@@ -63,7 +65,9 @@ def main():
         flags=risk_flags(row["title"],source); decision=publication_status(row["title"],source)
         db.update(int(row["id"]),status=decision,fact_check_status="needs_review" if flags else "pending",fact_check_notes=", ".join(flags) if flags else None)
         processed += 1
-        if decision!="published": continue
+        if decision!="published":
+            print(f"Item {row['id']} not eligible for automatic publication: {decision}; flags={flags}")
+            continue
         db.update(int(row["id"]),published_at_site=datetime.now(timezone.utc).isoformat())
         label=choose_template(row.get("category"),row["title"])
         web=OUT/f"{row['id']}_web.jpg"; reel_img=OUT/f"{row['id']}_reel.jpg"; video=OUT/f"{row['id']}.mp4"
@@ -71,19 +75,28 @@ def main():
         build_graphic(row["title"],row.get("category") or "general",row.get("image_url"),label=label,reel=True,out_path=str(reel_img))
         if publish_instagram:
             if not music:
-                print("Instagram skipped: fixed 18-second audio is unavailable",row["id"])
+                msg=f"Instagram skipped: fixed 18-second audio is unavailable for item {row['id']}"
+                print(msg)
+                if require_instagram: raise RuntimeError(msg)
                 continue
             build_reel([str(reel_img)],str(video),audio_path=music,duration_per_image=18)
             url=upload_video(str(video)) or public_video_url(str(video))
             if not url:
-                print("Instagram skipped: public video URL unavailable",row["id"])
+                msg=f"Instagram skipped: public video URL unavailable for item {row['id']}"
+                print(msg)
+                if require_instagram: raise RuntimeError(msg)
                 continue
             try:
-                print("Instagram result",publish_reel(url,caption({**row,"ai_summary":ai_summary})))
+                result=publish_reel(url,caption({**row,"ai_summary":ai_summary}))
+                instagram_success += 1
+                print("Instagram result",result)
             except Exception as exc:
                 print("Instagram publish failed:",exc)
+                if require_instagram: raise
         else:
             print("Reel generation skipped in safe mode",row["id"])
     db.close()
+    if require_instagram and instagram_success < 1:
+        raise RuntimeError("Instagram test completed without a successful Reel publish. Check the item eligibility and logs above.")
 
 if __name__=="__main__": main()
