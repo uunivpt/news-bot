@@ -13,7 +13,6 @@ from app.meta_instagram import publish_reel
 
 OUT=Path("data/test_instagram"); OUT.mkdir(parents=True,exist_ok=True)
 
-
 def main():
     audio=os.getenv("FIXED_AUDIO_URL","").strip()
     if not audio.startswith(("https://","http://")):
@@ -29,9 +28,10 @@ def main():
     image=OUT/"card.jpg"; img.save(image,quality=92)
     video=OUT/"test_reel.mp4"
     build_reel([str(image)],str(video),audio_path=str(audio_path),duration_per_image=18)
+    print("18-second MP4 created successfully")
     url=upload_video(str(video))
     if not url: raise RuntimeError("Cloudinary video upload returned no public URL")
-    print("Cloudinary video URL created successfully")
+    print("Cloudinary video upload successful")
     result=publish_reel(url,"News Reel — Instagram publishing test")
     print("Instagram publish successful:",result)
 
