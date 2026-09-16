@@ -1,0 +1,30 @@
+name: Test Instagram Reel
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: pip install -r requirements.txt
+      - name: Publish exactly one Reel
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AI_API_URL: ${{ secrets.AI_API_URL }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_MODEL: ${{ secrets.AI_MODEL }}
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          META_INSTAGRAM_ACCOUNT_ID: ${{ secrets.META_INSTAGRAM_ACCOUNT_ID }}
+          META_API_VERSION: ${{ secrets.META_API_VERSION }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_UPLOAD_PRESET: ${{ secrets.CLOUDINARY_UPLOAD_PRESET }}
+          FIXED_AUDIO_PATH: ${{ secrets.FIXED_AUDIO_PATH }}
+          FIXED_AUDIO_URL: ${{ secrets.FIXED_AUDIO_URL }}
+          PUBLISH_TO_INSTAGRAM: 'true'
+          MAX_ITEMS: '1'
+        run: python scripts/auto_publish.py
