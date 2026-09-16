@@ -72,13 +72,21 @@ class NewsDatabase:
     def insert_many(self, items: Iterable[NewsItem]) -> tuple[int, int]:
         added = skipped = 0
         for item in items:
-            if self.insert(item): added += 1
-            else: skipped += 1
+            if self.insert(item):
+                added += 1
+            else:
+                skipped += 1
         return added, skipped
 
     def count(self) -> int:
-        return int(self.conn.execute("SELECT COUNT(*) FROM news_items").fetchone()[0])
+        row = self.conn.execute("SELECT COUNT(*) AS count FROM news_items").fetchone()
+        if self._postgres:
+            return int(row["count"])
+        return int(row[0])
 
     def latest(self, limit: int = 20):
         placeholder = "%s" if self._postgres else "?"
-        return self.conn.execute(f"SELECT * FROM news_items ORDER BY id DESC LIMIT {placeholder}", (limit,)).fetchall()
+        return self.conn.execute(
+            f"SELECT * FROM news_items ORDER BY id DESC LIMIT {placeholder}",
+            (limit,),
+        ).fetchall()
