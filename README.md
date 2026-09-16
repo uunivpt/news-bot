@@ -1,54 +1,31 @@
-# News Bot — Phase 1
+# NewsDesk
 
-A modular, low-cost news collection system.
+Automated source collector and news publishing platform.
 
-## Phase 1 scope
+## Flow
+Telegram/RSS → collector → duplicate check → PostgreSQL → processing → publication policy → website + Reel graphic → optional Instagram publishing.
 
-- Collect new items from configured RSS/Atom feeds.
-- Optionally collect posts from public Telegram channels using their public preview pages.
-- Normalize title, URL, source and publication time.
-- Prevent duplicates using a URL hash and normalized title hash.
-- Store collected items in a local SQLite database.
-- Keep source configuration outside the code in `config/sources.json`.
-- Run once or continuously with a configurable polling interval.
+Public site exposes only published stories. Admin is separate at `/admin/`.
 
-Phase 1 intentionally has **no AI**, publishing, admin dashboard, or automatic article rewriting.
+## Sources
+Configure permitted sources in `config/sources.json`. Do not copy full copyrighted articles; keep source attribution and link to the original source.
 
-## Run locally
+## Environment
+- Database: `DATABASE_URL`
+- Admin: `FLASK_SECRET_KEY`, `ADMIN_USERS_JSON` (username → Werkzeug password hash)
+- Optional AI: `AI_API_URL`, `AI_API_KEY`, `AI_MODEL`
+- Instagram: `META_ACCESS_TOKEN`, `META_INSTAGRAM_ACCOUNT_ID`, optional `META_API_VERSION`
+- Public Reel storage: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_UPLOAD_PRESET`
+- Fixed music: `FIXED_AUDIO_PATH` on the worker. Only use music you have permission to publish.
 
-Python 3.11+ is recommended.
+Generate admin hashes with `python scripts/hash_password.py`.
 
-```bash
-python -m venv .venv
-# Windows: .venv\\Scripts\\activate
-# Linux/macOS: source .venv/bin/activate
-pip install -r requirements.txt
-cp config/sources.example.json config/sources.json
-python run.py --once
-```
+## Automation
+`.github/workflows/process.yml` runs every 10 minutes. It installs ffmpeg, processes pending stories, generates web/Reel graphics and publishes to Instagram only when the required Meta and public-media configuration exists.
 
-For continuous polling:
+## Local test
+`pip install -r requirements.txt`
+`python run.py --once`
+`python scripts/auto_publish.py`
 
-```bash
-python run.py --interval 300
-```
-
-The SQLite database is created at `data/news.db`.
-
-## Adding sources
-
-Edit `config/sources.json` and add RSS/Atom feeds. Telegram public channels can be added by username when their public preview is accessible.
-
-Only collect and reuse material in accordance with each source's terms, permissions, copyright rules and applicable law. The system stores metadata and links by default; it does not copy full articles.
-
-## Tests
-
-```bash
-python -m unittest discover -s tests -v
-```
-
-## Phase 1 data flow
-
-`RSS / public Telegram → collector → normalize → duplicate check → SQLite`
-
-Later phases can consume this database without changing the collection layer.
+The worker uses PostgreSQL when `DATABASE_URL` is present and otherwise falls back to SQLite.
