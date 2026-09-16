@@ -20,5 +20,5 @@ jobs:
           CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
           CLOUDINARY_UPLOAD_PRESET: ${{ secrets.CLOUDINARY_UPLOAD_PRESET }}
           FIXED_AUDIO_URL: ${{ secrets.FIXED_AUDIO_URL }}
-          SKIP_AUDIO: 'true'
+          SKIP_AUDIO: 'false'
         run: python scripts/test_instagram_direct.py
