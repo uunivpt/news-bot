@@ -1,0 +1,16 @@
+{
+  "rss": [
+    {
+      "name": "Example Feed",
+      "url": "https://example.com/rss.xml",
+      "enabled": false
+    }
+  ],
+  "telegram": [
+    {
+      "name": "Example Public Channel",
+      "username": "example_channel",
+      "enabled": false
+    }
+  ]
+}
