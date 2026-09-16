@@ -5,6 +5,16 @@ import feedparser
 from .models import NewsItem
 
 
+def _image(entry: Any) -> str | None:
+    media = entry.get("media_content") or entry.get("media_thumbnail") or []
+    if media and isinstance(media, list):
+        return media[0].get("url")
+    enclosure = entry.get("enclosures") or []
+    if enclosure:
+        return enclosure[0].get("href") or enclosure[0].get("url")
+    return None
+
+
 def collect_rss(source: dict[str, Any]) -> list[NewsItem]:
     feed = feedparser.parse(source["url"])
     if getattr(feed, "bozo", False) and not feed.entries:
@@ -28,6 +38,8 @@ def collect_rss(source: dict[str, Any]) -> list[NewsItem]:
                 published_at=published,
                 summary=summary,
                 external_id=str(external_id),
+                category=source.get("category", "general"),
+                image_url=_image(entry),
             )
         )
     return items
