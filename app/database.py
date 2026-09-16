@@ -60,11 +60,8 @@ class NewsDatabase:
              summary, external_id, url_hash, title_hash, collected_at)
             VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})"""
         if self._postgres:
-            try:
-                self.conn.execute(sql.format(p="%s") + " ON CONFLICT DO NOTHING", params)
-                return self.conn.info.transaction_status == 0
-            except Exception:
-                return False
+            cur = self.conn.execute(sql.format(p="%s") + " ON CONFLICT DO NOTHING", params)
+            return cur.rowcount == 1
         try:
             self.conn.execute(sql.format(p="?"), params)
             self.conn.commit()
