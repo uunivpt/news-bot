@@ -67,14 +67,14 @@ class NewsDatabase:
             from psycopg.rows import dict_row
             self.conn = psycopg.connect(self.database_url, row_factory=dict_row)
             self.conn.autocommit = True
-            # psycopg does not reliably execute a multi-statement schema as one
-            # prepared command, so execute each statement separately.
-            for sql in (SCHEMA, INDEXES):
-                for statement in sql.split(";"):
-                    statement = statement.strip()
-                    if statement:
-                        self.conn.execute(statement)
+            # Existing databases may not have newly added columns. Run migrations
+            # before creating indexes that depend on those columns.
+            self.conn.execute(SCHEMA)
             self._migrate_postgres()
+            for statement in INDEXES.split(";"):
+                statement = statement.strip()
+                if statement:
+                    self.conn.execute(statement)
         else:
             self.path = Path(path)
             self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -82,8 +82,8 @@ class NewsDatabase:
             self.conn = sqlite3.connect(self.path)
             self.conn.row_factory = sqlite3.Row
             self.conn.execute(sqlite_schema)
-            self.conn.executescript(INDEXES)
             self._migrate_sqlite()
+            self.conn.executescript(INDEXES)
             self.conn.commit()
 
     def _migrate_postgres(self) -> None:
