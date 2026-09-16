@@ -21,30 +21,18 @@ def download_and_validate_audio(url: str, path: Path) -> None:
     r.raise_for_status()
     data = r.content
     path.write_bytes(data)
-
     content_type = (r.headers.get("content-type") or "").lower()
     print(f"Audio download: {len(data)} bytes, Content-Type: {content_type}, Final URL: {r.url}")
-
     if data[:1] == b"<" or "text/html" in content_type:
-        raise RuntimeError(
-            "FIXED_AUDIO_URL returned HTML instead of an audio file. "
-            "Use Cloudinary's actual Secure delivery URL for the uploaded MP3 "
-            "(res.cloudinary.com/.../raw/upload/...mp3), not a Media Library/console URL."
-        )
-
+        raise RuntimeError("FIXED_AUDIO_URL returned HTML instead of an audio file.")
     if len(data) < 1024:
-        raise RuntimeError(f"Downloaded audio is suspiciously small ({len(data)} bytes). Check FIXED_AUDIO_URL.")
-
+        raise RuntimeError(f"Downloaded audio is suspiciously small ({len(data)} bytes).")
     probe = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries", "format=format_name,duration", "-of", "default=nw=1", str(path)],
-        capture_output=True,
-        text=True,
+        capture_output=True, text=True,
     )
     if probe.returncode != 0:
-        raise RuntimeError(
-            "Downloaded FIXED_AUDIO_URL is not a valid FFmpeg-readable audio file. "
-            f"ffprobe says: {probe.stderr.strip()}"
-        )
+        raise RuntimeError(f"Downloaded FIXED_AUDIO_URL is not valid audio: {probe.stderr.strip()}")
     print("Audio validation successful:", probe.stdout.strip().replace("\n", ", "))
 
 
@@ -57,15 +45,11 @@ def validate_cloudinary_video(url: str) -> None:
             r.raise_for_status()
             content_type = (r.headers.get("content-type") or "").lower()
             content_length = r.headers.get("content-length", "unknown")
-            print(
-                f"Cloudinary video preflight {attempt + 1}/6: "
-                f"HTTP {r.status_code}, Content-Type: {content_type}, Size: {content_length}"
-            )
+            print(f"Cloudinary video preflight {attempt + 1}/6: HTTP {r.status_code}, Content-Type: {content_type}, Size: {content_length}")
             if "video/mp4" not in content_type:
                 raise RuntimeError(f"Cloudinary URL did not return video/mp4 (got {content_type}).")
             r.close()
             print("Cloudinary video is publicly reachable and ready.")
-            # Give Cloudinary a small propagation window before Meta fetches it.
             time.sleep(10)
             return
         except Exception as exc:
@@ -75,12 +59,16 @@ def validate_cloudinary_video(url: str) -> None:
 
 
 def main():
-    audio = os.getenv("FIXED_AUDIO_URL", "").strip()
-    if not audio.startswith(("https://", "http://")):
-        raise RuntimeError("FIXED_AUDIO_URL must be a full public https:// URL")
-
-    audio_path = OUT / "audio.mp3"
-    download_and_validate_audio(audio, audio_path)
+    skip_audio = os.getenv("SKIP_AUDIO", "true").strip().lower() == "true"
+    audio_path = None
+    if not skip_audio:
+        audio = os.getenv("FIXED_AUDIO_URL", "").strip()
+        if not audio.startswith(("https://", "http://")):
+            raise RuntimeError("FIXED_AUDIO_URL must be a full public https:// URL")
+        audio_path = OUT / "audio.mp3"
+        download_and_validate_audio(audio, audio_path)
+    else:
+        print("Audio test disabled: building a video-only Reel to isolate Instagram processing.")
 
     from PIL import Image, ImageDraw, ImageFont
     img = Image.new("RGB", (1080, 1920), (20, 24, 32))
@@ -93,7 +81,7 @@ def main():
     img.save(image, quality=92)
 
     video = OUT / "test_reel.mp4"
-    build_reel([str(image)], str(video), audio_path=str(audio_path), duration_per_image=18)
+    build_reel([str(image)], str(video), audio_path=audio_path, duration_per_image=18)
     print("18-second MP4 created successfully")
 
     url = upload_video(str(video))
