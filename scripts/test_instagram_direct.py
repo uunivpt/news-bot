@@ -1,5 +1,5 @@
 from __future__ import annotations
-import os, sys, subprocess
+import os, sys, subprocess, time
 from pathlib import Path
 import requests
 
@@ -25,7 +25,6 @@ def download_and_validate_audio(url: str, path: Path) -> None:
     content_type = (r.headers.get("content-type") or "").lower()
     print(f"Audio download: {len(data)} bytes, Content-Type: {content_type}, Final URL: {r.url}")
 
-    # Never send an HTML/error page to FFmpeg as if it were MP3.
     if data[:1] == b"<" or "text/html" in content_type:
         raise RuntimeError(
             "FIXED_AUDIO_URL returned HTML instead of an audio file. "
@@ -36,7 +35,6 @@ def download_and_validate_audio(url: str, path: Path) -> None:
     if len(data) < 1024:
         raise RuntimeError(f"Downloaded audio is suspiciously small ({len(data)} bytes). Check FIXED_AUDIO_URL.")
 
-    # Let ffprobe verify that the downloaded bytes are actually decodable audio.
     probe = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries", "format=format_name,duration", "-of", "default=nw=1", str(path)],
         capture_output=True,
@@ -48,6 +46,32 @@ def download_and_validate_audio(url: str, path: Path) -> None:
             f"ffprobe says: {probe.stderr.strip()}"
         )
     print("Audio validation successful:", probe.stdout.strip().replace("\n", ", "))
+
+
+def validate_cloudinary_video(url: str) -> None:
+    headers = {"User-Agent": "news-bot-instagram-test/1.0"}
+    last_error = None
+    for attempt in range(6):
+        try:
+            r = requests.get(url, headers=headers, timeout=60, allow_redirects=True, stream=True)
+            r.raise_for_status()
+            content_type = (r.headers.get("content-type") or "").lower()
+            content_length = r.headers.get("content-length", "unknown")
+            print(
+                f"Cloudinary video preflight {attempt + 1}/6: "
+                f"HTTP {r.status_code}, Content-Type: {content_type}, Size: {content_length}"
+            )
+            if "video/mp4" not in content_type:
+                raise RuntimeError(f"Cloudinary URL did not return video/mp4 (got {content_type}).")
+            r.close()
+            print("Cloudinary video is publicly reachable and ready.")
+            # Give Cloudinary a small propagation window before Meta fetches it.
+            time.sleep(10)
+            return
+        except Exception as exc:
+            last_error = exc
+            time.sleep(5)
+    raise RuntimeError(f"Cloudinary video preflight failed: {last_error}")
 
 
 def main():
@@ -76,8 +100,9 @@ def main():
     if not url:
         raise RuntimeError("Cloudinary video upload returned no public URL")
     print("Cloudinary video upload successful")
+    validate_cloudinary_video(url)
 
-    result = publish_reel(url, "News Reel — Instagram publishing test")
+    result = publish_reel(url, "News Reel - Instagram publishing test")
     print("Instagram publish successful:", result)
 
 
