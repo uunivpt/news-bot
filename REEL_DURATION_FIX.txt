@@ -1,0 +1,1 @@
+Pipeline rule: Instagram news reels are generated at exactly 18 seconds and use the fixed owner-supplied audio asset when configured via FIXED_AUDIO_PATH or FIXED_AUDIO_URL.
