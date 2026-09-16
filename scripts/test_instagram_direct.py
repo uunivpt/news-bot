@@ -1,7 +1,11 @@
 from __future__ import annotations
-import os
+import os, sys
 from pathlib import Path
 import requests
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from app.instagram_reel import build_reel
 from app.cloudinary_storage import upload_video
@@ -16,7 +20,6 @@ def main():
         raise RuntimeError("FIXED_AUDIO_URL must be a full public https:// URL")
     audio_path=OUT/"audio.mp3"
     r=requests.get(audio,timeout=60); r.raise_for_status(); audio_path.write_bytes(r.content)
-    # Simple neutral test card; no database item is required.
     from PIL import Image, ImageDraw, ImageFont
     img=Image.new("RGB",(1080,1920),(20,24,32)); d=ImageDraw.Draw(img)
     font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",72)
