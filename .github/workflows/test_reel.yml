@@ -1,0 +1,87 @@
+name: Test 18s Reel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: pip install -r requirements.txt
+
+      - name: Download fixed audio and build test image
+        env:
+          FIXED_AUDIO_URL: ${{ secrets.FIXED_AUDIO_URL }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import requests
+          from PIL import Image, ImageDraw, ImageFont
+
+          url = os.environ.get("FIXED_AUDIO_URL", "").strip()
+          if not url.startswith(("https://", "http://")):
+              raise SystemExit("FIXED_AUDIO_URL is not a valid HTTP(S) URL. Re-copy the Cloudinary Secure URL into the GitHub secret.")
+
+          out = Path("data/media")
+          out.mkdir(parents=True, exist_ok=True)
+          r = requests.get(url, timeout=30)
+          r.raise_for_status()
+          audio = out / "fixed_music.mp3"
+          audio.write_bytes(r.content)
+          print(f"Audio download OK: {len(r.content)} bytes")
+
+          img = Image.new("RGB", (1080, 1920), "white")
+          d = ImageDraw.Draw(img)
+          try:
+              font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 64)
+          except Exception:
+              font = ImageFont.load_default()
+          d.text((70, 800), "NEWS REEL TEST", fill="black", font=font)
+          d.text((70, 900), "18 seconds • fixed audio", fill="black", font=font)
+          img.save(out / "test.jpg", quality=92)
+          PY
+
+      - name: Build exact 18-second Reel
+        run: |
+          python - <<'PY'
+          from app.instagram_reel import build_reel
+          build_reel(["data/media/test.jpg"], "data/media/test_18s.mp4", "data/media/fixed_music.mp3", 18)
+          PY
+          DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 data/media/test_18s.mp4)
+          echo "Reel duration: ${DURATION}s"
+          python - "$DURATION" <<'PY'
+          import sys
+          duration = float(sys.argv[1])
+          if abs(duration - 18.0) > 0.15:
+              raise SystemExit(f"Reel is not 18 seconds: {duration}")
+          print("18-second duration check: PASS")
+          PY
+
+      - name: Upload test Reel to Cloudinary (no Instagram publish)
+        env:
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_UPLOAD_PRESET: ${{ secrets.CLOUDINARY_UPLOAD_PRESET }}
+        run: |
+          python - <<'PY'
+          import os
+          from app.cloudinary_storage import upload_video
+          url = upload_video("data/media/test_18s.mp4")
+          if not url:
+              raise SystemExit("Cloudinary upload was not configured")
+          print("Cloudinary video upload: PASS")
+          print("Public video URL was returned successfully (not printing the URL).")
+          PY
+
+      - name: Upload test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: news-pulse-18s-test
+          path: data/media/test_18s.mp4
+          retention-days: 3
