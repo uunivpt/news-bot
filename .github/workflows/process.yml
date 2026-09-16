@@ -26,5 +26,7 @@ jobs:
           CLOUDINARY_UPLOAD_PRESET: ${{ secrets.CLOUDINARY_UPLOAD_PRESET }}
           FIXED_AUDIO_PATH: ${{ secrets.FIXED_AUDIO_PATH }}
           FIXED_AUDIO_URL: ${{ secrets.FIXED_AUDIO_URL }}
-          PUBLISH_TO_INSTAGRAM: 'false'
+          PUBLISH_TO_INSTAGRAM: 'true'
+          REQUIRE_INSTAGRAM_PUBLISH: 'true'
+          MAX_ITEMS: '1'
         run: python scripts/auto_publish.py
