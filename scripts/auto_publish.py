@@ -38,7 +38,9 @@ def main():
         if decision!="published":continue
         db.update(int(row["id"]),published_at_site=datetime.now(timezone.utc).isoformat())
         label=choose_template(row.get("category"),row["title"]); web=OUT/f"{row['id']}_web.jpg"; reel_img=OUT/f"{row['id']}_reel.jpg"; video=OUT/f"{row['id']}.mp4"
-        build_graphic(row["title"],row.get("category") or "general",row.get("image_url"),label=label,out_path=str(web)); build_graphic(row["title"],row.get("category") or "general",row.get("image_url"),label=label,reel=True,out_path=str(reel_img)); build_reel([str(reel_img)],str(video),audio_path=music,duration_per_image=6)
+        build_graphic(row["title"],row.get("category") or "general",row.get("image_url"),label=label,out_path=str(web)); build_graphic(row["title"],row.get("category") or "general",row.get("image_url"),label=label,reel=True,out_path=str(reel_img))
+        # Every Instagram Reel is exactly 18 seconds. The owner-supplied fixed audio is used when configured.
+        build_reel([str(reel_img)],str(video),audio_path=music,duration_per_image=18)
         url=upload_video(str(video)) or public_video_url(str(video))
         if url and os.getenv("META_ACCESS_TOKEN") and os.getenv("META_INSTAGRAM_ACCOUNT_ID"):print("Instagram result",publish_reel(url,caption({**row,"ai_summary":ai_summary})))
         else:print("Instagram pending media storage or Meta credentials",row["id"])
