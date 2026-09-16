@@ -1,9 +1,4 @@
-"""Official Meta Instagram API publishing for Reels.
-
-Uses the Instagram API with Instagram Login (graph.instagram.com) by default.
-The Instagram user ID is resolved from the access token so an app ID/account ID
-mistake does not get sent to /media.
-"""
+"""Instagram Reels publishing helper."""
 from __future__ import annotations
 import os, time
 import requests
@@ -28,7 +23,6 @@ def _raise_meta(r: requests.Response, action: str) -> None:
 
 
 def _resolve_instagram_user(base: str, token: str, configured_account: str) -> str:
-    """Resolve the Instagram user ID belonging to this Instagram Login token."""
     r = requests.get(
         f"{base}/me",
         params={"fields": "id,username", "access_token": token},
@@ -40,13 +34,8 @@ def _resolve_instagram_user(base: str, token: str, configured_account: str) -> s
     username = str(data.get("username", "")).strip()
     if not resolved:
         raise RuntimeError(f"Instagram token/account lookup returned no user id: {data}")
-
-    # Never print the access token. The configured ID is only used as a sanity check.
     if configured_account and configured_account != resolved:
-        print(
-            "Instagram account ID mismatch: configured META_INSTAGRAM_ACCOUNT_ID does "
-            "not match the ID returned by this token. Using the token's Instagram user ID."
-        )
+        print("Instagram account ID mismatch: using the Instagram user ID returned by this token.")
     if username:
         print(f"Instagram account resolved: @{username}")
     print(f"Instagram user ID resolved successfully: {resolved}")
@@ -77,15 +66,22 @@ def publish_reel(video_url: str, caption: str) -> dict:
     container = r.json().get("id")
     if not container:
         raise RuntimeError(f"Instagram did not return a creation container id: {r.json()}")
+    print(f"Instagram media container created: {container}")
 
-    for _ in range(36):
+    # Ask Meta for the detailed processing error fields. The old code only
+    # requested status_code/status, which hid the actual reason for ERROR.
+    for attempt in range(36):
         s = requests.get(
             f"{base}/{container}",
-            params={"fields": "status_code,status", "access_token": token},
+            params={
+                "fields": "id,status_code,status,error_message,error_type,error_subcode",
+                "access_token": token,
+            },
             timeout=30,
         )
         _raise_meta(s, "container status check")
         data = s.json()
+        print(f"Instagram container check {attempt + 1}: {data}")
         if data.get("status_code") == "FINISHED":
             break
         if data.get("status_code") == "ERROR":
