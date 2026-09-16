@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NewsDesk</title>
+<style>
+:root{font-family:Inter,system-ui,sans-serif;background:#f5f7fb;color:#101828}*{box-sizing:border-box}body{margin:0}.top{background:#111827;color:white;padding:18px 5%;display:flex;justify-content:space-between;align-items:center;gap:12px}.brand{font-size:24px;font-weight:800}.wrap{max-width:1200px;margin:24px auto;padding:0 18px}.hero{background:white;border-radius:18px;padding:24px;box-shadow:0 4px 20px #0000000a}.filters{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}.filters input,.filters select,.filters button{padding:11px 13px;border:1px solid #d0d5dd;border-radius:10px;background:white}.filters button{cursor:pointer}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}.card{background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 18px #0000000a}.card img{width:100%;height:170px;object-fit:cover;background:#e5e7eb}.card .body{padding:16px}.meta{font-size:12px;color:#667085;margin-bottom:8px}.card h3{margin:0 0 9px;font-size:18px}.card p{color:#475467;line-height:1.5}.card a{display:inline-block;margin-top:6px;color:#175cd3;text-decoration:none;font-weight:700}.admin{display:none}.admin.on{display:block}.row{display:flex;gap:8px;flex-wrap:wrap}.stats{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}.stat{background:#fff;border-radius:12px;padding:14px 18px}.small{font-size:12px;color:#667085}.danger{color:#b42318}.success{color:#027a48}</style>
+</head>
+<body>
+<header class="top"><div class="brand">NewsDesk</div><button onclick="adminLogin()">Admin</button></header>
+<main class="wrap">
+<section class="hero"><h1>Latest News</h1><p class="small">Source-attributed headlines and summaries. Full articles remain on their original sources.</p>
+<div class="filters"><input id="search" placeholder="Search news..."><select id="category"><option value="all">All categories</option><option>india</option><option>world</option><option>politics</option><option>business</option><option>technology</option><option>sports</option><option>entertainment</option><option>science</option><option>health</option></select><button onclick="loadNews()">Search</button></div></section>
+<section id="admin" class="admin hero"><h2>Admin Dashboard</h2><div id="stats" class="stats"></div><div class="row"><button onclick="loadAdmin()">Refresh</button><button onclick="factCheck()">Run fact-check precheck</button></div><div id="adminList" style="margin-top:18px"></div></section>
+<section style="margin-top:20px"><div id="news" class="grid"></div></section>
+</main>
+<script>
+let token=sessionStorage.getItem('admin_token')||'';
+function headers(){return token?{'X-Admin-Token':token}:{} }
+async function loadNews(){const q=new URLSearchParams({category:category.value,search:search.value,limit:'60'});const r=await fetch('/api/news?'+q,{headers:headers()});const data=await r.json();news.innerHTML=data.map(n=>`<article class="card">${n.image_url?`<img src="${esc(n.image_url)}" loading="lazy">`:''}<div class="body"><div class="meta">${esc(n.category)} · ${esc(n.source_name)} · ${esc(n.published_at||'')}</div><h3>${esc(n.title)}</h3><p>${esc(n.ai_summary||n.summary||'')}</p><a href="${esc(n.url)}" target="_blank" rel="noopener">Read source →</a></div></article>`).join('')||'<p>No published news yet.</p>'}
+async function adminLogin(){const t=prompt('Admin token:');if(!t)return;const r=await fetch('/api/stats',{headers:{'X-Admin-Token':t}});if(!r.ok){alert('Invalid token');return}token=t;sessionStorage.setItem('admin_token',t);admin.classList.add('on');loadAdmin();loadNews()}
+async function loadAdmin(){const s=await fetch('/api/stats',{headers:headers()}).then(r=>r.json());stats.innerHTML=Object.entries(s).map(([k,v])=>`<div class="stat"><b>${v}</b><div class="small">${k}</div></div>`).join('');const q=new URLSearchParams({status:'all',limit:'80'});const data=await fetch('/api/news?'+q,{headers:headers()}).then(r=>r.json());adminList.innerHTML=data.map(n=>`<div class="card" style="padding:14px;margin-bottom:10px"><div class="meta">#${n.id} · ${esc(n.category)} · ${esc(n.status)} · fact: ${esc(n.fact_check_status)}</div><b>${esc(n.title)}</b><div class="small" style="margin:8px 0">${esc(n.source_name)}</div><div class="row"><button onclick="action(${n.id},'approve')">Approve</button><button onclick="action(${n.id},'reject')">Reject</button><button onclick="action(${n.id},'ai')">AI write</button><button onclick="action(${n.id},'publish')">Publish</button></div></div>`).join('')}
+async function action(id,a){const r=await fetch(`/api/news/${id}/${a}`,{method:'POST',headers:headers()});const d=await r.json();if(!r.ok)alert(d.error||'Failed');loadAdmin();loadNews()}
+async function factCheck(){const r=await fetch('/api/fact-check',{method:'POST',headers:headers()});const d=await r.json();alert(d.ok?`Checked ${d.checked} items`:(d.error||'Failed'));loadAdmin()}
+function esc(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+loadNews();
+</script>
+</body></html>
