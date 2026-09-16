@@ -4,16 +4,19 @@
     {
       "name": "Watcher Guru",
       "username": "@WatcherGuru",
+      "category": "business",
       "enabled": true
     },
     {
       "name": "Middle East Spectator",
       "username": "@Middle_East_Spectator",
+      "category": "world",
       "enabled": true
     },
     {
       "name": "Geopolitics Prime",
       "username": "@geopolitics_prime",
+      "category": "politics",
       "enabled": true
     }
   ]
