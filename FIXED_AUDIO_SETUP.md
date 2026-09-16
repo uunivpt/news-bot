@@ -1,0 +1,1 @@
+Use the owner-supplied 18-second News Pulse track for every Instagram reel. Configure FIXED_AUDIO_PATH for a local worker or FIXED_AUDIO_URL for a public asset URL. The reel generator caps output at 18 seconds.
