@@ -68,20 +68,17 @@ def publish_reel(video_url: str, caption: str) -> dict:
         raise RuntimeError(f"Instagram did not return a creation container id: {r.json()}")
     print(f"Instagram media container created: {container}")
 
-    # Ask Meta for the detailed processing error fields. The old code only
-    # requested status_code/status, which hid the actual reason for ERROR.
+    # Instagram's container endpoint supports status_code/status. Do not ask
+    # for unsupported error fields here; doing so causes a misleading HTTP 400.
     for attempt in range(36):
         s = requests.get(
             f"{base}/{container}",
-            params={
-                "fields": "id,status_code,status,error_message,error_type,error_subcode",
-                "access_token": token,
-            },
+            params={"fields": "id,status_code,status", "access_token": token},
             timeout=30,
         )
         _raise_meta(s, "container status check")
         data = s.json()
-        print(f"Instagram container check {attempt + 1}: {data}")
+        print(f"Instagram container check {attempt + 1}: status_code={data.get('status_code')}, status={data.get('status')}")
         if data.get("status_code") == "FINISHED":
             break
         if data.get("status_code") == "ERROR":
