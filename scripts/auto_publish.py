@@ -41,11 +41,18 @@ def audio_path():
 def main():
     db=NewsDatabase(); ai=AIService()
     publish_instagram=os.getenv("PUBLISH_TO_INSTAGRAM","false").strip().lower() in {"1","true","yes"}
-    rows=[dict(r) for r in db.latest(100,status="pending")]
+    try:
+        max_items=max(1,int(os.getenv("MAX_ITEMS","100")))
+    except ValueError:
+        max_items=100
+    rows=[dict(r) for r in db.latest(max_items,status="pending")]
     music=audio_path() if publish_instagram else None
     if not publish_instagram:
         print("Instagram publishing is OFF (PUBLISH_TO_INSTAGRAM=false).")
+    print(f"Processing up to {max_items} pending item(s).")
+    processed=0
     for row in rows:
+        if processed >= max_items: break
         source=row.get("summary") or row["title"]; ai_summary=row.get("ai_summary"); ai_article=row.get("ai_article")
         if ai.enabled:
             try:
@@ -55,6 +62,7 @@ def main():
             except Exception as exc: print("AI skipped:",exc)
         flags=risk_flags(row["title"],source); decision=publication_status(row["title"],source)
         db.update(int(row["id"]),status=decision,fact_check_status="needs_review" if flags else "pending",fact_check_notes=", ".join(flags) if flags else None)
+        processed += 1
         if decision!="published": continue
         db.update(int(row["id"]),published_at_site=datetime.now(timezone.utc).isoformat())
         label=choose_template(row.get("category"),row["title"])
