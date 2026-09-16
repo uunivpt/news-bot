@@ -27,4 +27,5 @@ jobs:
           FIXED_AUDIO_URL: ${{ secrets.FIXED_AUDIO_URL }}
           PUBLISH_TO_INSTAGRAM: 'true'
           MAX_ITEMS: '1'
+          REQUIRE_INSTAGRAM_PUBLISH: 'true'
         run: python scripts/auto_publish.py
