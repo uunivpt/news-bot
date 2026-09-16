@@ -12,6 +12,8 @@ class NewsItem:
     published_at: Optional[str] = None
     summary: Optional[str] = None
     external_id: Optional[str] = None
+    category: str = "general"
+    image_url: Optional[str] = None
 
     @staticmethod
     def now_iso() -> str:
