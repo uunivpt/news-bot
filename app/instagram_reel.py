@@ -18,22 +18,26 @@ def _run_ffmpeg(args: list[str]) -> None:
 
 
 def _video_codec_args() -> list[str]:
-    # Conservative H.264/AAC settings for Instagram's remote video fetcher.
+    # Conservative MP4/H.264 settings for Instagram's remote video processor.
     return [
         "-c:v", "libx264",
         "-preset", "medium",
-        "-profile:v", "high",
-        "-level:v", "4.2",
-        "-crf", "20",
-        "-maxrate", "8M",
-        "-bufsize", "16M",
+        "-profile:v", "baseline",
+        "-level:v", "4.0",
+        "-crf", "21",
+        "-maxrate", "6M",
+        "-bufsize", "12M",
         "-pix_fmt", "yuv420p",
+        "-g", "60",
+        "-keyint_min", "60",
+        "-sc_threshold", "0",
     ]
 
 
 def _audio_codec_args() -> list[str]:
     return [
         "-c:a", "aac",
+        "-profile:a", "aac_low",
         "-b:a", "128k",
         "-ar", "44100",
         "-ac", "2",
@@ -67,10 +71,15 @@ def build_reel(image_paths: list[str], output_path: str, audio_path: str | None 
         ]
         args += _video_codec_args()
         if audio_path:
-            args += ["-map", "1:a:0"] + _audio_codec_args() + ["-t", str(REEL_DURATION)]
+            args += ["-map", "1:a:0"] + _audio_codec_args()
         else:
             args += ["-an"]
-        args += ["-movflags", "+faststart", str(output)]
+        args += [
+            "-t", str(REEL_DURATION),
+            "-movflags", "+faststart",
+            "-video_track_timescale", "90000",
+            str(output),
+        ]
         _run_ffmpeg(args)
         return str(output)
 
@@ -95,9 +104,14 @@ def build_reel(image_paths: list[str], output_path: str, audio_path: str | None 
     args += _video_codec_args()
     if audio_path:
         audio_index = len(image_paths)
-        args += ["-map", f"{audio_index}:a"] + _audio_codec_args() + ["-t", str(REEL_DURATION)]
+        args += ["-map", f"{audio_index}:a"] + _audio_codec_args()
     else:
         args += ["-an"]
-    args += ["-movflags", "+faststart", str(output)]
+    args += [
+        "-t", str(REEL_DURATION),
+        "-movflags", "+faststart",
+        "-video_track_timescale", "90000",
+        str(output),
+    ]
     _run_ffmpeg(args)
     return str(output)
