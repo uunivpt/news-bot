@@ -8,7 +8,16 @@ from bs4 import BeautifulSoup
 from .models import NewsItem
 
 
-HEADERS = {"User-Agent": "news-bot/1.0 (+Phase-1 collector)"}
+HEADERS = {"User-Agent": "news-bot/1.0 (+public-source-collector)"}
+
+
+def _image(message: Any) -> str | None:
+    photo = message.select_one(".tgme_widget_message_photo_wrap")
+    if not photo:
+        return None
+    style = photo.get("style", "")
+    match = re.search(r"url\(['\"]?(.*?)['\"]?\)", style)
+    return match.group(1) if match else None
 
 
 def collect_public_telegram(source: dict[str, Any], timeout: int = 15) -> list[NewsItem]:
@@ -28,9 +37,7 @@ def collect_public_telegram(source: dict[str, Any], timeout: int = 15) -> list[N
             continue
         post_url = urljoin("https://t.me/", post_link.get("href", ""))
         text_node = message.select_one(".tgme_widget_message_text")
-        title = text_node.get_text(" ", strip=True) if text_node else ""
-        if not title:
-            title = "Telegram post"
+        title = text_node.get_text(" ", strip=True) if text_node else "Telegram post"
         post_id_match = re.search(r"/(\d+)$", post_url.rstrip("/"))
         external_id = post_id_match.group(1) if post_id_match else post_url
         date_node = post_link.select_one("time")
@@ -43,6 +50,8 @@ def collect_public_telegram(source: dict[str, Any], timeout: int = 15) -> list[N
                 url=post_url,
                 published_at=published,
                 external_id=external_id,
+                category=source.get("category", "general"),
+                image_url=_image(message),
             )
         )
     return items
