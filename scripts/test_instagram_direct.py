@@ -58,6 +58,21 @@ def validate_cloudinary_video(url: str) -> None:
     raise RuntimeError(f"Cloudinary video preflight failed: {last_error}")
 
 
+def inspect_video(path: Path) -> None:
+    probe = subprocess.run(
+        [
+            "ffprobe", "-v", "error",
+            "-show_entries", "stream=index,codec_name,profile,codec_type,width,height,r_frame_rate,avg_frame_rate,pix_fmt,level,has_b_frames:format=format_name,duration,size",
+            "-of", "json", str(path),
+        ],
+        capture_output=True, text=True,
+    )
+    if probe.returncode != 0:
+        raise RuntimeError(f"Generated MP4 failed ffprobe: {probe.stderr.strip()}")
+    print("Generated MP4 ffprobe:")
+    print(probe.stdout)
+
+
 def main():
     skip_audio = os.getenv("SKIP_AUDIO", "true").strip().lower() == "true"
     audio_path = None
@@ -83,6 +98,7 @@ def main():
     video = OUT / "test_reel.mp4"
     build_reel([str(image)], str(video), audio_path=audio_path, duration_per_image=18)
     print("18-second MP4 created successfully")
+    inspect_video(video)
 
     url = upload_video(str(video))
     if not url:
