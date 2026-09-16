@@ -33,7 +33,10 @@ CREATE TABLE IF NOT EXISTS news_items (
     approved_at TEXT,
     published_at_site TEXT,
     UNIQUE(source_name, external_id)
-);
+)
+"""
+
+INDEXES = """
 CREATE INDEX IF NOT EXISTS idx_news_published_at ON news_items(published_at);
 CREATE INDEX IF NOT EXISTS idx_news_source ON news_items(source_name);
 CREATE INDEX IF NOT EXISTS idx_news_category ON news_items(category);
@@ -64,7 +67,13 @@ class NewsDatabase:
             from psycopg.rows import dict_row
             self.conn = psycopg.connect(self.database_url, row_factory=dict_row)
             self.conn.autocommit = True
-            self.conn.execute(SCHEMA)
+            # psycopg does not reliably execute a multi-statement schema as one
+            # prepared command, so execute each statement separately.
+            for sql in (SCHEMA, INDEXES):
+                for statement in sql.split(";"):
+                    statement = statement.strip()
+                    if statement:
+                        self.conn.execute(statement)
             self._migrate_postgres()
         else:
             self.path = Path(path)
@@ -72,7 +81,8 @@ class NewsDatabase:
             sqlite_schema = SCHEMA.replace("BIGSERIAL PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT")
             self.conn = sqlite3.connect(self.path)
             self.conn.row_factory = sqlite3.Row
-            self.conn.executescript(sqlite_schema)
+            self.conn.execute(sqlite_schema)
+            self.conn.executescript(INDEXES)
             self._migrate_sqlite()
             self.conn.commit()
 
