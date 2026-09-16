@@ -36,6 +36,22 @@ def download_and_validate_audio(url: str, path: Path) -> None:
     print("Audio validation successful:", probe.stdout.strip().replace("\n", ", "))
 
 
+def make_silent_audio(path: Path) -> None:
+    # Instagram Reels publishing expects a normal video/audio container. Use
+    # a known-good silent AAC track to isolate the video from the user's music.
+    result = subprocess.run(
+        [
+            "ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
+            "-t", "18", "-c:a", "aac", "-profile:a", "aac_low", "-b:a", "128k",
+            "-ar", "44100", "-ac", "2", str(path),
+        ],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"Failed to create silent AAC audio: {result.stderr.strip()}")
+    print("Silent AAC audio created for Instagram compatibility test.")
+
+
 def validate_cloudinary_video(url: str) -> None:
     headers = {"User-Agent": "news-bot-instagram-test/1.0"}
     last_error = None
@@ -74,16 +90,10 @@ def inspect_video(path: Path) -> None:
 
 
 def main():
-    skip_audio = os.getenv("SKIP_AUDIO", "true").strip().lower() == "true"
-    audio_path = None
-    if not skip_audio:
-        audio = os.getenv("FIXED_AUDIO_URL", "").strip()
-        if not audio.startswith(("https://", "http://")):
-            raise RuntimeError("FIXED_AUDIO_URL must be a full public https:// URL")
-        audio_path = OUT / "audio.mp3"
-        download_and_validate_audio(audio, audio_path)
-    else:
-        print("Audio test disabled: building a video-only Reel to isolate Instagram processing.")
+    # Do not use the previous no-audio test: Reels publishing may require an
+    # audio stream. First isolate Meta with a known-good silent AAC track.
+    audio_path = OUT / "silent_aac.m4a"
+    make_silent_audio(audio_path)
 
     from PIL import Image, ImageDraw, ImageFont
     img = Image.new("RGB", (1080, 1920), (20, 24, 32))
@@ -96,8 +106,8 @@ def main():
     img.save(image, quality=92)
 
     video = OUT / "test_reel.mp4"
-    build_reel([str(image)], str(video), audio_path=audio_path, duration_per_image=18)
-    print("18-second MP4 created successfully")
+    build_reel([str(image)], str(video), audio_path=str(audio_path), duration_per_image=18)
+    print("18-second MP4 with silent AAC audio created successfully")
     inspect_video(video)
 
     url = upload_video(str(video))
