@@ -34,7 +34,6 @@ def sentences(text: str) -> list[str]:
         item = part.strip(" \t-–—")
         if len(item) < 30 or BAD_LINE_RE.search(item):
             continue
-        # Never publish a final-looking fragment such as: "including the sum, models, and the."
         if TRAILING_FRAGMENT_RE.search(item):
             continue
         result.append(item.rstrip(".!?") + ".")
@@ -80,8 +79,6 @@ def _first_complete_sentence(value: str) -> str:
 
 def make_headline(title: str, source_text: str) -> str:
     value = SPACE_RE.sub(" ", clean_text(title)).strip(" .:-")
-    # Telegram posts frequently put the headline and body in the same field.
-    # Keep only the first complete sentence when the collected title is clearly a full post.
     if value:
         first = _first_complete_sentence(value)
         if first and (len(value.split()) > 18 or len(value) > 140 or first.casefold() != value.casefold()):
@@ -103,14 +100,13 @@ def make_summary(title: str, source_text: str) -> str:
 
 
 def make_article(title: str, source_text: str) -> str:
-    # Use complete sentences only. Do not cut the article at an arbitrary character.
     chosen = select_sentences(source_text, 40)
     if not chosen:
         return ""
     paragraphs: list[str] = []
     first = chosen[:3]
     if first:
-        paragraphs.append(" ".join(first))
+        paragraphs.append(f"What happened: {' '.join(first)}")
     buckets = [chosen[3:8], chosen[8:14], chosen[14:20], chosen[20:28], chosen[28:40]]
     labels = ["Key details", "What is known", "Context", "What comes next", "Additional details"]
     for label, bucket in zip(labels, buckets):
