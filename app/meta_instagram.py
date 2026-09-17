@@ -59,7 +59,9 @@ def _container_status(base: str, token: str, container: str) -> dict:
         timeout=30,
     )
     _raise_meta(r, "container status check")
-    return r.json()
+    data = r.json()
+    print(f"Instagram container HTTP {r.status_code}: {data}")
+    return data
 
 
 def _video_preflight(video_url: str) -> None:
@@ -76,16 +78,16 @@ def _video_preflight(video_url: str) -> None:
         content_type = (r.headers.get("content-type") or "").lower()
         content_length = r.headers.get("content-length", "unknown")
         accept_ranges = r.headers.get("accept-ranges", "unknown")
+        content_range = r.headers.get("content-range", "unknown")
         print(
             "Instagram video preflight: "
             f"HTTP={r.status_code} type={content_type} size={content_length} "
-            f"accept-ranges={accept_ranges} final_url={_safe_url(r.url)}"
+            f"accept-ranges={accept_ranges} content-range={content_range} "
+            f"final_url={_safe_url(r.url)}"
         )
         r.close()
         if "video/mp4" not in content_type:
-            raise RuntimeError(
-                f"Instagram video URL did not return video/mp4; got {content_type!r}"
-            )
+            raise RuntimeError(f"Instagram video URL did not return video/mp4; got {content_type!r}")
     except requests.RequestException as exc:
         raise RuntimeError(f"Instagram video URL is not reachable: {exc}") from exc
 
@@ -149,5 +151,7 @@ def publish_reel(video_url: str, caption: str) -> dict:
     )
     _raise_meta(p, "media publish")
     result = p.json()
+    if isinstance(result, dict):
+        result["container_id"] = container
     print(f"Instagram media published successfully: {result}")
     return result
