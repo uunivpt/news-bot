@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup
 
 from .models import NewsItem
 
-HEADERS = {"User-Agent": "news-bot/1.1 (+public-source-collector)"}
+HEADERS = {"User-Agent": "PoliticsHubNewsBot/1.0 (+public-source-collector)"}
 URL_RE = re.compile(r"https?://[^\s<>()]+", re.I)
 
 
@@ -20,22 +20,18 @@ def _image(message: Any) -> str | None:
     return match.group(1) if match else None
 
 
-def _link_metadata(text: str, timeout: int = 6) -> tuple[str | None, str | None, str | None]:
-    """Use only public page metadata when a Telegram post has no photo.
-
-    We do not scrape/re-publish the linked article body. This is only for a
-    better thumbnail/title/summary candidate for the news card.
-    """
+def _link_metadata(text: str, timeout: int = 6) -> tuple[str | None, str | None, str | None, str | None]:
+    """Read public metadata only; article body is handled later by the AI pipeline."""
     match = URL_RE.search(text or "")
     if not match:
-        return None, None, None
+        return None, None, None, None
     link = match.group(0).rstrip(".,);]}")
     try:
         response = requests.get(link, headers=HEADERS, timeout=timeout, allow_redirects=True)
         response.raise_for_status()
         content_type = (response.headers.get("content-type") or "").lower()
         if "html" not in content_type:
-            return None, None, link
+            return None, None, None, link
         soup = BeautifulSoup(response.text[:2_000_000], "html.parser")
 
         def meta(*names: str) -> str | None:
@@ -48,16 +44,15 @@ def _link_metadata(text: str, timeout: int = 6) -> tuple[str | None, str | None,
         image = meta("og:image", "twitter:image")
         title = meta("og:title", "twitter:title")
         description = meta("og:description", "twitter:description", "description")
-        return image, title, description
+        return image, title, description, response.url
     except Exception:
-        return None, None, link
+        return None, None, None, link
 
 
 def collect_public_telegram(source: dict[str, Any], timeout: int = 15) -> list[NewsItem]:
     username = source["username"].lstrip("@").strip()
     if not username:
         return []
-
     url = f"https://t.me/s/{username}"
     response = requests.get(url, headers=HEADERS, timeout=timeout)
     response.raise_for_status()
@@ -72,18 +67,17 @@ def collect_public_telegram(source: dict[str, Any], timeout: int = 15) -> list[N
         text_node = message.select_one(".tgme_widget_message_text")
         raw_text = text_node.get_text(" ", strip=True) if text_node else "Telegram post"
         title = raw_text
-        summary = None
+        summary = raw_text
         image_url = _image(message)
 
-        # Many Telegram news posts contain only a link. Recover the public
-        # article preview image/title without copying the article body.
-        if not image_url:
-            preview_image, preview_title, preview_description = _link_metadata(raw_text, timeout=min(timeout, 6))
-            image_url = preview_image
+        if URL_RE.search(raw_text):
+            preview_image, preview_title, preview_description, _ = _link_metadata(raw_text, timeout=min(timeout, 6))
+            if not image_url:
+                image_url = preview_image
             if preview_title:
                 title = preview_title
             if preview_description:
-                summary = preview_description
+                summary = f"{preview_description}\n\n{raw_text}"
 
         post_id_match = re.search(r"/(\d+)$", post_url.rstrip("/"))
         external_id = post_id_match.group(1) if post_id_match else post_url
@@ -96,7 +90,7 @@ def collect_public_telegram(source: dict[str, Any], timeout: int = 15) -> list[N
                 title=title[:500],
                 url=post_url,
                 published_at=published,
-                summary=summary,
+                summary=summary[:8000],
                 external_id=external_id,
                 category=source.get("category", "general"),
                 image_url=image_url,
