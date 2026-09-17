@@ -138,7 +138,7 @@ def save_settings():
     if "instagram_interval_minutes" in body:
         try:v=int(body["instagram_interval_minutes"])
         except(TypeError,ValueError):return jsonify({"error":"interval must be a number"}),400
-        if v<5 or v>1440:return jsonify({"error":"interval must be between 5 and 1440 minutes"}),400
+        if v<0 or v>1440:return jsonify({"error":"interval must be between 0 and 1440 minutes"}),400
         values["instagram_interval_minutes"]=str(v)
     if "instagram_selection_mode" in body:
         mode=str(body["instagram_selection_mode"]).lower()
