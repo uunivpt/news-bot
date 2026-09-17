@@ -5,8 +5,6 @@ on:
     - cron: '*/5 * * * *'
   workflow_dispatch:
 
-# Keep only one Instagram publisher active. A new pending run waits while an
-# active upload is allowed to finish safely.
 concurrency:
   group: instagram-publisher
   cancel-in-progress: false
@@ -30,6 +28,7 @@ jobs:
           META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
           META_INSTAGRAM_ACCOUNT_ID: ${{ secrets.META_INSTAGRAM_ACCOUNT_ID }}
           META_API_VERSION: ${{ secrets.META_API_VERSION }}
+          META_API_BASE_URL: ${{ secrets.META_API_BASE_URL }}
           CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
           CLOUDINARY_UPLOAD_PRESET: ${{ secrets.CLOUDINARY_UPLOAD_PRESET }}
           FIXED_AUDIO_PATH: ${{ secrets.FIXED_AUDIO_PATH }}
@@ -38,8 +37,6 @@ jobs:
           PUBLISH_TO_INSTAGRAM: 'true'
           MAX_ITEMS: '1'
           AI_ENRICH_ITEMS: '0'
-          # High workflow ceiling; the real daily limit is controlled from Admin.
-          # This prevents the GitHub workflow from overriding the Admin setting.
           INSTAGRAM_NEW_ITEMS: '100'
           INSTAGRAM_RETRY_ITEMS: '10'
         run: python scripts/auto_publish.py
