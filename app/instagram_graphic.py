@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import requests
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
 
 WIDTH, HEIGHT = 1080, 1350
 REEL_WIDTH, REEL_HEIGHT = 1080, 1920
@@ -67,7 +67,7 @@ def _download_image(url: str | None) -> Image.Image | None:
         parsed = urlparse(url)
         if parsed.scheme not in {"http", "https"}:
             return None
-        r = requests.get(url, timeout=10, headers={"User-Agent": "politicshub.in/1.0"})
+        r = requests.get(url, timeout=15, headers={"User-Agent": "politicshub.in/1.0"})
         r.raise_for_status()
         return Image.open(io.BytesIO(r.content)).convert("RGB")
     except Exception:
@@ -78,6 +78,36 @@ def _cover(base: Image.Image, image: Image.Image, box):
     x1, y1, x2, y2 = box
     fitted = ImageOps.fit(image, (x2 - x1, y2 - y1), method=Image.Resampling.LANCZOS)
     base.paste(fitted, (x1, y1))
+
+
+def _photo_background(image: Image.Image | None) -> Image.Image:
+    """Always return a visual 9:16 background; never fall back to a blank white card."""
+    if image is None:
+        # Neutral editorial texture instead of a blank white screen.
+        bg = Image.new("RGB", (REEL_WIDTH, REEL_HEIGHT), (24, 28, 36))
+        d = ImageDraw.Draw(bg)
+        for x in range(-REEL_HEIGHT, REEL_WIDTH, 120):
+            d.line((x, 0, x + REEL_HEIGHT, REEL_HEIGHT), fill=(42, 48, 58), width=3)
+        return bg
+    return ImageOps.fit(image, (REEL_WIDTH, REEL_HEIGHT), method=Image.Resampling.LANCZOS)
+
+
+def _gradient_overlay(base: Image.Image, top: int = 0, bottom: int = REEL_HEIGHT, strength: int = 205):
+    overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
+    od = ImageDraw.Draw(overlay)
+    height = max(1, bottom - top)
+    for y in range(max(0, top), min(REEL_HEIGHT, bottom)):
+        alpha = int(strength * ((y - top) / height))
+        od.line((0, y, REEL_WIDTH, y), fill=(0, 0, 0, alpha))
+    base.alpha_composite(overlay)
+
+
+def _photo_card(image: Image.Image | None) -> Image.Image:
+    c = _photo_background(image).convert("RGBA")
+    # Slight editorial darkening makes the actual photograph remain visible while text stays readable.
+    shade = Image.new("RGBA", c.size, (0, 0, 0, 55))
+    c.alpha_composite(shade)
+    return c
 
 
 def choose_template(title: str, category: str = "general", summary: str = "") -> str:
@@ -129,46 +159,57 @@ def generate_graphic(title: str, summary: str = "", category: str = "general", s
 
 
 def generate_reel_cards(title: str, summary: str, category: str, image_url: str | None, output_dir: str | Path) -> list[Path]:
-    """Create three information-dense 9:16 cards; no source name/link is rendered."""
+    """Create three photo-led 9:16 news cards with useful information and no source attribution."""
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     image = _download_image(image_url)
-    facts = _wrap(summary or "Latest update from politicshub.in.", _font(38), 900)[:10]
-    title_font, title_lines = _fit_title(title, 900, 5)
+
+    title_font, title_lines = _fit_title(title, 900, 4)
+    body_font = _font(38)
+    facts = _wrap(summary or "Latest update from politicshub.in.", body_font, 860)[:12]
     cards: list[Path] = []
 
-    # Card 1: headline + visual
-    c = Image.new("RGB", (REEL_WIDTH, REEL_HEIGHT), "white")
+    # Card 1 — real news photo + headline.
+    c = _photo_card(image)
     d = ImageDraw.Draw(c)
-    if image:
-        _cover(c, image, (40, 40, 1040, 950))
-    d.text((55, 1000), "politicshub.in", font=_font(34, True), fill=(20, 20, 20))
-    y = 1080
+    _gradient_overlay(c, 850, REEL_HEIGHT, 235)
+    d = ImageDraw.Draw(c)
+    d.rounded_rectangle((55, 75, 350, 145), radius=18, fill=(185, 30, 30, 235))
+    d.text((82, 91), "LATEST NEWS", font=_font(28, True), fill="white")
+    y = 1120
     for line in title_lines:
-        d.text((55, y), line, font=title_font, fill=(8, 8, 8))
-        y += title_font.size + 8
-    p = out / "01_headline.png"; c.save(p, format="PNG", optimize=True); cards.append(p)
+        d.text((55, y), line, font=title_font, fill="white", stroke_width=2, stroke_fill=(0, 0, 0))
+        y += title_font.size + 10
+    d.text((55, 1810), "politicshub.in", font=_font(32, True), fill="white")
+    p = out / "01_headline.png"; c.convert("RGB").save(p, format="PNG", optimize=True); cards.append(p)
 
-    # Card 2: key information
-    c = Image.new("RGB", (REEL_WIDTH, REEL_HEIGHT), "white")
+    # Card 2 — same real photo, blurred/darkened background + readable facts.
+    c = _photo_card(image).filter(ImageFilter.GaussianBlur(radius=2)).convert("RGBA")
+    shade = Image.new("RGBA", c.size, (0, 0, 0, 115)); c.alpha_composite(shade)
     d = ImageDraw.Draw(c)
-    d.text((55, 90), "KEY UPDATE", font=_font(34, True), fill=(20, 20, 20))
-    y = 190
-    for line in facts:
-        d.ellipse((60, y + 12, 78, y + 30), fill=(20, 20, 20))
-        wrapped = _wrap(line, _font(38), 850)
+    d.rounded_rectangle((55, 75, 410, 150), radius=18, fill=(20, 20, 20, 220))
+    d.text((82, 93), "WHAT WE KNOW", font=_font(28, True), fill="white")
+    y = 235
+    # Break summary into actual readable bullet facts, not placeholder text.
+    for fact in facts:
+        wrapped = _wrap(fact, body_font, 820)
+        d.ellipse((62, y + 14, 80, y + 32), fill=(235, 235, 235))
         for part in wrapped:
-            d.text((105, y), part, font=_font(38), fill=(35, 35, 35)); y += 52
-        y += 26
-        if y > 1700: break
-    d.text((55, 1810), "politicshub.in", font=_font(30, True), fill=(20, 20, 20))
-    p = out / "02_key_update.png"; c.save(p, format="PNG", optimize=True); cards.append(p)
+            d.text((110, y), part, font=body_font, fill="white", stroke_width=1, stroke_fill=(0, 0, 0))
+            y += 53
+        y += 24
+        if y > 1650:
+            break
+    d.text((55, 1810), "politicshub.in", font=_font(30, True), fill="white")
+    p = out / "02_key_update.png"; c.convert("RGB").save(p, format="PNG", optimize=True); cards.append(p)
 
-    # Card 3: clean closing/brand card
-    c = Image.new("RGB", (REEL_WIDTH, REEL_HEIGHT), "white")
+    # Card 3 — real photo again + clean closing, never a white brand card.
+    c = _photo_card(image)
     d = ImageDraw.Draw(c)
-    d.text((55, 720), "STAY UPDATED", font=_font(62, True), fill=(10, 10, 10))
-    d.text((55, 830), "politicshub.in", font=_font(70, True), fill=(20, 20, 20))
-    d.text((55, 950), "News • Politics • World • Business • Technology", font=_font(28), fill=(70, 70, 70))
-    p = out / "03_brand.png"; c.save(p, format="PNG", optimize=True); cards.append(p)
+    _gradient_overlay(c, 650, REEL_HEIGHT, 225)
+    d = ImageDraw.Draw(c)
+    d.text((55, 1240), "STAY UPDATED", font=_font(62, True), fill="white", stroke_width=2, stroke_fill=(0, 0, 0))
+    d.text((55, 1345), "politicshub.in", font=_font(72, True), fill="white", stroke_width=2, stroke_fill=(0, 0, 0))
+    d.text((55, 1460), "News • Politics • World • Business • Technology", font=_font(28), fill="white")
+    p = out / "03_brand.png"; c.convert("RGB").save(p, format="PNG", optimize=True); cards.append(p)
     return cards
