@@ -14,6 +14,7 @@ class NewsItem:
     external_id: Optional[str] = None
     category: str = "general"
     image_url: Optional[str] = None
+    public_source: bool = False
 
     @staticmethod
     def now_iso() -> str:
