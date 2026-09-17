@@ -13,10 +13,13 @@ def clean_text(text: str|None)->str:
 def sentences(text:str)->list[str]:
  value=SPACE_RE.sub(" ",clean_text(text).replace("\n"," ")).strip()
  if not value:return []
+ parts=re.split(r"(?<=[.!?])\s+(?=[A-Z0-9\"'‘“])",value)
  result=[]
- for part in re.split(r"(?<=[.!?])\s+(?=[A-Z0-9\"'‘“])",value):
+ for index,part in enumerate(parts):
   item=part.strip(" \t-–—")
-  if len(item)<30 or BAD_LINE_RE.search(item) or TRAILING_FRAGMENT_RE.search(item):continue
+  if len(item)<30 or BAD_LINE_RE.search(item):continue
+  if index==len(parts)-1 and not re.search(r"[.!?][\"'’”)]*$",item):continue
+  if TRAILING_FRAGMENT_RE.search(item):continue
   result.append(item.rstrip(".!?")+".")
  return result
 
@@ -41,9 +44,7 @@ def _first_complete_sentence(value):
  items=sentences(value); return items[0] if items else ""
 
 def _headline_from_sentence(sentence):
- sentence=sentence.rstrip(".!?").strip()
- # Prefer the first clause when a Telegram post's first sentence is too long.
- clauses=re.split(r"\s+(?=[—–-])|,\s+",sentence)
+ sentence=sentence.rstrip(".!?").strip(); clauses=re.split(r"\s+(?=[—–-])|,\s+",sentence)
  for clause in clauses:
   clause=clause.strip(" -–—")
   if 5<=len(clause.split())<=16:return clause
@@ -58,8 +59,7 @@ def make_headline(title,source_text):
   if 4<=len(clause.split())<=18:return clause
  items=sentences(source_text)
  if items:
-  clause=_headline_from_sentence(items[0])
-  return clause[:140].rstrip(" .:-")
+  clause=_headline_from_sentence(items[0]); return clause[:140].rstrip(" .:-")
  return value[:140].rstrip(" .:-") or "Latest news update"
 
 def make_summary(title,source_text):
