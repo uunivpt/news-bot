@@ -28,6 +28,11 @@ jobs:
         env:
           PYTHONPATH: .
         run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Collect fresh news from configured sources
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PYTHONPATH: .
+        run: python run.py --once --config config/sources.json
       - name: Repair legacy published stories with deterministic bot
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
