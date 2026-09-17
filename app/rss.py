@@ -32,7 +32,7 @@ def collect_rss(source: dict[str, Any]) -> list[NewsItem]:
         items.append(
             NewsItem(
                 source_name=source["name"],
-                source_type="rss",
+                source_type=source.get("source_class", "rss"),
                 title=title,
                 url=url,
                 published_at=published,
@@ -40,6 +40,7 @@ def collect_rss(source: dict[str, Any]) -> list[NewsItem]:
                 external_id=str(external_id),
                 category=source.get("category", "general"),
                 image_url=_image(entry),
+                public_source=bool(source.get("public_source", False)),
             )
         )
     return items
