@@ -2,6 +2,7 @@ from __future__ import annotations
 import os, sys, subprocess, re
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -23,7 +24,6 @@ STALE_PROCESSING_MINUTES = 20
 
 
 def _dedupe_caption_text(title: str, text: str) -> str:
-    """Keep title once when AI/source summary repeats the headline."""
     title = re.sub(r"\s+", " ", (title or "")).strip()
     text = re.sub(r"\s+", " ", (text or "")).strip()
     if not text:
@@ -43,7 +43,6 @@ def caption(row):
     title = clean_instagram_text(row.get("title") or "", source_name)
     text = clean_instagram_text(row.get("ai_summary") or row.get("summary") or "", source_name)
     text = _dedupe_caption_text(title, text)
-    # No source names, @handles, JUST IN/BREAKING labels or source credits on Instagram.
     return f"{title}\n\n{text[:700]}\n\npoliticshub.in" if text else f"{title}\n\npoliticshub.in"
 
 
@@ -136,7 +135,6 @@ def process_instagram(db: NewsDatabase, row: dict, music: str | None) -> bool:
             output_dir=OUT / "reel_cards" / str(item_id),
         )
         video = OUT / f"{item_id}.mp4"
-        # One hero card is intentionally used for the complete 18-second Reel.
         build_reel([str(p) for p in cards], str(video), audio_path=music, duration_per_image=18)
         url = upload_video(str(video)) or public_video_url(str(video))
         if not url:
@@ -145,7 +143,7 @@ def process_instagram(db: NewsDatabase, row: dict, music: str | None) -> bool:
         media_id = result.get("id") if isinstance(result, dict) else None
         container_id = result.get("container_id") if isinstance(result, dict) else None
         db.update(item_id, instagram_status="published", instagram_media_id=media_id,
-                  instagram_container_id=container_id,
+                  instagram_container_id=container_id, instagram_selected=0,
                   instagram_published_at=datetime.now(timezone.utc).isoformat(),
                   instagram_error=None, instagram_next_retry_at=None)
         print(f"Instagram LIVE: item {item_id} media={media_id} container={container_id}")
@@ -188,19 +186,35 @@ def _retry_due(row: dict, now: datetime) -> bool:
         return False
 
 
+def _today_bounds():
+    tz = ZoneInfo("Asia/Kolkata")
+    today = datetime.now(tz).date()
+    start = datetime.combine(today, datetime.min.time(), tzinfo=tz).astimezone(timezone.utc)
+    return start, start + timedelta(days=1)
+
+
+def _instagram_candidates(db: NewsDatabase, mode: str, limit: int, now: datetime):
+    if limit <= 0:
+        return []
+    if mode == "manual":
+        rows = [dict(r) for r in db.latest(max(limit * 3, 20), status="published", instagram_status="pending")]
+        return [r for r in rows if int(r.get("instagram_selected") or 0) == 1][:limit]
+    return [dict(r) for r in db.latest(limit, status="published", instagram_status="pending")]
+
+
 def main():
     db = NewsDatabase()
     ai = AIService()
-    publish_instagram = os.getenv("PUBLISH_TO_INSTAGRAM", "false").strip().lower() in {"1", "true", "yes"}
-    publish_website = os.getenv("PUBLISH_WEBSITE", "true").strip().lower() in {"1", "true", "yes"}
+    env_instagram = os.getenv("PUBLISH_TO_INSTAGRAM", "false").strip().lower() in {"1", "true", "yes"}
+    env_website = os.getenv("PUBLISH_WEBSITE", "true").strip().lower() in {"1", "true", "yes"}
+    settings = db.get_settings()
+    publish_instagram = env_instagram and settings.get("instagram_enabled", "true") == "true"
+    publish_website = env_website and settings.get("website_enabled", "true") == "true"
+
     try:
         max_items = max(1, int(os.getenv("MAX_ITEMS", "15")))
     except ValueError:
         max_items = 15
-    try:
-        instagram_items = max(0, int(os.getenv("INSTAGRAM_NEW_ITEMS", "5")))
-    except ValueError:
-        instagram_items = 5
     try:
         ai_items = max(0, int(os.getenv("AI_ENRICH_ITEMS", "5")))
     except ValueError:
@@ -209,7 +223,17 @@ def main():
         retry_limit = max(0, int(os.getenv("INSTAGRAM_RETRY_ITEMS", "10")))
     except ValueError:
         retry_limit = 10
+    try:
+        admin_daily_limit = max(0, int(settings.get("instagram_daily_limit", "5")))
+    except ValueError:
+        admin_daily_limit = 5
+    try:
+        env_daily_limit = max(0, int(os.getenv("INSTAGRAM_NEW_ITEMS", "5")))
+    except ValueError:
+        env_daily_limit = 5
 
+    # The admin limit is the hard cap; the workflow env remains an additional safety cap.
+    daily_limit = min(admin_daily_limit, env_daily_limit) if env_daily_limit else 0
     now = datetime.now(timezone.utc)
     now_iso = now.isoformat()
     music = audio_path() if publish_instagram else None
@@ -224,20 +248,24 @@ def main():
             enrich_with_ai(db, row, ai)
 
     attempted_ids: set[int] = set()
-    if publish_instagram:
+    if publish_instagram and daily_limit > 0:
         _recover_stale_processing(db, now)
-        new_rows = pending[:instagram_items] if publish_website else []
-        for row in new_rows:
+        day_start, day_end = _today_bounds()
+        published_today = db.instagram_daily_count(day_start.isoformat(), day_end.isoformat())
+        remaining = max(0, daily_limit - published_today)
+        mode = settings.get("instagram_selection_mode", "auto")
+        candidates = _instagram_candidates(db, mode, remaining, now)
+        for row in candidates:
             process_instagram(db, row, music)
             attempted_ids.add(int(row["id"]))
+            # Re-check the DB count after every attempt that can become live.
+            published_today = db.instagram_daily_count(day_start.isoformat(), day_end.isoformat())
+            remaining = max(0, daily_limit - published_today)
+            if remaining <= 0:
+                break
 
-        if not publish_website and instagram_items:
-            fresh_rows = [dict(r) for r in db.latest(instagram_items, status="published", instagram_status="pending")]
-            for row in fresh_rows:
-                process_instagram(db, row, music)
-                attempted_ids.add(int(row["id"]))
-
-        if retry_limit:
+        # Failed retries also respect the same daily cap and never retry an item twice in one run.
+        if retry_limit and remaining > 0:
             retry_rows = [dict(r) for r in db.latest(retry_limit, status="published", instagram_status="failed")]
             for row in retry_rows:
                 item_id = int(row["id"])
@@ -245,8 +273,15 @@ def main():
                     continue
                 process_instagram(db, row, music)
                 attempted_ids.add(item_id)
+                published_today = db.instagram_daily_count(day_start.isoformat(), day_end.isoformat())
+                remaining = max(0, daily_limit - published_today)
+                if remaining <= 0:
+                    break
 
-    print(f"Website published={len(pending)}; Instagram attempted={len(attempted_ids) if publish_instagram else 0}")
+    print(
+        f"Website published={len(pending)}; Instagram enabled={publish_instagram}; "
+        f"daily_limit={daily_limit}; Instagram attempted={len(attempted_ids) if publish_instagram else 0}"
+    )
     db.close()
 
 
