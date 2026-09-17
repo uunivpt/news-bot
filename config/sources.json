@@ -5,19 +5,109 @@
       "name": "Watcher Guru",
       "username": "@WatcherGuru",
       "category": "business",
-      "enabled": true
+      "enabled": true,
+      "public_source": false
     },
     {
       "name": "Middle East Spectator",
       "username": "@Middle_East_Spectator",
       "category": "world",
-      "enabled": true
+      "enabled": true,
+      "public_source": false
     },
     {
       "name": "Geopolitics Prime",
       "username": "@geopolitics_prime",
       "category": "politics",
-      "enabled": true
+      "enabled": true,
+      "public_source": false
+    }
+  ],
+  "website": [
+    {
+      "name": "Government of India - PIB",
+      "source_class": "government",
+      "source_type": "government",
+      "category": "india",
+      "enabled": true,
+      "collection_allowed": true,
+      "public_source": true,
+      "allowed_hosts": ["pib.gov.in"],
+      "sections": ["https://www.pib.gov.in/Allrel.aspx?lang=1&reg=1"],
+      "article_path_prefixes": ["/PressReleasePage.aspx", "/PressReleaseDetail.aspx", "/Allrel.aspx", "/newsite/PressReleaseDetail.aspx"],
+      "max_links": 80,
+      "check_every_minutes": 5
+    },
+    {
+      "name": "Ministry of Home Affairs - India",
+      "source_class": "government",
+      "source_type": "government",
+      "category": "india",
+      "enabled": true,
+      "collection_allowed": true,
+      "public_source": true,
+      "allowed_hosts": ["mha.gov.in"],
+      "sections": ["https://www.mha.gov.in/en/commoncontent/press-release-2026"],
+      "article_path_prefixes": ["/en/commoncontent/", "/en/press-releases/", "/en/"],
+      "max_links": 60,
+      "check_every_minutes": 5
+    },
+    {
+      "name": "The White House",
+      "source_class": "government",
+      "source_type": "government",
+      "category": "world",
+      "enabled": true,
+      "collection_allowed": true,
+      "public_source": true,
+      "allowed_hosts": ["whitehouse.gov"],
+      "sections": ["https://www.whitehouse.gov/news/", "https://www.whitehouse.gov/releases/", "https://www.whitehouse.gov/presidential-actions/"],
+      "article_path_prefixes": ["/news/", "/releases/", "/presidential-actions/"],
+      "max_links": 100,
+      "check_every_minutes": 5
+    },
+    {
+      "name": "Government of Russia",
+      "source_class": "government",
+      "source_type": "government",
+      "category": "world",
+      "enabled": true,
+      "collection_allowed": true,
+      "public_source": true,
+      "allowed_hosts": ["government.ru"],
+      "sections": ["https://government.ru/news/"],
+      "article_path_prefixes": ["/news/", "/docs/"],
+      "max_links": 80,
+      "check_every_minutes": 5
+    }
+  ],
+  "private_websites": [
+    {
+      "name": "Hindustan Times",
+      "domain": "hindustantimes.com",
+      "category": "india",
+      "enabled": false,
+      "collection_allowed": false,
+      "public_source": false,
+      "requires_permission": true
+    },
+    {
+      "name": "Times of India",
+      "domain": "timesofindia.indiatimes.com",
+      "category": "india",
+      "enabled": false,
+      "collection_allowed": false,
+      "public_source": false,
+      "requires_permission": true
+    },
+    {
+      "name": "Economic Times",
+      "domain": "economictimes.indiatimes.com",
+      "category": "business",
+      "enabled": false,
+      "collection_allowed": false,
+      "public_source": false,
+      "requires_permission": true
     }
   ]
 }
