@@ -7,7 +7,7 @@ from .models import NewsItem
 from .normalize import fingerprint, normalize_url
 
 CATEGORIES = ("general", "india", "world", "politics", "business", "technology", "sports", "entertainment", "science", "health")
-STATUSES = ("pending", "review", "approved", "published", "rejected")
+STATUSES = ("pending", "published", "rejected")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS news_items (
@@ -32,6 +32,11 @@ CREATE TABLE IF NOT EXISTS news_items (
     fact_check_notes TEXT,
     approved_at TEXT,
     published_at_site TEXT,
+    instagram_status TEXT NOT NULL DEFAULT 'pending',
+    instagram_media_id TEXT,
+    instagram_error TEXT,
+    instagram_published_at TEXT,
+    reel_cloudinary_public_id TEXT,
     UNIQUE(source_name, external_id)
 )
 """
@@ -41,6 +46,8 @@ CREATE INDEX IF NOT EXISTS idx_news_published_at ON news_items(published_at);
 CREATE INDEX IF NOT EXISTS idx_news_source ON news_items(source_name);
 CREATE INDEX IF NOT EXISTS idx_news_category ON news_items(category);
 CREATE INDEX IF NOT EXISTS idx_news_status ON news_items(status);
+CREATE INDEX IF NOT EXISTS idx_news_review ON news_items(fact_check_status);
+CREATE INDEX IF NOT EXISTS idx_news_instagram ON news_items(instagram_status);
 """
 
 MIGRATIONS = {
@@ -53,6 +60,11 @@ MIGRATIONS = {
     "fact_check_notes": "ALTER TABLE news_items ADD COLUMN fact_check_notes TEXT",
     "approved_at": "ALTER TABLE news_items ADD COLUMN approved_at TEXT",
     "published_at_site": "ALTER TABLE news_items ADD COLUMN published_at_site TEXT",
+    "instagram_status": "ALTER TABLE news_items ADD COLUMN instagram_status TEXT NOT NULL DEFAULT 'pending'",
+    "instagram_media_id": "ALTER TABLE news_items ADD COLUMN instagram_media_id TEXT",
+    "instagram_error": "ALTER TABLE news_items ADD COLUMN instagram_error TEXT",
+    "instagram_published_at": "ALTER TABLE news_items ADD COLUMN instagram_published_at TEXT",
+    "reel_cloudinary_public_id": "ALTER TABLE news_items ADD COLUMN reel_cloudinary_public_id TEXT",
 }
 
 
@@ -67,8 +79,6 @@ class NewsDatabase:
             from psycopg.rows import dict_row
             self.conn = psycopg.connect(self.database_url, row_factory=dict_row)
             self.conn.autocommit = True
-            # Existing databases may not have newly added columns. Run migrations
-            # before creating indexes that depend on those columns.
             self.conn.execute(SCHEMA)
             self._migrate_postgres()
             for statement in INDEXES.split(";"):
@@ -139,12 +149,16 @@ class NewsDatabase:
         row = self.conn.execute("SELECT COUNT(*) AS count FROM news_items").fetchone()
         return int(row["count"] if self._postgres else row[0])
 
-    def latest(self, limit: int = 20, category: str | None = None, status: str | None = None, search: str | None = None):
+    def latest(self, limit: int = 20, category: str | None = None, status: str | None = None, search: str | None = None, review_status: str | None = None, instagram_status: str | None = None):
         clauses, params = [], []
         if category and category != "all":
             clauses.append("category = " + ("%s" if self._postgres else "?")); params.append(category)
         if status and status != "all":
             clauses.append("status = " + ("%s" if self._postgres else "?")); params.append(status)
+        if review_status and review_status != "all":
+            clauses.append("fact_check_status = " + ("%s" if self._postgres else "?")); params.append(review_status)
+        if instagram_status and instagram_status != "all":
+            clauses.append("instagram_status = " + ("%s" if self._postgres else "?")); params.append(instagram_status)
         if search:
             ph = "%s" if self._postgres else "?"
             clauses.append(f"(LOWER(title) LIKE LOWER({ph}) OR LOWER(summary) LIKE LOWER({ph}))")
@@ -157,14 +171,20 @@ class NewsDatabase:
         ).fetchall()
 
     def update(self, item_id: int, **fields: Any) -> None:
-        allowed = {"category", "status", "ai_summary", "ai_article", "fact_check_status", "fact_check_notes", "image_url", "approved_at", "published_at_site"}
+        allowed = {
+            "category", "status", "ai_summary", "ai_article", "fact_check_status",
+            "fact_check_notes", "image_url", "approved_at", "published_at_site",
+            "instagram_status", "instagram_media_id", "instagram_error",
+            "instagram_published_at", "reel_cloudinary_public_id",
+        }
         fields = {k: v for k, v in fields.items() if k in allowed}
         if not fields:
             return
         sets, params = [], []
         ph = "%s" if self._postgres else "?"
         for key, value in fields.items():
-            sets.append(f"{key} = {ph}"); params.append(value)
+            sets.append(f"{key} = {ph}")
+            params.append(value)
         params.append(item_id)
         self.conn.execute(f"UPDATE news_items SET {', '.join(sets)} WHERE id = {ph}", params)
         if not self._postgres:
