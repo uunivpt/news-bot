@@ -42,6 +42,16 @@ def _resolve_instagram_user(base: str, token: str, configured_account: str) -> s
     return resolved
 
 
+def _container_status(base: str, token: str, container: str) -> dict:
+    r = requests.get(
+        f"{base}/{container}",
+        params={"fields": "id,status_code,status", "access_token": token},
+        timeout=30,
+    )
+    _raise_meta(r, "container status check")
+    return r.json()
+
+
 def publish_reel(video_url: str, caption: str) -> dict:
     token, configured_account, version, host = _cfg()
     if not token:
@@ -68,24 +78,32 @@ def publish_reel(video_url: str, caption: str) -> dict:
         raise RuntimeError(f"Instagram did not return a creation container id: {r.json()}")
     print(f"Instagram media container created: {container}")
 
-    # Instagram's container endpoint supports status_code/status. Do not ask
-    # for unsupported error fields here; doing so causes a misleading HTTP 400.
-    for attempt in range(36):
-        s = requests.get(
-            f"{base}/{container}",
-            params={"fields": "id,status_code,status", "access_token": token},
-            timeout=30,
+    last_status = {}
+    for attempt in range(48):
+        data = _container_status(base, token, container)
+        last_status = data
+        print(
+            f"Instagram container check {attempt + 1}: "
+            f"status_code={data.get('status_code')}, status={data.get('status')}"
         )
-        _raise_meta(s, "container status check")
-        data = s.json()
-        print(f"Instagram container check {attempt + 1}: status_code={data.get('status_code')}, status={data.get('status')}")
         if data.get("status_code") == "FINISHED":
             break
         if data.get("status_code") == "ERROR":
-            raise RuntimeError(f"Instagram container failed: {data}")
+            # Meta often exposes only ERROR at this endpoint. Fetching the
+            # container with unsupported fields can itself cause a 400, so
+            # preserve the raw supported response and give actionable context.
+            raise RuntimeError(
+                "Instagram container failed before publishing. "
+                f"Container response: {data}. "
+                "The public video URL was reachable, so check the Instagram "
+                "account permissions and Meta's Reel video validation."
+            )
         time.sleep(5)
     else:
-        raise TimeoutError("Instagram media container did not finish in time")
+        raise TimeoutError(
+            "Instagram media container did not finish in time. "
+            f"Last status: {last_status}"
+        )
 
     p = requests.post(
         f"{base}/{account}/media_publish",
