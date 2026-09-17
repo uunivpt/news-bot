@@ -23,7 +23,11 @@ CREATE TABLE IF NOT EXISTS news_items (
  instagram_selected INTEGER NOT NULL DEFAULT 0, UNIQUE(source_name, external_id)
 )
 """
-ADMIN_SCHEMA = "CREATE TABLE IF NOT EXISTS admin_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)"
+ADMIN_SCHEMA = """
+CREATE TABLE IF NOT EXISTS admin_settings (
+ key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL
+)
+"""
 INDEXES = """
 CREATE INDEX IF NOT EXISTS idx_news_published_at ON news_items(published_at);
 CREATE INDEX IF NOT EXISTS idx_news_source ON news_items(source_name);
@@ -55,7 +59,8 @@ class NewsDatabase:
   if self._postgres:
    import psycopg
    from psycopg.rows import dict_row
-   self.conn=psycopg.connect(self.database_url,row_factory=dict_row); self.conn.autocommit=True; self.conn.execute(SCHEMA); self.conn.execute(ADMIN_SCHEMA); self._migrate_postgres()
+   self.conn=psycopg.connect(self.database_url,row_factory=dict_row); self.conn.autocommit=True
+   self.conn.execute(SCHEMA); self.conn.execute(ADMIN_SCHEMA); self._migrate_postgres()
    for statement in INDEXES.split(";"):
     if statement.strip(): self.conn.execute(statement.strip())
   else:
