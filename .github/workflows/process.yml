@@ -24,6 +24,10 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Install Python dependencies
         run: pip install -r requirements.txt
+      - name: Test deterministic newsroom bot
+        env:
+          PYTHONPATH: .
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Publish website, process news and Instagram queue
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
