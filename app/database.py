@@ -41,7 +41,14 @@ CREATE TABLE IF NOT EXISTS news_items (
     instagram_next_retry_at TEXT,
     instagram_container_id TEXT,
     reel_cloudinary_public_id TEXT,
+    instagram_selected INTEGER NOT NULL DEFAULT 0,
     UNIQUE(source_name, external_id)
+)
+
+CREATE TABLE IF NOT EXISTS admin_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL
 )
 """
 
@@ -53,6 +60,7 @@ CREATE INDEX IF NOT EXISTS idx_news_status ON news_items(status);
 CREATE INDEX IF NOT EXISTS idx_news_review ON news_items(fact_check_status);
 CREATE INDEX IF NOT EXISTS idx_news_instagram ON news_items(instagram_status);
 CREATE INDEX IF NOT EXISTS idx_news_instagram_retry ON news_items(instagram_status, instagram_next_retry_at);
+CREATE INDEX IF NOT EXISTS idx_news_instagram_selected ON news_items(instagram_selected, instagram_status);
 """
 
 MIGRATIONS = {
@@ -74,6 +82,13 @@ MIGRATIONS = {
     "instagram_next_retry_at": "ALTER TABLE news_items ADD COLUMN instagram_next_retry_at TEXT",
     "instagram_container_id": "ALTER TABLE news_items ADD COLUMN instagram_container_id TEXT",
     "reel_cloudinary_public_id": "ALTER TABLE news_items ADD COLUMN reel_cloudinary_public_id TEXT",
+    "instagram_selected": "ALTER TABLE news_items ADD COLUMN instagram_selected INTEGER NOT NULL DEFAULT 0",
+}
+
+DEFAULT_SETTINGS = {
+    "instagram_enabled": "true",
+    "instagram_daily_limit": "5",
+    "instagram_selection_mode": "auto",
 }
 
 
@@ -100,10 +115,11 @@ class NewsDatabase:
             sqlite_schema = SCHEMA.replace("BIGSERIAL PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT")
             self.conn = sqlite3.connect(self.path)
             self.conn.row_factory = sqlite3.Row
-            self.conn.execute(sqlite_schema)
+            self.conn.executescript(sqlite_schema)
             self._migrate_sqlite()
             self.conn.executescript(INDEXES)
             self.conn.commit()
+        self._seed_settings()
 
     def _migrate_postgres(self) -> None:
         for sql in MIGRATIONS.values():
@@ -118,6 +134,58 @@ class NewsDatabase:
         for name, sql in MIGRATIONS.items():
             if name not in cols:
                 self.conn.execute(sql)
+
+    def _seed_settings(self) -> None:
+        now = NewsItem.now_iso()
+        for key, value in DEFAULT_SETTINGS.items():
+            if self._postgres:
+                self.conn.execute(
+                    "INSERT INTO admin_settings (key, value, updated_at) VALUES (%s, %s, %s) ON CONFLICT (key) DO NOTHING",
+                    (key, value, now),
+                )
+            else:
+                self.conn.execute(
+                    "INSERT OR IGNORE INTO admin_settings (key, value, updated_at) VALUES (?, ?, ?)",
+                    (key, value, now),
+                )
+        if not self._postgres:
+            self.conn.commit()
+
+    def get_settings(self) -> dict[str, str]:
+        rows = self.conn.execute("SELECT key, value FROM admin_settings").fetchall()
+        result = dict(DEFAULT_SETTINGS)
+        result.update({str(r["key"] if self._postgres else r[0]): str(r["value"] if self._postgres else r[1]) for r in rows})
+        return result
+
+    def get_setting(self, key: str, default: str | None = None) -> str | None:
+        return self.get_settings().get(key, default)
+
+    def set_settings(self, values: dict[str, Any]) -> None:
+        now = NewsItem.now_iso()
+        for key, value in values.items():
+            if key not in DEFAULT_SETTINGS:
+                continue
+            value = str(value)
+            if self._postgres:
+                self.conn.execute(
+                    "INSERT INTO admin_settings (key, value, updated_at) VALUES (%s, %s, %s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=EXCLUDED.updated_at",
+                    (key, value, now),
+                )
+            else:
+                self.conn.execute(
+                    "INSERT INTO admin_settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+                    (key, value, now),
+                )
+        if not self._postgres:
+            self.conn.commit()
+
+    def instagram_daily_count(self, day_start_iso: str, day_end_iso: str) -> int:
+        ph = "%s" if self._postgres else "?"
+        row = self.conn.execute(
+            f"SELECT COUNT(*) AS count FROM news_items WHERE instagram_status='published' AND instagram_published_at >= {ph} AND instagram_published_at < {ph}",
+            (day_start_iso, day_end_iso),
+        ).fetchone()
+        return int(row["count"] if self._postgres else row[0])
 
     def close(self) -> None:
         self.conn.close()
@@ -186,6 +254,7 @@ class NewsDatabase:
             "instagram_status", "instagram_media_id", "instagram_error",
             "instagram_published_at", "instagram_attempts", "instagram_last_attempt_at",
             "instagram_next_retry_at", "instagram_container_id", "reel_cloudinary_public_id",
+            "instagram_selected",
         }
         fields = {k: v for k, v in fields.items() if k in allowed}
         if not fields:
