@@ -89,6 +89,7 @@ DEFAULT_SETTINGS = {
     "instagram_enabled": "true",
     "instagram_daily_limit": "5",
     "instagram_selection_mode": "auto",
+    "website_enabled": "true",
 }
 
 
