@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS news_items (
  title TEXT NOT NULL, url TEXT NOT NULL, normalized_url TEXT NOT NULL, published_at TEXT,
  summary TEXT, external_id TEXT, url_hash TEXT NOT NULL UNIQUE, title_hash TEXT NOT NULL,
  collected_at TEXT NOT NULL, category TEXT NOT NULL DEFAULT 'general', status TEXT NOT NULL DEFAULT 'pending',
- image_url TEXT, ai_summary TEXT, ai_article TEXT, bot_summary TEXT, bot_article TEXT,
+ image_url TEXT, public_source INTEGER NOT NULL DEFAULT 0,
+ ai_summary TEXT, ai_article TEXT, bot_summary TEXT, bot_article TEXT,
  fact_check_status TEXT NOT NULL DEFAULT 'pending', fact_check_notes TEXT, approved_at TEXT, published_at_site TEXT,
  instagram_status TEXT NOT NULL DEFAULT 'pending', instagram_media_id TEXT, instagram_error TEXT,
  instagram_published_at TEXT, instagram_attempts INTEGER NOT NULL DEFAULT 0, instagram_last_attempt_at TEXT,
@@ -35,7 +36,8 @@ CREATE INDEX IF NOT EXISTS idx_news_instagram_selected ON news_items(instagram_s
 """
 MIGRATIONS = {
  "category":"ALTER TABLE news_items ADD COLUMN category TEXT NOT NULL DEFAULT 'general'", "status":"ALTER TABLE news_items ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'",
- "image_url":"ALTER TABLE news_items ADD COLUMN image_url TEXT", "ai_summary":"ALTER TABLE news_items ADD COLUMN ai_summary TEXT", "ai_article":"ALTER TABLE news_items ADD COLUMN ai_article TEXT",
+ "image_url":"ALTER TABLE news_items ADD COLUMN image_url TEXT", "public_source":"ALTER TABLE news_items ADD COLUMN public_source INTEGER NOT NULL DEFAULT 0",
+ "ai_summary":"ALTER TABLE news_items ADD COLUMN ai_summary TEXT", "ai_article":"ALTER TABLE news_items ADD COLUMN ai_article TEXT",
  "bot_summary":"ALTER TABLE news_items ADD COLUMN bot_summary TEXT", "bot_article":"ALTER TABLE news_items ADD COLUMN bot_article TEXT",
  "fact_check_status":"ALTER TABLE news_items ADD COLUMN fact_check_status TEXT NOT NULL DEFAULT 'pending'", "fact_check_notes":"ALTER TABLE news_items ADD COLUMN fact_check_notes TEXT",
  "approved_at":"ALTER TABLE news_items ADD COLUMN approved_at TEXT", "published_at_site":"ALTER TABLE news_items ADD COLUMN published_at_site TEXT",
@@ -92,7 +94,7 @@ class NewsDatabase:
   row=self.conn.execute("SELECT instagram_published_at FROM news_items WHERE instagram_status='published' AND instagram_published_at IS NOT NULL ORDER BY instagram_published_at DESC LIMIT 1").fetchone(); return (row["instagram_published_at"] if self._postgres else row[0]) if row else None
  def close(self):self.conn.close()
  def insert(self,item:NewsItem)->bool:
-  normalized_url=normalize_url(item.url); url_hash,title_hash=fingerprint(normalized_url,item.title); params=(item.source_name,item.source_type,item.title.strip(),item.url,normalized_url,item.published_at,item.summary,item.external_id,url_hash,title_hash,NewsItem.now_iso(),item.category or "general",item.image_url); sql="INSERT INTO news_items (source_name,source_type,title,url,normalized_url,published_at,summary,external_id,url_hash,title_hash,collected_at,category,image_url) VALUES ({p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p})"
+  normalized_url=normalize_url(item.url); url_hash,title_hash=fingerprint(normalized_url,item.title); params=(item.source_name,item.source_type,item.title.strip(),item.url,normalized_url,item.published_at,item.summary,item.external_id,url_hash,title_hash,NewsItem.now_iso(),item.category or "general",item.image_url,1 if item.public_source else 0); sql="INSERT INTO news_items (source_name,source_type,title,url,normalized_url,published_at,summary,external_id,url_hash,title_hash,collected_at,category,image_url,public_source) VALUES ({p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p})"
   if self._postgres:return self.conn.execute(sql.format(p="%s")+" ON CONFLICT DO NOTHING",params).rowcount==1
   try:self.conn.execute(sql.format(p="?"),params); self.conn.commit(); return True
   except sqlite3.IntegrityError:return False
@@ -110,7 +112,7 @@ class NewsDatabase:
   if search:clauses.append(f"(LOWER(title) LIKE LOWER({ph}) OR LOWER(summary) LIKE LOWER({ph}))");params.extend([f"%{search}%",f"%{search}%"])
   where=(" WHERE "+" AND ".join(clauses)) if clauses else ""; return self.conn.execute(f"SELECT * FROM news_items{where} ORDER BY id DESC LIMIT {ph}",(*params,limit)).fetchall()
  def update(self,item_id:int,**fields:Any):
-  allowed={"title","summary","category","status","bot_summary","bot_article","ai_summary","ai_article","fact_check_status","fact_check_notes","image_url","approved_at","published_at_site","instagram_status","instagram_media_id","instagram_error","instagram_published_at","instagram_attempts","instagram_last_attempt_at","instagram_next_retry_at","instagram_container_id","reel_cloudinary_public_id","instagram_selected"}; fields={k:v for k,v in fields.items() if k in allowed}
+  allowed={"title","summary","category","status","bot_summary","bot_article","ai_summary","ai_article","fact_check_status","fact_check_notes","image_url","approved_at","published_at_site","instagram_status","instagram_media_id","instagram_error","instagram_published_at","instagram_attempts","instagram_last_attempt_at","instagram_next_retry_at","instagram_container_id","reel_cloudinary_public_id","instagram_selected","public_source"}; fields={k:v for k,v in fields.items() if k in allowed}
   if not fields:return
   ph="%s" if self._postgres else "?";sets=[];params=[]
   for k,v in fields.items():sets.append(f"{k} = {ph}");params.append(v)
