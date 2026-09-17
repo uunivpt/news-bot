@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os, sys, subprocess
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -18,6 +18,7 @@ from app.ai import AIService
 
 OUT = Path(os.getenv("MEDIA_OUTPUT_DIR", "data/media"))
 OUT.mkdir(parents=True, exist_ok=True)
+MAX_INSTAGRAM_ATTEMPTS = 6
 
 
 def caption(row):
@@ -57,31 +58,54 @@ def publish_website_first(db: NewsDatabase, row: dict, now: str) -> dict:
     return row
 
 
+def _next_retry(attempts: int) -> str:
+    # Do not hammer Meta after a failed container. Delays: 5, 15, 30, 60, 120 min.
+    minutes = (5, 15, 30, 60, 120)[min(max(attempts - 1, 0), 4)]
+    return (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat()
+
+
 def process_instagram(db: NewsDatabase, row: dict, music: str | None) -> bool:
-    if not music:
-        db.update(int(row["id"]), instagram_status="failed", instagram_error="News Pulse audio unavailable")
+    item_id = int(row["id"])
+    attempts = int(row.get("instagram_attempts") or 0)
+    if attempts >= MAX_INSTAGRAM_ATTEMPTS:
+        db.update(item_id, instagram_status="failed", instagram_error="Instagram retry limit reached")
+        print(f"Instagram retry limit reached: item {item_id}")
         return False
-    db.update(int(row["id"]), instagram_status="processing", instagram_error=None)
+
+    attempts += 1
+    started = datetime.now(timezone.utc).isoformat()
+    db.update(item_id, instagram_status="processing", instagram_error=None,
+              instagram_attempts=attempts, instagram_last_attempt_at=started,
+              instagram_next_retry_at=None)
+
+    if not music:
+        error = "News Pulse audio unavailable"
+        db.update(item_id, instagram_status="failed", instagram_error=error,
+                  instagram_next_retry_at=_next_retry(attempts))
+        return False
+
     try:
         summary = row.get("ai_summary") or row.get("summary") or ""
         cards = generate_reel_cards(title=row["title"], summary=summary,
                                     category=row.get("category") or "general", image_url=row.get("image_url"),
-                                    output_dir=OUT / "reel_cards" / str(row["id"]))
-        video = OUT / f"{row['id']}.mp4"
+                                    output_dir=OUT / "reel_cards" / str(item_id))
+        video = OUT / f"{item_id}.mp4"
         build_reel([str(p) for p in cards], str(video), audio_path=music, duration_per_image=6)
         url = upload_video(str(video)) or public_video_url(str(video))
         if not url:
             raise RuntimeError("Public Reel video URL unavailable")
         result = publish_reel(url, caption(row))
         media_id = result.get("id") if isinstance(result, dict) else None
-        db.update(int(row["id"]), instagram_status="published", instagram_media_id=media_id,
-                  instagram_published_at=datetime.now(timezone.utc).isoformat(), instagram_error=None)
-        print(f"Instagram LIVE: item {row['id']} media={media_id}")
+        db.update(item_id, instagram_status="published", instagram_media_id=media_id,
+                  instagram_published_at=datetime.now(timezone.utc).isoformat(),
+                  instagram_error=None, instagram_next_retry_at=None)
+        print(f"Instagram LIVE: item {item_id} media={media_id}")
         return True
     except Exception as exc:
         error = str(exc)[:2000]
-        db.update(int(row["id"]), instagram_status="failed", instagram_error=error)
-        print(f"Instagram failed for item {row['id']}: {error}")
+        db.update(item_id, instagram_status="failed", instagram_error=error,
+                  instagram_next_retry_at=_next_retry(attempts))
+        print(f"Instagram failed for item {item_id}, attempt {attempts}: {error}")
         return False
 
 
@@ -98,6 +122,21 @@ def enrich_with_ai(db: NewsDatabase, row: dict, ai: AIService) -> None:
         print(f"AI enrichment complete: item {row['id']}")
     except Exception as exc:
         print(f"AI enrichment skipped for item {row['id']}: {exc}")
+
+
+def _retry_due(row: dict, now: datetime) -> bool:
+    if int(row.get("instagram_attempts") or 0) >= MAX_INSTAGRAM_ATTEMPTS:
+        return False
+    raw = row.get("instagram_next_retry_at")
+    if not raw:
+        return True
+    try:
+        due = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        if due.tzinfo is None:
+            due = due.replace(tzinfo=timezone.utc)
+        return due <= now
+    except ValueError:
+        return False
 
 
 def main():
@@ -121,28 +160,43 @@ def main():
     except ValueError:
         retry_limit = 10
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
     music = audio_path() if publish_instagram else None
 
-    # Website is always first: review, AI, Cloudinary and Instagram cannot block it.
+    # Website publication is independent: Instagram/AI failures cannot delay the site.
     pending = [dict(r) for r in db.latest(max_items, status="pending")]
     for row in pending:
-        publish_website_first(db, row, now)
+        publish_website_first(db, row, now_iso)
 
-    # Bound slow AI enrichment so the live queue stays fast.
     if ai.enabled and ai_items:
         for row in pending[:ai_items]:
             enrich_with_ai(db, row, ai)
 
-    # Instagram is an independent delivery queue. Failures remain retryable.
     if publish_instagram:
+        attempted_ids: set[int] = set()
+
+        # New items get one Instagram attempt in this run.
         for row in pending[:instagram_items]:
             process_instagram(db, row, music)
-        retry_rows = [dict(r) for r in db.latest(retry_limit, status="published", instagram_status="failed")] if retry_limit else []
-        for row in retry_rows:
-            process_instagram(db, row, music)
+            attempted_ids.add(int(row["id"]))
 
-    print(f"Website published={len(pending)}; Instagram attempted={min(len(pending), instagram_items) if publish_instagram else 0}")
+        # IMPORTANT: retry queue is evaluated from persisted failures, but never
+        # retries an item that just failed above in the same run. This prevents
+        # creating multiple Meta containers for the same story back-to-back.
+        if retry_limit:
+            retry_rows = [dict(r) for r in db.latest(retry_limit, status="published", instagram_status="failed")]
+            for row in retry_rows:
+                item_id = int(row["id"])
+                if item_id in attempted_ids or not _retry_due(row, now):
+                    continue
+                process_instagram(db, row, music)
+                attempted_ids.add(item_id)
+
+    print(
+        f"Website published={len(pending)}; "
+        f"Instagram attempted={len(attempted_ids) if publish_instagram else 0}"
+    )
     db.close()
 
 
