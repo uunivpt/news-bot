@@ -9,37 +9,27 @@ on:
 
 concurrency:
   group: news-processing
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   process:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Install Python dependencies
         run: pip install -r requirements.txt
-      - name: Process and publish
+      - name: Publish website and enrich news
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           AI_API_URL: ${{ secrets.AI_API_URL }}
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
           AI_MODEL: ${{ secrets.AI_MODEL }}
-          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
-          META_INSTAGRAM_ACCOUNT_ID: ${{ secrets.META_INSTAGRAM_ACCOUNT_ID }}
-          META_API_VERSION: ${{ secrets.META_API_VERSION }}
-          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
-          CLOUDINARY_UPLOAD_PRESET: ${{ secrets.CLOUDINARY_UPLOAD_PRESET }}
-          FIXED_AUDIO_PATH: ${{ secrets.FIXED_AUDIO_PATH }}
-          FIXED_AUDIO_URL: ${{ secrets.FIXED_AUDIO_URL }}
-          PUBLISH_TO_INSTAGRAM: 'true'
+          PUBLISH_WEBSITE: 'true'
+          PUBLISH_TO_INSTAGRAM: 'false'
           MAX_ITEMS: '15'
           AI_ENRICH_ITEMS: '5'
-          INSTAGRAM_NEW_ITEMS: '5'
-          INSTAGRAM_RETRY_ITEMS: '10'
         run: python scripts/auto_publish.py
