@@ -1,1 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 160" role="img" aria-label="PoliticsHub.in"><rect width="520" height="160" rx="22" fill="#050505"/><g transform="translate(35 25)"><path fill="#fff" d="M0 0h78c45 0 70 22 70 58 0 35-25 58-70 58H36v-33h42c22 0 34-9 34-25 0-17-12-25-34-25H36v83H0V0z"/><path fill="#bdbdbd" d="M132 36h38v32h45V36h38v80h-38V99h-45v17h-38V36z"/><path fill="#fff" d="M12 115c11-38 35-60 67-75 17-8 32-12 48-14-25 15-44 31-58 49-13 17-22 30-29 40H12z"/><path fill="#050505" d="M40 50c7-22 22-33 43-33s37 11 44 33H40zm-7 8h100v9H33z"/><path fill="#050505" d="M49 68h10v37H49zm18 0h10v37H67zm18 0h10v37H85zm18 0h10v37h-10z"/><path fill="#050505" d="M74 10h8v12h-8zM81 9h15v6H81z"/></g><text x="190" y="104" font-family="Inter,Arial,sans-serif" font-size="52" font-weight="850" fill="#fff">Politics</text><text x="372" y="104" font-family="Inter,Arial,sans-serif" font-size="52" font-weight="850" fill="#bdbdbd">Hub</text><text x="462" y="104" font-family="Inter,Arial,sans-serif" font-size="52" font-weight="850" fill="#fff">.in</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 768 768" role="img" aria-label="PoliticsHub.in">
+<rect width="768" height="768" fill="#000"/>
+<g transform="translate(210 115) scale(2.05)">
+<path fill="#fff" d="M0 0h78c45 0 70 22 70 58 0 35-25 58-70 58H36v-33h42c22 0 34-9 34-25 0-17-12-25-34-25H36v83H0V0z"/>
+<path fill="#bdbdbd" d="M132 36h38v32h45V36h38v80h-38V99h-45v17h-38V36z"/>
+<path fill="#fff" d="M12 115c11-38 35-60 67-75 17-8 32-12 48-14-25 15-44 31-58 49-13 17-22 30-29 40H12z"/>
+<path fill="#050505" d="M40 50c7-22 22-33 43-33s37 11 44 33H40zm-7 8h100v9H33z"/>
+<path fill="#050505" d="M49 68h10v37H49zm18 0h10v37H67zm18 0h10v37H85zm18 0h10v37h-10z"/>
+<path fill="#050505" d="M74 10h8v12h-8zM81 9h15v6H81z"/>
+</g>
+<text x="384" y="555" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="72" font-weight="850" fill="#fff">Politics<tspan fill="#bdbdbd">Hub</tspan><tspan fill="#fff">.in</tspan></text>
+</svg>
