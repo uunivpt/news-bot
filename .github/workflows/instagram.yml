@@ -1,0 +1,43 @@
+name: Instagram Publisher
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+# Keep only one Instagram publisher active. A new pending run replaces an older
+# pending run, while an active upload is allowed to finish safely.
+concurrency:
+  group: instagram-publisher
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+      - name: Publish one Instagram Reel
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          META_INSTAGRAM_ACCOUNT_ID: ${{ secrets.META_INSTAGRAM_ACCOUNT_ID }}
+          META_API_VERSION: ${{ secrets.META_API_VERSION }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_UPLOAD_PRESET: ${{ secrets.CLOUDINARY_UPLOAD_PRESET }}
+          FIXED_AUDIO_PATH: ${{ secrets.FIXED_AUDIO_PATH }}
+          FIXED_AUDIO_URL: ${{ secrets.FIXED_AUDIO_URL }}
+          PUBLISH_WEBSITE: 'false'
+          PUBLISH_TO_INSTAGRAM: 'true'
+          MAX_ITEMS: '1'
+          AI_ENRICH_ITEMS: '0'
+          INSTAGRAM_NEW_ITEMS: '1'
+          INSTAGRAM_RETRY_ITEMS: '2'
+        run: python scripts/auto_publish.py
