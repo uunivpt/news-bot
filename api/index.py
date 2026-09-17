@@ -6,6 +6,7 @@ from werkzeug.security import check_password_hash,generate_password_hash
 from app.ai import AIService
 from app.database import NewsDatabase
 from app.factcheck import run_cross_source_check
+from app.worker import dispatch_worker
 app=Flask(__name__)
 _secret=os.getenv("FLASK_SECRET_KEY") or os.getenv("ADMIN_TOKEN") or os.getenv("ADMIN_SETUP_KEY")
 if not _secret: raise RuntimeError("Configure FLASK_SECRET_KEY in Vercel Environment Variables")
@@ -144,8 +145,11 @@ def save_settings():
         if mode not in {"auto","manual"}:return jsonify({"error":"selection mode must be auto or manual"}),400
         values["instagram_selection_mode"]=mode
     database=db()
-    try:database.set_settings(values);return jsonify({"ok":True,"settings":database.get_settings()})
+    try:database.set_settings(values);settings_now=database.get_settings()
     finally:database.close()
+    dispatch=None
+    if any(k.startswith("instagram_") for k in values):dispatch=dispatch_worker()
+    return jsonify({"ok":True,"settings":settings_now,**({"worker_dispatched":dispatch.get("ok",False),"worker_dispatch":dispatch} if dispatch is not None else {})})
 def change(item_id,status=None,**extra):
     err=require_admin()
     if err:return err
@@ -176,11 +180,21 @@ def edit_news(item_id):
     try:database.update(item_id,**fields);return jsonify({"ok":True,"fields":fields})
     finally:database.close()
 @app.post("/api/news/<int:item_id>/instagram/queue")
-def instagram_queue(item_id):return change(item_id,instagram_selected=1,instagram_status="pending",instagram_error=None,instagram_next_retry_at=None)
+def instagram_queue(item_id):
+    result=change(item_id,instagram_selected=1,instagram_status="pending",instagram_error=None,instagram_next_retry_at=None)
+    if isinstance(result,tuple):return result
+    dispatch=dispatch_worker();payload=result.get_json() or {}
+    payload["worker_dispatched"]=dispatch.get("ok",False);payload["worker_dispatch"]=dispatch
+    return jsonify(payload)
 @app.post("/api/news/<int:item_id>/instagram/unqueue")
 def instagram_unqueue(item_id):return change(item_id,instagram_selected=0)
 @app.post("/api/news/<int:item_id>/instagram/retry")
-def instagram_retry(item_id):return change(item_id,instagram_status="pending",instagram_error=None,instagram_next_retry_at=None,instagram_selected=1)
+def instagram_retry(item_id):
+    result=change(item_id,instagram_status="pending",instagram_error=None,instagram_next_retry_at=None,instagram_selected=1)
+    if isinstance(result,tuple):return result
+    dispatch=dispatch_worker();payload=result.get_json() or {}
+    payload["worker_dispatched"]=dispatch.get("ok",False);payload["worker_dispatch"]=dispatch
+    return jsonify(payload)
 @app.post("/api/news/<int:item_id>/instagram/publish-now")
 def instagram_publish_now(item_id):
     err=require_admin()
@@ -194,8 +208,10 @@ def instagram_publish_now(item_id):
         if row.get("instagram_status")=="published":return jsonify({"error":"already published to Instagram"}),409
         database.set_settings({"instagram_priority_id":str(item_id),"instagram_paused":"true"})
         database.update(item_id,instagram_selected=1,instagram_status="pending",instagram_error=None,instagram_next_retry_at=None)
-        return jsonify({"ok":True,"priority_id":item_id,"queue_paused":True,"message":"Priority Instagram publish requested; normal queue is frozen until this story succeeds."})
-    finally:database.close()
+    finally:
+        database.close()
+    dispatch=dispatch_worker()
+    return jsonify({"ok":True,"priority_id":item_id,"queue_paused":True,"worker_dispatched":dispatch.get("ok",False),"worker_dispatch":dispatch,"message":"Priority Instagram publish requested; worker dispatched." if dispatch.get("ok") else "Priority Instagram publish queued; scheduled worker will pick it up because live dispatch is not configured."})
 @app.post("/api/news/<int:item_id>/instagram/cancel-priority")
 def instagram_cancel_priority(item_id):
     err=require_admin()
