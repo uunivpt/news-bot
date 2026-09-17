@@ -21,7 +21,7 @@ def _image(message: Any) -> str | None:
 
 
 def _link_metadata(text: str, timeout: int = 6) -> tuple[str | None, str | None, str | None, str | None]:
-    """Read public metadata only; article body is handled later by the AI pipeline."""
+    """Read public metadata only; article body is handled later by the deterministic bot."""
     match = URL_RE.search(text or "")
     if not match:
         return None, None, None, None
@@ -94,6 +94,7 @@ def collect_public_telegram(source: dict[str, Any], timeout: int = 15) -> list[N
                 external_id=external_id,
                 category=source.get("category", "general"),
                 image_url=image_url,
+                public_source=bool(source.get("public_source", True)),
             )
         )
     return items
