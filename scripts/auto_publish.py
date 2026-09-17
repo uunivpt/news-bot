@@ -84,11 +84,14 @@ def _instagram_candidates(db,mode,limit):
     if limit<=0:return []
     if mode=="manual":
         rows=[dict(r) for r in db.latest(max(limit*5,50),status="published",instagram_status="pending")];return [r for r in rows if int(r.get("instagram_selected") or 0)==1][:limit]
-    # AUTO is deliberately newest-first. It does not drain the whole backlog in one run.
     return [dict(r) for r in db.latest(limit,status="published",instagram_status="pending")]
 
 def main():
-    db=NewsDatabase();ai=AIService();env_ig=os.getenv("PUBLISH_TO_INSTAGRAM","false").lower() in {"1","true","yes"};env_web=os.getenv("PUBLISH_WEBSITE","true").lower() in {"1","true","yes"};settings=db.get_settings();publish_instagram=env_ig and settings.get("instagram_enabled","true")=="true";publish_website=env_web and settings.get("website_enabled","true")=="true"
+    db=NewsDatabase();ai=AIService();settings=db.get_settings()
+    env_ig=os.getenv("PUBLISH_TO_INSTAGRAM","false").lower() in {"1","true","yes"};env_web=os.getenv("PUBLISH_WEBSITE","true").lower() in {"1","true","yes"}
+    priority_id=str(settings.get("instagram_priority_id","") or "").strip();paused=settings.get("instagram_paused","false")=="true"
+    # POST NOW is a one-item priority and intentionally overrides the normal master switch for that item only.
+    publish_instagram=env_ig and (settings.get("instagram_enabled","true")=="true" or bool(priority_id));publish_website=env_web and settings.get("website_enabled","true")=="true"
     try:max_items=max(1,int(os.getenv("MAX_ITEMS","15")))
     except ValueError:max_items=15
     try:ai_items=max(0,int(os.getenv("AI_ENRICH_ITEMS","5")))
@@ -107,23 +110,32 @@ def main():
     if ai.enabled and ai_items:
         for row in (pending[:ai_items] if publish_website else [dict(r) for r in db.latest(ai_items,status="published")]):enrich_with_ai(db,row,ai)
     attempted=set()
-    if publish_instagram and daily_limit>0:
-        _recover_stale_processing(db,now);start,end=_today_bounds();published_today=db.instagram_daily_count(start.isoformat(),end.isoformat());remaining=max(0,daily_limit-published_today)
-        since=_minutes_since_last(db,now)
-        slot_open=since is None or since>=interval
-        if remaining>0 and slot_open:
-            mode=settings.get("instagram_selection_mode","auto");candidates=_instagram_candidates(db,mode,1)
-            # Only one Reel is allowed per interval slot. The selected item is the newest eligible item now.
-            if candidates:
-                row=candidates[0];process_instagram(db,row,music);attempted.add(int(row["id"]))
-                published_today=db.instagram_daily_count(start.isoformat(),end.isoformat());remaining=max(0,daily_limit-published_today)
-            elif retry_limit and remaining>0:
-                retry_rows=[dict(r) for r in db.latest(retry_limit,status="published",instagram_status="failed")]
-                for row in retry_rows:
-                    if int(row["id"]) in attempted or not _retry_due(row,now):continue
-                    process_instagram(db,row,music);attempted.add(int(row["id"]));break
-        else:
-            print(f"Instagram slot closed: last_publish_minutes={since}, interval={interval}, remaining_today={remaining}")
-    print(f"Website published={len(pending)}; Instagram enabled={publish_instagram}; daily_limit={daily_limit}; interval={interval}m; attempted={len(attempted)}")
+    if publish_instagram:
+        _recover_stale_processing(db,now)
+        # A priority item freezes the normal queue until it succeeds.
+        if priority_id:
+            try:priority_row=next((dict(r) for r in db.latest(1000,status="published",instagram_status="all") if str(r["id"])==priority_id),None)
+            except Exception:priority_row=None
+            if priority_row and priority_row.get("instagram_status")!="published":
+                ok=process_instagram(db,priority_row,music);attempted.add(int(priority_row["id"]))
+                if ok:
+                    db.set_settings({"instagram_priority_id":"","instagram_paused":"false"});priority_id="";paused=False
+                else:print(f"Instagram priority item {priority_id} failed; normal queue remains paused")
+            else:
+                db.set_settings({"instagram_priority_id":"","instagram_paused":"false"});priority_id="";paused=False
+        if not priority_id and not paused and daily_limit>0:
+            start,end=_today_bounds();published_today=db.instagram_daily_count(start.isoformat(),end.isoformat());remaining=max(0,daily_limit-published_today);since=_minutes_since_last(db,now);slot_open=since is None or since>=interval
+            if remaining>0 and slot_open:
+                mode=settings.get("instagram_selection_mode","auto");candidates=_instagram_candidates(db,mode,1)
+                if candidates:
+                    row=candidates[0];process_instagram(db,row,music);attempted.add(int(row["id"]))
+                elif retry_limit and remaining>0:
+                    retry_rows=[dict(r) for r in db.latest(retry_limit,status="published",instagram_status="failed")]
+                    for row in retry_rows:
+                        if int(row["id"]) in attempted or not _retry_due(row,now):continue
+                        process_instagram(db,row,music);attempted.add(int(row["id"]));break
+            else:print(f"Instagram slot closed: last_publish_minutes={since}, interval={interval}, remaining_today={remaining}")
+        elif paused and not priority_id:print("Instagram queue paused by admin")
+    print(f"Website published={len(pending)}; Instagram enabled={publish_instagram}; paused={paused}; priority={priority_id or 'none'}; daily_limit={daily_limit}; interval={interval}m; attempted={len(attempted)}")
     db.close()
 if __name__=="__main__":main()
