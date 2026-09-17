@@ -1,5 +1,5 @@
 from __future__ import annotations
-import os, sys, subprocess, time
+import os, sys, subprocess, time, json
 from pathlib import Path
 import requests
 
@@ -62,7 +62,7 @@ def inspect_video(path: Path) -> None:
     probe = subprocess.run(
         [
             "ffprobe", "-v", "error",
-            "-show_entries", "stream=index,codec_name,profile,codec_type,width,height,r_frame_rate,avg_frame_rate,pix_fmt,level,has_b_frames:format=format_name,duration,size",
+            "-show_entries", "stream=index,codec_name,profile,codec_type,width,height,r_frame_rate,avg_frame_rate,pix_fmt,level,has_b_frames,sample_rate,channels:format=format_name,duration,size",
             "-of", "json", str(path),
         ],
         capture_output=True, text=True,
@@ -71,16 +71,35 @@ def inspect_video(path: Path) -> None:
         raise RuntimeError(f"Generated MP4 failed ffprobe: {probe.stderr.strip()}")
     print("Generated MP4 ffprobe:")
     print(probe.stdout)
+    data = json.loads(probe.stdout)
+    streams = data.get("streams", [])
+    video = next((s for s in streams if s.get("codec_type") == "video"), None)
+    audio = next((s for s in streams if s.get("codec_type") == "audio"), None)
+    duration = float((data.get("format") or {}).get("duration") or 0)
+    if not video or video.get("codec_name") != "h264":
+        raise RuntimeError("Generated Reel is not H.264 video.")
+    if video.get("width") != 1080 or video.get("height") != 1920:
+        raise RuntimeError(f"Generated Reel has wrong dimensions: {video.get('width')}x{video.get('height')}")
+    if video.get("pix_fmt") != "yuv420p":
+        raise RuntimeError(f"Generated Reel has wrong pixel format: {video.get('pix_fmt')}")
+    if abs(duration - 18.0) > 0.15:
+        raise RuntimeError(f"Generated Reel is not 18 seconds: {duration}")
+    if audio and (audio.get("codec_name") != "aac" or str(audio.get("sample_rate")) != "48000"):
+        raise RuntimeError("Generated Reel audio is not AAC 48 kHz.")
 
 
 def main():
-    audio_url = os.getenv("FIXED_AUDIO_URL", "").strip()
-    if not audio_url.startswith(("https://", "http://")):
-        raise RuntimeError("FIXED_AUDIO_URL must be a full public https:// URL")
-
-    audio_path = OUT / "news_pulse.mp3"
-    print("Using the real FIXED_AUDIO_URL audio track for this Instagram test.")
-    download_and_validate_audio(audio_url, audio_path)
+    skip_audio = os.getenv("SKIP_AUDIO", "false").strip().lower() in {"1", "true", "yes"}
+    audio_path = None
+    if skip_audio:
+        print("Diagnostic mode: publishing video-only Reel to isolate Meta video/API compatibility.")
+    else:
+        audio_url = os.getenv("FIXED_AUDIO_URL", "").strip()
+        if not audio_url.startswith(("https://", "http://")):
+            raise RuntimeError("FIXED_AUDIO_URL must be a full public https:// URL")
+        audio_path = OUT / "news_pulse.mp3"
+        print("Using the real FIXED_AUDIO_URL audio track for this Instagram test.")
+        download_and_validate_audio(audio_url, audio_path)
 
     from PIL import Image, ImageDraw, ImageFont
     img = Image.new("RGB", (1080, 1920), (20, 24, 32))
@@ -88,13 +107,13 @@ def main():
     font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 72)
     small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 42)
     d.text((80, 780), "NEWS REEL TEST", font=font, fill="white")
-    d.text((80, 890), "Instagram publishing test", font=small, fill="white")
+    d.text((80, 890), "Instagram compatibility test", font=small, fill="white")
     image = OUT / "card.jpg"
     img.save(image, quality=92)
 
     video = OUT / "test_reel.mp4"
-    build_reel([str(image)], str(video), audio_path=str(audio_path), duration_per_image=18)
-    print("18-second MP4 with real News Pulse audio created successfully")
+    build_reel([str(image)], str(video), audio_path=str(audio_path) if audio_path else None, duration_per_image=18)
+    print("18-second MP4 created successfully")
     inspect_video(video)
 
     url = upload_video(str(video))
