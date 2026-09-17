@@ -1,5 +1,5 @@
 from __future__ import annotations
-import os, sys, subprocess
+import os, sys, subprocess, re
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 
@@ -21,9 +21,28 @@ OUT.mkdir(parents=True, exist_ok=True)
 MAX_INSTAGRAM_ATTEMPTS = 6
 
 
+def _dedupe_caption_text(title: str, text: str) -> str:
+    """Keep title once when AI/source summary repeats the headline."""
+    title = re.sub(r"\s+", " ", (title or "")).strip()
+    text = re.sub(r"\s+", " ", (text or "")).strip()
+    if not text:
+        return ""
+    if text.casefold().startswith(title.casefold()):
+        text = text[len(title):].lstrip(" :–—-|\n")
+    # Remove an accidental immediate duplicate sentence/paragraph.
+    parts = [p.strip() for p in re.split(r"\n+", text) if p.strip()]
+    unique = []
+    for part in parts:
+        if not any(part.casefold() == old.casefold() for old in unique):
+            unique.append(part)
+    return " ".join(unique)
+
+
 def caption(row):
-    text = row.get("ai_summary") or row.get("summary") or row.get("title") or ""
-    return f"{row['title']}\n\n{text[:700]}\n\npoliticshub.in"
+    title = re.sub(r"\s+", " ", str(row.get("title") or "")).strip()
+    text = _dedupe_caption_text(title, row.get("ai_summary") or row.get("summary") or "")
+    # Title is deliberately present once; Instagram should not receive source attribution.
+    return f"{title}\n\n{text[:700]}\n\npoliticshub.in" if text else f"{title}\n\npoliticshub.in"
 
 
 def audio_path():
@@ -59,7 +78,6 @@ def publish_website_first(db: NewsDatabase, row: dict, now: str) -> dict:
 
 
 def _next_retry(attempts: int) -> str:
-    # Do not hammer Meta after a failed container. Delays: 5, 15, 30, 60, 120 min.
     minutes = (5, 15, 30, 60, 120)[min(max(attempts - 1, 0), 4)]
     return (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat()
 
@@ -69,7 +87,6 @@ def process_instagram(db: NewsDatabase, row: dict, music: str | None) -> bool:
     attempts = int(row.get("instagram_attempts") or 0)
     if attempts >= MAX_INSTAGRAM_ATTEMPTS:
         db.update(item_id, instagram_status="failed", instagram_error="Instagram retry limit reached")
-        print(f"Instagram retry limit reached: item {item_id}")
         return False
 
     attempts += 1
@@ -164,7 +181,6 @@ def main():
     now_iso = now.isoformat()
     music = audio_path() if publish_instagram else None
 
-    # Website publication is independent: Instagram/AI failures cannot delay the site.
     pending = [dict(r) for r in db.latest(max_items, status="pending")]
     for row in pending:
         publish_website_first(db, row, now_iso)
@@ -175,15 +191,10 @@ def main():
 
     if publish_instagram:
         attempted_ids: set[int] = set()
-
-        # New items get one Instagram attempt in this run.
         for row in pending[:instagram_items]:
             process_instagram(db, row, music)
             attempted_ids.add(int(row["id"]))
 
-        # IMPORTANT: retry queue is evaluated from persisted failures, but never
-        # retries an item that just failed above in the same run. This prevents
-        # creating multiple Meta containers for the same story back-to-back.
         if retry_limit:
             retry_rows = [dict(r) for r in db.latest(retry_limit, status="published", instagram_status="failed")]
             for row in retry_rows:
@@ -193,10 +204,7 @@ def main():
                 process_instagram(db, row, music)
                 attempted_ids.add(item_id)
 
-    print(
-        f"Website published={len(pending)}; "
-        f"Instagram attempted={len(attempted_ids) if publish_instagram else 0}"
-    )
+    print(f"Website published={len(pending)}; Instagram attempted={len(attempted_ids) if publish_instagram else 0}")
     db.close()
 
 
