@@ -1,5 +1,6 @@
-import os, json, secrets
-from datetime import datetime, timezone
+import os, json, secrets, time
+from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from flask import Flask, jsonify, request, session
 from werkzeug.security import check_password_hash
 from app.ai import AIService
@@ -8,7 +9,15 @@ from app.factcheck import run_cross_source_check
 
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", os.getenv("ADMIN_TOKEN", "change-me"))
-app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SECURE=True, SESSION_COOKIE_SAMESITE="Lax")
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+)
+
+_LOGIN_WINDOW_SECONDS = 300
+_LOGIN_MAX_FAILURES = 8
+_login_failures: dict[str, list[float]] = {}
 
 
 def db():
@@ -29,6 +38,16 @@ def require_admin():
     return None
 
 
+def require_csrf():
+    if not session.get("admin_user"):
+        return None
+    token = request.headers.get("X-CSRF-Token", "")
+    expected = session.get("csrf_token", "")
+    if not token or not expected or not secrets.compare_digest(token, expected):
+        return jsonify({"error": "invalid CSRF token"}), 403
+    return None
+
+
 def rows_json(rows):
     return [dict(r) for r in rows]
 
@@ -40,27 +59,73 @@ def users():
         return {}
 
 
+def _client_key():
+    return request.headers.get("X-Forwarded-For", request.remote_addr or "unknown").split(",")[0].strip()
+
+
+def _login_allowed():
+    now = time.time()
+    values = [t for t in _login_failures.get(_client_key(), []) if now - t < _LOGIN_WINDOW_SECONDS]
+    _login_failures[_client_key()] = values
+    return len(values) < _LOGIN_MAX_FAILURES
+
+
+def _login_failed():
+    _login_failures.setdefault(_client_key(), []).append(time.time())
+
+
+def _india_day_bounds():
+    tz = ZoneInfo("Asia/Kolkata")
+    today = datetime.now(tz).date()
+    start = datetime.combine(today, datetime.min.time(), tzinfo=tz).astimezone(timezone.utc)
+    end = start + timedelta(days=1)
+    return start.isoformat(), end.isoformat()
+
+
+@app.after_request
+def security_headers(response):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Cache-Control"] = "no-store" if request.path.startswith("/api/admin") else response.headers.get("Cache-Control", "no-cache")
+    return response
+
+
 @app.post("/api/admin/login")
 def login():
+    if not _login_allowed():
+        return jsonify({"error": "too many login attempts; try again later"}), 429
     body = request.get_json(silent=True) or {}
     username = str(body.get("username", "")).strip()
     password = str(body.get("password", ""))
     record = users().get(username)
     if not record or not check_password_hash(record, password):
+        _login_failed()
         return jsonify({"error": "invalid credentials"}), 401
+    _login_failures.pop(_client_key(), None)
+    session.clear()
     session["admin_user"] = username
-    return jsonify({"ok": True, "username": username})
+    session["csrf_token"] = secrets.token_urlsafe(32)
+    return jsonify({"ok": True, "username": username, "csrf_token": session["csrf_token"]})
 
 
 @app.post("/api/admin/logout")
 def logout():
+    err = require_csrf()
+    if err:
+        return err
     session.clear()
     return jsonify({"ok": True})
 
 
 @app.get("/api/admin/me")
 def me():
-    return jsonify({"authenticated": bool(session.get("admin_user")), "username": session.get("admin_user")})
+    return jsonify({
+        "authenticated": bool(session.get("admin_user")),
+        "username": session.get("admin_user"),
+        "csrf_token": session.get("csrf_token") if session.get("admin_user") else None,
+    })
 
 
 @app.get("/api/health")
@@ -116,6 +181,8 @@ def stats():
         return err
     database = db()
     try:
+        day_start, day_end = _india_day_bounds()
+        settings = database.get_settings()
         return jsonify({
             "total": database.count(),
             "pending": len(database.latest(100, status="pending")),
@@ -123,13 +190,67 @@ def stats():
             "reviewed": len(database.latest(100, status="published", review_status="reviewed")),
             "published": len(database.latest(100, status="published")),
             "instagram_failed": len(database.latest(100, status="published", instagram_status="failed")),
+            "instagram_today": database.instagram_daily_count(day_start, day_end),
+            "instagram_limit": int(settings.get("instagram_daily_limit", "5")),
+            "instagram_enabled": settings.get("instagram_enabled", "true") == "true",
         })
+    finally:
+        database.close()
+
+
+@app.get("/api/admin/settings")
+def admin_settings():
+    err = require_admin()
+    if err:
+        return err
+    database = db()
+    try:
+        settings = database.get_settings()
+        day_start, day_end = _india_day_bounds()
+        settings["instagram_today"] = str(database.instagram_daily_count(day_start, day_end))
+        return jsonify(settings)
+    finally:
+        database.close()
+
+
+@app.post("/api/admin/settings")
+def save_settings():
+    err = require_admin()
+    if err:
+        return err
+    err = require_csrf()
+    if err:
+        return err
+    body = request.get_json(silent=True) or {}
+    values = {}
+    if "instagram_enabled" in body:
+        values["instagram_enabled"] = "true" if bool(body["instagram_enabled"]) else "false"
+    if "instagram_daily_limit" in body:
+        try:
+            limit = int(body["instagram_daily_limit"])
+        except (TypeError, ValueError):
+            return jsonify({"error": "daily limit must be a number"}), 400
+        if limit < 0 or limit > 100:
+            return jsonify({"error": "daily limit must be between 0 and 100"}), 400
+        values["instagram_daily_limit"] = str(limit)
+    if "instagram_selection_mode" in body:
+        mode = str(body["instagram_selection_mode"]).lower()
+        if mode not in {"auto", "manual"}:
+            return jsonify({"error": "selection mode must be auto or manual"}), 400
+        values["instagram_selection_mode"] = mode
+    database = db()
+    try:
+        database.set_settings(values)
+        return jsonify({"ok": True, "settings": database.get_settings()})
     finally:
         database.close()
 
 
 def change(item_id, status=None, **extra):
     err = require_admin()
+    if err:
+        return err
+    err = require_csrf()
     if err:
         return err
     database = db()
@@ -145,14 +266,12 @@ def change(item_id, status=None, **extra):
 
 @app.post("/api/news/<int:item_id>/approve")
 def approve(item_id):
-    # Approval means the admin reviewed the item; publication remains LIVE.
     return change(item_id, fact_check_status="reviewed", approved_at=datetime.now(timezone.utc).isoformat())
 
 
 @app.post("/api/news/<int:item_id>/reject")
 def reject(item_id):
-    # Explicit admin rejection can take a live item offline.
-    return change(item_id, status="rejected")
+    return change(item_id, status="rejected", instagram_selected=0)
 
 
 @app.post("/api/news/<int:item_id>/publish")
@@ -160,9 +279,27 @@ def publish(item_id):
     return change(item_id, status="published", published_at_site=datetime.now(timezone.utc).isoformat())
 
 
+@app.post("/api/news/<int:item_id>/instagram/queue")
+def instagram_queue(item_id):
+    return change(item_id, instagram_selected=1, instagram_status="pending", instagram_error=None, instagram_next_retry_at=None)
+
+
+@app.post("/api/news/<int:item_id>/instagram/unqueue")
+def instagram_unqueue(item_id):
+    return change(item_id, instagram_selected=0)
+
+
+@app.post("/api/news/<int:item_id>/instagram/retry")
+def instagram_retry(item_id):
+    return change(item_id, instagram_status="pending", instagram_error=None, instagram_next_retry_at=None, instagram_selected=1)
+
+
 @app.post("/api/news/<int:item_id>/ai")
 def ai_process(item_id):
     err = require_admin()
+    if err:
+        return err
+    err = require_csrf()
     if err:
         return err
     database = db()
@@ -185,6 +322,9 @@ def ai_process(item_id):
 @app.post("/api/fact-check")
 def fact_check():
     err = require_admin()
+    if err:
+        return err
+    err = require_csrf()
     if err:
         return err
     database = db()
