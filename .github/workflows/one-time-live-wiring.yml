@@ -1,0 +1,99 @@
+name: One-time live wiring
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: "!contains(github.event.head_commit.message, '[live-wiring]')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch API to dispatch worker after admin actions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('api/index.py')
+          s = p.read_text()
+
+          if 'from app.worker import dispatch_worker' not in s:
+              s = s.replace('from app.factcheck import run_cross_source_check\n', 'from app.factcheck import run_cross_source_check\nfrom app.worker import dispatch_worker\n', 1)
+
+          publish_pattern = re.compile(r'@app\.post\("/api/news/<int:item_id>/instagram/publish-now"\)\ndef instagram_publish_now\(item_id\):.*?\n@app\.post\("/api/news/<int:item_id>/instagram/cancel-priority"\)', re.S)
+          publish_replacement = '''@app.post("/api/news/<int:item_id>/instagram/publish-now")
+          def instagram_publish_now(item_id):
+              err=require_admin()
+              if err:return err
+              err=require_csrf()
+              if err:return err
+              database=db()
+              try:
+                  row=next((dict(r) for r in database.latest(1000,status="published",instagram_status="all") if int(r["id"])==item_id),None)
+                  if not row:return jsonify({"error":"published story not found"}),404
+                  if row.get("instagram_status")=="published":return jsonify({"error":"already published to Instagram"}),409
+                  database.set_settings({"instagram_priority_id":str(item_id),"instagram_paused":"true"})
+                  database.update(item_id,instagram_selected=1,instagram_status="pending",instagram_error=None,instagram_next_retry_at=None)
+              finally:
+                  database.close()
+              dispatch=dispatch_worker()
+              return jsonify({"ok":True,"priority_id":item_id,"queue_paused":True,"worker_dispatched":dispatch.get("ok",False),"worker_dispatch":dispatch,"message":"Priority Instagram publish requested; worker dispatched." if dispatch.get("ok") else "Priority Instagram publish queued; scheduled worker will pick it up because live dispatch is not configured."})
+          @app.post("/api/news/<int:item_id>/instagram/cancel-priority")'''
+          s, n = publish_pattern.subn(publish_replacement, s, count=1)
+          if n != 1:
+              raise SystemExit('publish-now patch target not found')
+
+          queue_pattern = re.compile(r'@app\.post\("/api/news/<int:item_id>/instagram/queue"\)\ndef instagram_queue\(item_id\):return change\(item_id,instagram_selected=1,instagram_status="pending",instagram_error=None,instagram_next_retry_at=None\)')
+          queue_replacement = '''@app.post("/api/news/<int:item_id>/instagram/queue")
+          def instagram_queue(item_id):
+              result=change(item_id,instagram_selected=1,instagram_status="pending",instagram_error=None,instagram_next_retry_at=None)
+              if isinstance(result,tuple):return result
+              dispatch=dispatch_worker();payload=result.get_json() or {}
+              payload["worker_dispatched"]=dispatch.get("ok",False);payload["worker_dispatch"]=dispatch
+              return jsonify(payload)'''
+          s, n = queue_pattern.subn(queue_replacement, s, count=1)
+          if n != 1:
+              raise SystemExit('queue patch target not found')
+
+          retry_pattern = re.compile(r'@app\.post\("/api/news/<int:item_id>/instagram/retry"\)\ndef instagram_retry\(item_id\):return change\(item_id,instagram_status="pending",instagram_error=None,instagram_next_retry_at=None,instagram_selected=1\)')
+          retry_replacement = '''@app.post("/api/news/<int:item_id>/instagram/retry")
+          def instagram_retry(item_id):
+              result=change(item_id,instagram_status="pending",instagram_error=None,instagram_next_retry_at=None,instagram_selected=1)
+              if isinstance(result,tuple):return result
+              dispatch=dispatch_worker();payload=result.get_json() or {}
+              payload["worker_dispatched"]=dispatch.get("ok",False);payload["worker_dispatch"]=dispatch
+              return jsonify(payload)'''
+          s, n = retry_pattern.subn(retry_replacement, s, count=1)
+          if n != 1:
+              raise SystemExit('retry patch target not found')
+
+          settings_pattern = re.compile(r'    database=db\(\)\n    try:database\.set_settings\(values\);return jsonify\(\{"ok":True,"settings":database\.get_settings\(\)\}\)\n    finally:database\.close\(\)', re.S)
+          settings_replacement = '''    database=db()
+              try:database.set_settings(values);settings_now=database.get_settings()
+              finally:database.close()
+              dispatch=None
+              if any(k.startswith("instagram_") for k in values):dispatch=dispatch_worker()
+              return jsonify({"ok":True,"settings":settings_now,**({"worker_dispatched":dispatch.get("ok",False),"worker_dispatch":dispatch} if dispatch is not None else {})})'''
+          s, n = settings_pattern.subn(settings_replacement, s, count=1)
+          if n != 1:
+              raise SystemExit('settings patch target not found')
+
+          p.write_text(s)
+          PY
+
+      - name: Verify patched API imports and compiles
+        run: |
+          python -m py_compile api/index.py app/worker.py
+
+      - name: Commit live wiring patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add api/index.py app/worker.py .github/workflows/one-time-live-wiring.yml
+          git commit -m 'Wire admin actions to live worker [live-wiring]'
+          git push
