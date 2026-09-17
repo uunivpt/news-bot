@@ -2,20 +2,39 @@ import os, json, secrets, time
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 from flask import Flask, jsonify, request, session
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 from app.ai import AIService
 from app.database import NewsDatabase
 from app.factcheck import run_cross_source_check
 
 app = Flask(__name__)
-app.secret_key = os.getenv("FLASK_SECRET_KEY", os.getenv("ADMIN_TOKEN", "change-me"))
+_secret = os.getenv("FLASK_SECRET_KEY")
+if not _secret:
+    raise RuntimeError("FLASK_SECRET_KEY must be configured")
+app.secret_key = _secret
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SECURE=True, SESSION_COOKIE_SAMESITE="Lax")
 _LOGIN_WINDOW_SECONDS = 300
 _LOGIN_MAX_FAILURES = 8
 _login_failures: dict[str, list[float]] = {}
 
 
-def db(): return NewsDatabase()
+def _ensure_admin_users(database):
+    sql = """CREATE TABLE IF NOT EXISTS admin_users (
+        username TEXT PRIMARY KEY,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'owner',
+        created_at TEXT NOT NULL
+    )"""
+    database.conn.execute(sql)
+    if not database._postgres:
+        database.conn.commit()
+
+
+def db():
+    database = NewsDatabase()
+    _ensure_admin_users(database)
+    return database
+
 
 def admin_ok():
     if session.get("admin_user"): return True
@@ -65,9 +84,43 @@ def security_headers(response):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     if request.path.startswith("/api/admin"):
         response.headers["Cache-Control"] = "no-store"
     return response
+
+
+@app.post("/api/admin/setup")
+def setup_owner():
+    if session.get("admin_user"):
+        return jsonify({"error": "owner setup is disabled after sign-in"}), 403
+    setup_key = os.getenv("ADMIN_SETUP_KEY", "")
+    if not setup_key:
+        return jsonify({"error": "owner setup is disabled; configure ADMIN_SETUP_KEY first"}), 503
+    body = request.get_json(silent=True) or {}
+    supplied_key = str(body.get("setup_key", ""))
+    if not supplied_key or not secrets.compare_digest(supplied_key, setup_key):
+        return jsonify({"error": "invalid setup key"}), 403
+    username = str(body.get("username", "")).strip()
+    password = str(body.get("password", ""))
+    if len(username) < 3 or len(username) > 40 or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-" for c in username):
+        return jsonify({"error": "username must be 3-40 characters using letters, numbers, dot, underscore or hyphen"}), 400
+    if len(password) < 12:
+        return jsonify({"error": "password must be at least 12 characters"}), 400
+    database = db()
+    try:
+        row = database.conn.execute("SELECT COUNT(*) AS count FROM admin_users").fetchone()
+        count = int(row["count"] if database._postgres else row[0])
+        if count:
+            return jsonify({"error": "owner already exists; setup is permanently closed"}), 409
+        now = datetime.now(timezone.utc).isoformat()
+        ph = "%s" if database._postgres else "?"
+        database.conn.execute(f"INSERT INTO admin_users (username, password_hash, role, created_at) VALUES ({ph}, {ph}, {ph}, {ph})", (username, generate_password_hash(password), "owner", now))
+        if not database._postgres: database.conn.commit()
+        session.clear(); session["admin_user"] = username; session["admin_role"] = "owner"; session["csrf_token"] = secrets.token_urlsafe(32)
+        return jsonify({"ok": True, "username": username, "role": "owner", "csrf_token": session["csrf_token"], "message": "Owner account created. Setup is now permanently closed."})
+    finally:
+        database.close()
 
 
 @app.post("/api/admin/login")
@@ -76,12 +129,22 @@ def login():
     body = request.get_json(silent=True) or {}
     username = str(body.get("username", "")).strip()
     password = str(body.get("password", ""))
-    record = users().get(username)
-    if not record or not check_password_hash(record, password):
+    database = db()
+    try:
+        row = database.conn.execute("SELECT username, password_hash, role FROM admin_users WHERE username = " + ("%s" if database._postgres else "?"), (username,)).fetchone()
+        valid = bool(row and check_password_hash(row["password_hash"] if database._postgres else row[1], password))
+        role = (row["role"] if database._postgres else row[2]) if row else None
+    finally:
+        database.close()
+    if not valid:
+        record = users().get(username)
+        valid = bool(record and check_password_hash(record, password))
+        role = "owner" if valid else None
+    if not valid:
         _login_failed(); return jsonify({"error": "invalid credentials"}), 401
     _login_failures.pop(_client_key(), None)
-    session.clear(); session["admin_user"] = username; session["csrf_token"] = secrets.token_urlsafe(32)
-    return jsonify({"ok": True, "username": username, "csrf_token": session["csrf_token"]})
+    session.clear(); session["admin_user"] = username; session["admin_role"] = role or "owner"; session["csrf_token"] = secrets.token_urlsafe(32)
+    return jsonify({"ok": True, "username": username, "role": session["admin_role"], "csrf_token": session["csrf_token"]})
 
 @app.post("/api/admin/logout")
 def logout():
@@ -91,7 +154,7 @@ def logout():
 
 @app.get("/api/admin/me")
 def me():
-    return jsonify({"authenticated": bool(session.get("admin_user")), "username": session.get("admin_user"), "csrf_token": session.get("csrf_token") if session.get("admin_user") else None})
+    return jsonify({"authenticated": bool(session.get("admin_user")), "username": session.get("admin_user"), "role": session.get("admin_role"), "csrf_token": session.get("csrf_token") if session.get("admin_user") else None})
 
 @app.get("/api/health")
 def health():
