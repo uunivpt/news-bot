@@ -1,6 +1,6 @@
 import unittest
 
-from app.newsroom import clean_text, make_summary, process_news, select_sentences
+from app.newsroom import clean_text, make_summary, process_news, select_sentences, sentences
 
 
 class NewsroomBotTests(unittest.TestCase):
@@ -33,6 +33,20 @@ class NewsroomBotTests(unittest.TestCase):
         self.assertTrue(result["article"].endswith("."))
         self.assertIn("What happened:", result["article"])
         self.assertNotIn("https://", result["article"])
+
+    def test_incomplete_final_fragment_is_dropped(self):
+        text = (
+            "The company announced a new agreement on Tuesday. "
+            "Officials said the order was confirmed. "
+            "Details including the amount and models and the"
+        )
+        items = sentences(text)
+        self.assertEqual(len(items), 2)
+        self.assertTrue(all(x.endswith(".") for x in items))
+        self.assertNotIn("and the", items[-1].lower())
+
+    def test_short_material_is_held(self):
+        self.assertIsNone(process_news("Tiny update", "Too short."))
 
 
 if __name__ == "__main__":
