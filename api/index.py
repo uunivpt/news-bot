@@ -38,7 +38,9 @@ def require_csrf():
 def _publicize(row):
  r=dict(row)
  if not admin_ok():
-  for key in ("source_name","source_type","url","normalized_url","external_id","url_hash","title_hash","collected_at","fact_check_status","fact_check_notes","approved_at","instagram_status","instagram_media_id","instagram_error","instagram_published_at","instagram_attempts","instagram_last_attempt_at","instagram_next_retry_at","instagram_container_id","reel_cloudinary_public_id","instagram_selected","ai_summary","ai_article","bot_summary","bot_article","published_at_site"):
+  # Public readers may see the originating source and its public article URL.
+  # Internal moderation, Instagram state, hashes and processing fields stay private.
+  for key in ("normalized_url","external_id","url_hash","title_hash","collected_at","fact_check_status","fact_check_notes","approved_at","instagram_status","instagram_media_id","instagram_error","instagram_published_at","instagram_attempts","instagram_last_attempt_at","instagram_next_retry_at","instagram_container_id","reel_cloudinary_public_id","instagram_selected","ai_summary","ai_article","bot_summary","bot_article","published_at_site"):
    r.pop(key,None)
   raw=dict(row).get("published_at_site") or dict(row).get("published_at")
   if raw:
@@ -227,7 +229,6 @@ def process_item(item_id):
   database.update(item_id,**fields); return jsonify({"ok":True,"mode":"deterministic_bot","headline":result["headline"],"summary":result["summary"],"article":result["article"]})
  finally:database.close()
 
-# Backward-compatible admin route name. It still uses only the deterministic bot; no AI service is called.
 @app.post("/api/news/<int:item_id>/ai")
 def legacy_process(item_id):return process_item(item_id)
 
