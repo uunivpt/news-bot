@@ -7,14 +7,46 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import requests
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 WIDTH, HEIGHT = 1080, 1350
 REEL_WIDTH, REEL_HEIGHT = 1080, 1920
 OUTPUT_DIR = Path("data/generated_images")
-TEMPLATES = ("breaking", "politics", "world", "business", "technology", "science", "general")
 FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 FONT_REG = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+
+# Editorial prefixes and source-attribution fragments that must never appear
+# in Instagram creative/caption. Website source attribution remains separate.
+EDITORIAL_PREFIX_RE = re.compile(
+    r"^\s*(?:just\s*in|breaking(?:\s+news)?|latest\s+news|latest\s+update|news\s+alert|alert|exclusive)\s*[:\-–—|]+\s*",
+    re.IGNORECASE,
+)
+HANDLE_RE = re.compile(r"(?<!\w)@[A-Za-z0-9_]{2,64}", re.IGNORECASE)
+SOURCE_FRAGMENT_RE = re.compile(
+    r"(?:\bsource\s*:\s*|\bvia\s+|\baccording\s+to\s+|\breported\s+by\s+|\bcredit\s*:\s*)[^|•\n]+",
+    re.IGNORECASE,
+)
+
+
+def clean_instagram_text(text: str, source_name: str = "") -> str:
+    """Remove social handles/source credits and editorial prefixes for Instagram."""
+    value = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not value:
+        return ""
+
+    # Remove the configured source by both display name and @handle forms.
+    source = re.sub(r"\s+", " ", str(source_name or "")).strip()
+    if source:
+        value = re.sub(re.escape(source), "", value, flags=re.IGNORECASE)
+        value = re.sub(re.escape(source.lstrip("@")), "", value, flags=re.IGNORECASE)
+
+    value = SOURCE_FRAGMENT_RE.sub(" ", value)
+    value = HANDLE_RE.sub(" ", value)
+    value = EDITORIAL_PREFIX_RE.sub("", value)
+    value = re.sub(r"\s+", " ", value)
+    value = re.sub(r"\s+([,.;:!?])", r"\1", value)
+    value = re.sub(r"([:|•])\s*(?:[-–—|•]\s*)+", r"\1 ", value)
+    return value.strip(" -–—|•:")
 
 
 def _font(size: int, bold: bool = False):
@@ -75,7 +107,6 @@ def _cover(base: Image.Image, image: Image.Image, box):
 
 
 def _photo_background(image: Image.Image | None) -> Image.Image:
-    """Always return a visual background; never a blank white Reel scene."""
     if image is None:
         bg = Image.new("RGB", (REEL_WIDTH, REEL_HEIGHT), (24, 28, 36))
         d = ImageDraw.Draw(bg)
@@ -145,66 +176,29 @@ def generate_graphic(title: str, summary: str = "", category: str = "general", s
     return path
 
 
-def _clean_facts(summary: str, title: str) -> list[str]:
-    raw = re.sub(r"\s+", " ", summary or "").strip()
-    title_clean = re.sub(r"\s+", " ", title or "").strip()
-    if raw.lower().startswith(title_clean.lower()):
-        raw = raw[len(title_clean):].lstrip(" :–—-|\n")
-    parts = [p.strip(" •-\t") for p in re.split(r"\n+|(?<=[.!?])\s+(?=[A-Z0-9])", raw) if p.strip()]
-    return parts[:4] if parts else ["Latest update is being tracked by politicshub.in."]
-
-
-def _draw_safe_text(d, text: str, font, x: int, y: int, max_width: int, max_lines: int = 4):
-    lines = _wrap(text, font, max_width)[:max_lines]
-    for line in lines:
-        d.text((x, y), line, font=font, fill="white", stroke_width=1, stroke_fill=(0, 0, 0)); y += font.size + 9
-    return y
-
-
-def generate_reel_cards(title: str, summary: str, category: str, image_url: str | None, output_dir: str | Path) -> list[Path]:
-    """Create three dynamic photo-led, information-first 9:16 scenes."""
-    out = Path(output_dir); out.mkdir(parents=True, exist_ok=True)
+def generate_reel_cards(title: str, summary: str, category: str, image_url: str | None, output_dir: str | Path, source_name: str = "") -> list[Path]:
+    """Create one clean hero card and keep it on screen for the full 18-second Reel."""
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
     image = _download_image(image_url)
-    template = choose_template(title, category, summary)
-    facts = _clean_facts(summary, title)
-    cards: list[Path] = []
 
-    # 1) Hero: full news photo, safe headline area and category badge.
-    c = _photo_card(image); d = ImageDraw.Draw(c)
-    _gradient_overlay(c, 650, REEL_HEIGHT, 235); d = ImageDraw.Draw(c)
-    d.rounded_rectangle((55, 70, 330, 140), radius=16, fill=(185, 30, 30, 235))
-    d.text((80, 87), ("BREAKING" if template == "breaking" else category.upper())[:15], font=_font(27, True), fill="white")
-    f, lines = _fit_title(title, 930, 4)
-    y = 1170
-    for line in lines:
-        d.text((55, y), line, font=f, fill="white", stroke_width=2, stroke_fill=(0, 0, 0)); y += f.size + 10
-    d.text((55, 1800), "politicshub.in", font=_font(32, True), fill="white")
-    p = out / "01_hero.png"; c.convert("RGB").save(p, format="PNG", optimize=True); cards.append(p)
+    clean_title = clean_instagram_text(title, source_name)
+    if not clean_title:
+        clean_title = "Latest news update"
 
-    # 2) Facts: photo remains visible, with a dark editorial information panel.
-    c = _photo_card(image).filter(ImageFilter.GaussianBlur(radius=1.2)).convert("RGBA")
-    shade = Image.new("RGBA", c.size, (0, 0, 0, 115)); c.alpha_composite(shade)
+    c = _photo_card(image)
+    _gradient_overlay(c, 650, REEL_HEIGHT, 235)
     d = ImageDraw.Draw(c)
-    d.rounded_rectangle((45, 70, 445, 145), radius=16, fill=(15, 15, 18, 225))
-    d.text((72, 88), "WHAT WE KNOW", font=_font(28, True), fill="white")
-    y = 230; body = _font(38)
-    for fact in facts:
-        wrapped = _wrap(fact, body, 835)[:3]
-        d.ellipse((60, y + 14, 80, y + 34), fill=(230, 50, 50))
-        for part in wrapped:
-            d.text((108, y), part, font=body, fill="white", stroke_width=1, stroke_fill=(0, 0, 0)); y += 52
-        y += 28
-        if y > 1640: break
-    d.text((55, 1810), "politicshub.in", font=_font(30, True), fill="white")
-    p = out / "02_facts.png"; c.convert("RGB").save(p, format="PNG", optimize=True); cards.append(p)
 
-    # 3) Context: photo-led closing with one useful context line, not a blank brand card.
-    c = _photo_card(image); d = ImageDraw.Draw(c)
-    _gradient_overlay(c, 700, REEL_HEIGHT, 225); d = ImageDraw.Draw(c)
-    d.rounded_rectangle((55, 1120, 395, 1190), radius=14, fill=(185, 30, 30, 225))
-    d.text((78, 1138), "LATEST UPDATE", font=_font(27, True), fill="white")
-    cf = _font(43, True)
-    _draw_safe_text(d, facts[0], cf, 55, 1250, 910, 4)
-    d.text((55, 1795), "politicshub.in  •  News & Updates", font=_font(29, True), fill="white")
-    p = out / "03_context.png"; c.convert("RGB").save(p, format="PNG", optimize=True); cards.append(p)
-    return cards
+    # Intentionally no JUST IN / BREAKING / category / source badge.
+    # The first hero frame is the complete Reel for all 18 seconds.
+    f, lines = _fit_title(clean_title, 930, 5)
+    y = 1160
+    for line in lines:
+        d.text((55, y), line, font=f, fill="white", stroke_width=2, stroke_fill=(0, 0, 0))
+        y += f.size + 10
+
+    d.text((55, 1800), "politicshub.in", font=_font(32, True), fill="white")
+    p = out / "01_hero.png"
+    c.convert("RGB").save(p, format="PNG", optimize=True)
+    return [p]
