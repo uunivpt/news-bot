@@ -36,6 +36,10 @@ CREATE TABLE IF NOT EXISTS news_items (
     instagram_media_id TEXT,
     instagram_error TEXT,
     instagram_published_at TEXT,
+    instagram_attempts INTEGER NOT NULL DEFAULT 0,
+    instagram_last_attempt_at TEXT,
+    instagram_next_retry_at TEXT,
+    instagram_container_id TEXT,
     reel_cloudinary_public_id TEXT,
     UNIQUE(source_name, external_id)
 )
@@ -48,6 +52,7 @@ CREATE INDEX IF NOT EXISTS idx_news_category ON news_items(category);
 CREATE INDEX IF NOT EXISTS idx_news_status ON news_items(status);
 CREATE INDEX IF NOT EXISTS idx_news_review ON news_items(fact_check_status);
 CREATE INDEX IF NOT EXISTS idx_news_instagram ON news_items(instagram_status);
+CREATE INDEX IF NOT EXISTS idx_news_instagram_retry ON news_items(instagram_status, instagram_next_retry_at);
 """
 
 MIGRATIONS = {
@@ -64,6 +69,10 @@ MIGRATIONS = {
     "instagram_media_id": "ALTER TABLE news_items ADD COLUMN instagram_media_id TEXT",
     "instagram_error": "ALTER TABLE news_items ADD COLUMN instagram_error TEXT",
     "instagram_published_at": "ALTER TABLE news_items ADD COLUMN instagram_published_at TEXT",
+    "instagram_attempts": "ALTER TABLE news_items ADD COLUMN instagram_attempts INTEGER NOT NULL DEFAULT 0",
+    "instagram_last_attempt_at": "ALTER TABLE news_items ADD COLUMN instagram_last_attempt_at TEXT",
+    "instagram_next_retry_at": "ALTER TABLE news_items ADD COLUMN instagram_next_retry_at TEXT",
+    "instagram_container_id": "ALTER TABLE news_items ADD COLUMN instagram_container_id TEXT",
     "reel_cloudinary_public_id": "ALTER TABLE news_items ADD COLUMN reel_cloudinary_public_id TEXT",
 }
 
@@ -175,7 +184,8 @@ class NewsDatabase:
             "category", "status", "ai_summary", "ai_article", "fact_check_status",
             "fact_check_notes", "image_url", "approved_at", "published_at_site",
             "instagram_status", "instagram_media_id", "instagram_error",
-            "instagram_published_at", "reel_cloudinary_public_id",
+            "instagram_published_at", "instagram_attempts", "instagram_last_attempt_at",
+            "instagram_next_retry_at", "instagram_container_id", "reel_cloudinary_public_id",
         }
         fields = {k: v for k, v in fields.items() if k in allowed}
         if not fields:
