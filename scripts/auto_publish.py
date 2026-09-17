@@ -82,7 +82,6 @@ def _next_retry(attempts: int) -> str:
 
 
 def _recover_stale_processing(db: NewsDatabase, now: datetime) -> int:
-    """Recover jobs that died after setting processing, so they don't stay stuck forever."""
     rows = [dict(r) for r in db.latest(50, status="published", instagram_status="processing")]
     recovered = 0
     cutoff = now - timedelta(minutes=STALE_PROCESSING_MINUTES)
@@ -188,6 +187,7 @@ def main():
     db = NewsDatabase()
     ai = AIService()
     publish_instagram = os.getenv("PUBLISH_TO_INSTAGRAM", "false").strip().lower() in {"1", "true", "yes"}
+    publish_website = os.getenv("PUBLISH_WEBSITE", "true").strip().lower() in {"1", "true", "yes"}
     try:
         max_items = max(1, int(os.getenv("MAX_ITEMS", "15")))
     except ValueError:
@@ -209,20 +209,30 @@ def main():
     now_iso = now.isoformat()
     music = audio_path() if publish_instagram else None
 
-    pending = [dict(r) for r in db.latest(max_items, status="pending")]
+    pending = [dict(r) for r in db.latest(max_items, status="pending")] if publish_website else []
     for row in pending:
         publish_website_first(db, row, now_iso)
 
     if ai.enabled and ai_items:
-        for row in pending[:ai_items]:
+        ai_rows = pending[:ai_items] if publish_website else [dict(r) for r in db.latest(ai_items, status="published")]
+        for row in ai_rows:
             enrich_with_ai(db, row, ai)
 
+    attempted_ids: set[int] = set()
     if publish_instagram:
         _recover_stale_processing(db, now)
-        attempted_ids: set[int] = set()
-        for row in pending[:instagram_items]:
+        new_rows = pending[:instagram_items] if publish_website else []
+        for row in new_rows:
             process_instagram(db, row, music)
             attempted_ids.add(int(row["id"]))
+
+        # In Instagram-only mode, pick already-published items that have never
+        # been attempted, then fall back to due failures.
+        if not publish_website and instagram_items:
+            fresh_rows = [dict(r) for r in db.latest(instagram_items, status="published", instagram_status="pending")]
+            for row in fresh_rows:
+                process_instagram(db, row, music)
+                attempted_ids.add(int(row["id"]))
 
         if retry_limit:
             retry_rows = [dict(r) for r in db.latest(retry_limit, status="published", instagram_status="failed")]
