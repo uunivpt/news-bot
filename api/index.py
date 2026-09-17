@@ -8,9 +8,9 @@ from app.database import NewsDatabase
 from app.factcheck import run_cross_source_check
 
 app = Flask(__name__)
-_secret = os.getenv("FLASK_SECRET_KEY")
+_secret = os.getenv("FLASK_SECRET_KEY") or os.getenv("ADMIN_TOKEN") or os.getenv("ADMIN_SETUP_KEY")
 if not _secret:
-    raise RuntimeError("FLASK_SECRET_KEY must be configured")
+    raise RuntimeError("Configure FLASK_SECRET_KEY in Vercel Environment Variables")
 app.secret_key = _secret
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SECURE=True, SESSION_COOKIE_SAMESITE="Lax")
 _LOGIN_WINDOW_SECONDS = 300
