@@ -36,21 +36,23 @@ def _motion_filter(index: int, direction: str, frames: int) -> str:
     d=1 is intentional: the image input already runs at 30fps. Using d=180
     here would multiply frames and make the render unnecessarily huge.
     """
+    last = max(frames - 1, 1)
     if direction == "left":
-        x = "iw/2-(iw/zoom/2)-min(70,(on/max(1,\"%d\"))*70)" % max(frames - 1, 1)
+        x = f"iw/2-(iw/zoom/2)-min(70,on/{last}*70)"
         y = "ih/2-(ih/zoom/2)"
     elif direction == "right":
-        x = "iw/2-(iw/zoom/2)+min(70,(on/max(1,\"%d\"))*70)" % max(frames - 1, 1)
+        x = f"iw/2-(iw/zoom/2)+min(70,on/{last}*70)"
         y = "ih/2-(ih/zoom/2)"
     else:
         x = "iw/2-(iw/zoom/2)"
-        y = "ih/2-(ih/zoom/2)-min(55,(on/max(1,\"%d\"))*55)" % max(frames - 1, 1)
+        y = f"ih/2-(ih/zoom/2)-min(55,on/{last}*55)"
+    end = max(frames / DEFAULT_FPS - 0.18, 0.18)
     return (
         f"[{index}:v]scale=1280:2276:force_original_aspect_ratio=increase,"
-        f"crop=1280:2276,zoompan=z='min(1+0.14*on/{max(frames-1,1)},1.14)':"
+        f"crop=1280:2276,zoompan=z='min(1+0.14*on/{last},1.14)':"
         f"x='{x}':y='{y}':d=1:s={REEL_WIDTH}x{REEL_HEIGHT}:fps={DEFAULT_FPS},"
         f"setsar=1,format=yuv420p,fade=t=in:st=0:d=0.18,"
-        f"fade=t=out:st={(frames/DEFAULT_FPS)-0.18:.2f}:d=0.18[v{index}]"
+        f"fade=t=out:st={end:.2f}:d=0.18[v{index}]"
     )
 
 
@@ -69,10 +71,7 @@ def build_reel(image_paths: list[str], output_path: str, audio_path: str | None 
         if audio_path:
             args += ["-stream_loop", "-1", "-i", audio_path]
         motion = _motion_filter(0, "right", frames)
-        args += [
-            "-filter_complex", motion,
-            "-map", "[v0]", "-r", str(DEFAULT_FPS), *_video_codec_args(),
-        ]
+        args += ["-filter_complex", motion, "-map", "[v0]", "-r", str(DEFAULT_FPS), *_video_codec_args()]
         args += (["-map", "1:a:0", *_audio_codec_args()] if audio_path else ["-an"])
         args += ["-t", str(REEL_DURATION), "-movflags", "+faststart", "-video_track_timescale", "90000", str(output)]
         _run_ffmpeg(args)
