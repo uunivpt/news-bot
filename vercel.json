@@ -1,5 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {"source": "/article.html", "destination": "/article2.html"}
+  ],
   "functions": {
     "api/**/*.py": {
       "excludeFiles": "{tests/**,data/**,scripts/**,.github/**,README.md,Dockerfile,app/collector.py,app/rss.py,app/telegram_public.py,app/publisher.py,app/instagram_*.py,app/image_generator.py,app/content_pipeline.py,app/publish_policy.py,app/meta_instagram.py}"
