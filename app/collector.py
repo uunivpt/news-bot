@@ -6,13 +6,14 @@ from typing import Any, Callable
 from .database import NewsDatabase
 from .rss import collect_rss
 from .telegram_public import collect_public_telegram
+from .website_monitor import collect_website
 
 logger = logging.getLogger(__name__)
-
 
 COLLECTORS: dict[str, Callable[[dict[str, Any]], list]] = {
     "rss": collect_rss,
     "telegram": collect_public_telegram,
+    "website": collect_website,
 }
 
 
