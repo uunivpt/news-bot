@@ -1,6 +1,10 @@
-"""Instagram Reels publishing helper."""
+"""Instagram Reels publishing helper with safe diagnostics."""
 from __future__ import annotations
-import os, time
+
+import os
+import time
+from urllib.parse import urlsplit
+
 import requests
 
 
@@ -12,14 +16,20 @@ def _cfg():
     return token, configured_account, version, host
 
 
+def _safe_url(url: str) -> str:
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}{parts.path}"
+
+
 def _raise_meta(r: requests.Response, action: str) -> None:
     if r.ok:
         return
     try:
         detail = r.json()
     except Exception:
-        detail = r.text[:1000]
-    raise RuntimeError(f"Instagram {action} failed ({r.status_code}): {detail}")
+        detail = r.text[:1500]
+    text = str(detail).replace(os.getenv("META_ACCESS_TOKEN", ""), "[REDACTED]")
+    raise RuntimeError(f"Instagram {action} failed ({r.status_code}): {text}")
 
 
 def _resolve_instagram_user(base: str, token: str, configured_account: str) -> str:
@@ -52,6 +62,34 @@ def _container_status(base: str, token: str, container: str) -> dict:
     return r.json()
 
 
+def _video_preflight(video_url: str) -> None:
+    """Verify the exact public URL Meta is expected to fetch."""
+    try:
+        r = requests.get(
+            video_url,
+            headers={"User-Agent": "news-bot-instagram-publisher/1.0"},
+            stream=True,
+            allow_redirects=True,
+            timeout=45,
+        )
+        r.raise_for_status()
+        content_type = (r.headers.get("content-type") or "").lower()
+        content_length = r.headers.get("content-length", "unknown")
+        accept_ranges = r.headers.get("accept-ranges", "unknown")
+        print(
+            "Instagram video preflight: "
+            f"HTTP={r.status_code} type={content_type} size={content_length} "
+            f"accept-ranges={accept_ranges} final_url={_safe_url(r.url)}"
+        )
+        r.close()
+        if "video/mp4" not in content_type:
+            raise RuntimeError(
+                f"Instagram video URL did not return video/mp4; got {content_type!r}"
+            )
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Instagram video URL is not reachable: {exc}") from exc
+
+
 def publish_reel(video_url: str, caption: str) -> dict:
     token, configured_account, version, host = _cfg()
     if not token:
@@ -59,6 +97,7 @@ def publish_reel(video_url: str, caption: str) -> dict:
     if not video_url.startswith(("https://", "http://")):
         raise ValueError("Instagram requires a publicly reachable video URL.")
 
+    _video_preflight(video_url)
     base = f"{host}/{version}"
     account = _resolve_instagram_user(base, token, configured_account)
 
@@ -73,9 +112,10 @@ def publish_reel(video_url: str, caption: str) -> dict:
         timeout=60,
     )
     _raise_meta(r, "media container creation")
-    container = r.json().get("id")
+    creation_response = r.json()
+    container = creation_response.get("id")
     if not container:
-        raise RuntimeError(f"Instagram did not return a creation container id: {r.json()}")
+        raise RuntimeError(f"Instagram did not return a creation container id: {creation_response}")
     print(f"Instagram media container created: {container}")
 
     last_status = {}
@@ -89,20 +129,17 @@ def publish_reel(video_url: str, caption: str) -> dict:
         if data.get("status_code") == "FINISHED":
             break
         if data.get("status_code") == "ERROR":
-            # Meta often exposes only ERROR at this endpoint. Fetching the
-            # container with unsupported fields can itself cause a 400, so
-            # preserve the raw supported response and give actionable context.
             raise RuntimeError(
-                "Instagram container failed before publishing. "
-                f"Container response: {data}. "
-                "The public video URL was reachable, so check the Instagram "
-                "account permissions and Meta's Reel video validation."
+                "Instagram media container entered ERROR. "
+                f"container={container}; status_response={data}; "
+                f"video_url={_safe_url(video_url)}. "
+                "No publish request was sent after the container failed."
             )
         time.sleep(5)
     else:
         raise TimeoutError(
             "Instagram media container did not finish in time. "
-            f"Last status: {last_status}"
+            f"container={container}; last_status={last_status}"
         )
 
     p = requests.post(
@@ -111,4 +148,6 @@ def publish_reel(video_url: str, caption: str) -> dict:
         timeout=60,
     )
     _raise_meta(p, "media publish")
-    return p.json()
+    result = p.json()
+    print(f"Instagram media published successfully: {result}")
+    return result
