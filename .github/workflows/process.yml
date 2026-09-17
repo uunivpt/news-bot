@@ -28,6 +28,11 @@ jobs:
         env:
           PYTHONPATH: .
         run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Repair legacy published stories with deterministic bot
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BOT_REPAIR_BATCH: '50'
+        run: python scripts/repair_bot_content.py
       - name: Publish website, process news and Instagram queue
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
