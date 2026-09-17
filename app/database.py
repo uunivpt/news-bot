@@ -250,7 +250,7 @@ class NewsDatabase:
 
     def update(self, item_id: int, **fields: Any) -> None:
         allowed = {
-            "category", "status", "ai_summary", "ai_article", "fact_check_status",
+            "title", "summary", "category", "status", "ai_summary", "ai_article", "fact_check_status",
             "fact_check_notes", "image_url", "approved_at", "published_at_site",
             "instagram_status", "instagram_media_id", "instagram_error",
             "instagram_published_at", "instagram_attempts", "instagram_last_attempt_at",
