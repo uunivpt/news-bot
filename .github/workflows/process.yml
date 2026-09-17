@@ -31,7 +31,7 @@ jobs:
       - name: Repair legacy published stories with deterministic bot
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          BOT_REPAIR_BATCH: '50'
+          BOT_REPAIR_BATCH: '5000'
         run: python scripts/repair_bot_content.py
       - name: Publish website, process news and Instagram queue
         env:
@@ -46,7 +46,7 @@ jobs:
           PUBLISH_WEBSITE: 'true'
           PUBLISH_TO_INSTAGRAM: 'true'
           MAX_ITEMS: '15'
-          BOT_REPAIR_ITEMS: '5'
+          BOT_REPAIR_ITEMS: '10'
           INSTAGRAM_NEW_ITEMS: '5'
           INSTAGRAM_RETRY_ITEMS: '10'
         run: python scripts/auto_publish.py
