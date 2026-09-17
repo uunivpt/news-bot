@@ -1,7 +1,11 @@
 from __future__ import annotations
 import re
 from collections import Counter
-URL_RE=re.compile(r"https?://\S+",re.I); SPACE_RE=re.compile(r"\s+"); BAD_LINE_RE=re.compile(r"^(?:source|via|follow|subscribe|read more|click here|advertisement|ad)\b",re.I); HANDLE_RE=re.compile(r"(?<!\w)@[A-Za-z0-9_]{2,64}"); TRAILING_FRAGMENT_RE=re.compile(r"\b(?:a|an|and|as|at|by|for|from|in|including|into|of|on|or|such|than|that|the|their|this|to|under|via|was|were|with|without)\.?$",re.I)
+URL_RE=re.compile(r"https?://\S+",re.I)
+SPACE_RE=re.compile(r"\s+")
+BAD_LINE_RE=re.compile(r"^(?:source|via|follow|subscribe|read more|click here|advertisement|ad)\b",re.I)
+HANDLE_RE=re.compile(r"(?<!\w)@[A-Za-z0-9_]{2,64}")
+TRAILING_FRAGMENT_RE=re.compile(r"\b(?:a|an|and|as|at|by|for|from|in|including|into|of|on|or|such|than|that|the|their|this|to|under|via|was|were|with|without)\.?$",re.I)
 
 def clean_text(text: str|None)->str:
  value=text or ""; value=URL_RE.sub("",value); value=HANDLE_RE.sub("",value); value=value.replace("\u200b"," ").replace("\xa0"," "); lines=[]
@@ -18,6 +22,7 @@ def sentences(text:str)->list[str]:
  for index,part in enumerate(parts):
   item=part.strip(" \t-–—")
   if len(item)<30 or BAD_LINE_RE.search(item):continue
+  # A final fragment without terminal punctuation is never promoted to news copy.
   if index==len(parts)-1 and not re.search(r"[.!?][\"'’”)]*$",item):continue
   if TRAILING_FRAGMENT_RE.search(item):continue
   result.append(item.rstrip(".!?")+".")
@@ -52,11 +57,12 @@ def _headline_from_sentence(sentence):
 
 def make_headline(title,source_text):
  value=SPACE_RE.sub(" ",clean_text(title)).strip(" .:-")
- first=_first_complete_sentence(value) if value else ""
+ # Prefer the actual source title; never build a headline by appending body text.
+ if 4<=len(value.split())<=18 and len(value)<=140:return value
+ first=_first_complete_sentence(value)
  if first:
-  if 4<=len(first.split())<=18 and len(first)<=140:return first.rstrip(".!?")
   clause=_headline_from_sentence(first)
-  if 4<=len(clause.split())<=18:return clause
+  if 4<=len(clause.split())<=18:return clause[:140].rstrip(" .:-")
  items=sentences(source_text)
  if items:
   clause=_headline_from_sentence(items[0]); return clause[:140].rstrip(" .:-")
@@ -71,9 +77,10 @@ def make_summary(title,source_text):
 def make_article(title,source_text):
  chosen=select_sentences(source_text,40)
  if not chosen:return ""
- paragraphs=[]; first=chosen[:3]
- if first:paragraphs.append(f"What happened: {' '.join(first)}")
- buckets=[chosen[3:8],chosen[8:14],chosen[14:20],chosen[20:28],chosen[28:40]]; labels=["Key details","What is known","Context","What comes next","Additional details"]
+ paragraphs=[]
+ if chosen[:3]:paragraphs.append(f"What happened: {' '.join(chosen[:3])}")
+ buckets=[chosen[3:8],chosen[8:14],chosen[14:20],chosen[20:28],chosen[28:40]]
+ labels=["Key details","What is known","Context","What comes next","Additional details"]
  for label,bucket in zip(labels,buckets):
   if bucket:paragraphs.append(f"{label}: {' '.join(bucket)}")
  return "\n\n".join(paragraphs).strip()
