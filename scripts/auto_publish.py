@@ -37,7 +37,7 @@ def _dedupe_caption_text(title,text):
 
 def caption(row):
  title=clean_instagram_text(row.get("title") or "",""); text=clean_instagram_text(row.get("bot_summary") or row.get("summary") or "",""); text=_dedupe_caption_text(title,text)
- return f"{title}\n\n{text[:700]}\n\npoliticshub.in" if text else f"{title}\n\npoliticshub.in"
+ return f"{title}\n\n{text}\n\nSource: {row.get('source_name') or 'PoliticsHub'}\npoliticshub.in" if text else f"{title}\n\nSource: {row.get('source_name') or 'PoliticsHub'}\npoliticshub.in"
 
 
 def audio_path():
@@ -56,15 +56,14 @@ def audio_path():
 
 def _process_content(row):
  try:
-  source=enrich_source_text(row.get("title") or "",row.get("summary") or "")
+  source=enrich_source_text(row.get("title") or "",row.get("summary") or "",row.get("url") or "")
   material=source.get("text") or row.get("summary") or row.get("title") or ""
-  result=process_news(row.get("title") or "",material,row.get("category") or "general")
+  result=process_news(source.get("title") or row.get("title") or "",material,row.get("category") or "general")
   if not result:return False
   fields={"title":result["headline"],"summary":result["summary"],"bot_summary":result["summary"],"bot_article":result["article"]}
   if source.get("image_url") and not row.get("image_url"):fields["image_url"]=source["image_url"]
-  db_update=fields
-  row.update(db_update)
-  return db_update
+  row.update(fields)
+  return fields
  except Exception as exc:
   print(f"Bot processing failed for item {row.get('id')}: {exc}"); return False
 
@@ -74,6 +73,16 @@ def process_content(db,row):
  if not fields:return False
  db.update(int(row["id"]),**fields)
  return True
+
+
+def _needs_content_repair(row):
+ title=str(row.get("title") or "").strip()
+ article=str(row.get("bot_article") or "").strip()
+ if not article:return True
+ if title.endswith(("…","...")):return True
+ # A sentence ending in a common connector is a strong signal that source text was cut mid-thought.
+ if re.search(r"\b(?:a|an|and|as|at|by|for|from|in|including|into|of|on|or|the|to|with|without)\.?$",article,re.I):return True
+ return False
 
 
 def publish_website_first(db,row,now):
@@ -108,7 +117,7 @@ def process_instagram(db,row,music):
  if not music:
   db.update(item_id,instagram_status="failed",instagram_error="News Pulse audio unavailable",instagram_next_retry_at=_next_retry(attempts)); return False
  try:
-  cards=generate_reel_cards(title=row["title"],summary=row.get("bot_summary") or row.get("summary") or "",category=row.get("category") or "general",image_url=row.get("image_url"),source_name="",output_dir=OUT/"reel_cards"/str(item_id))
+  cards=generate_reel_cards(title=row["title"],summary=row.get("bot_summary") or row.get("summary") or "",category=row.get("category") or "general",image_url=row.get("image_url"),source_name=row.get("source_name") or "",output_dir=OUT/"reel_cards"/str(item_id))
   video=OUT/f"{item_id}.mp4"; build_reel([str(p) for p in cards],str(video),audio_path=music,duration_per_image=18)
   url=upload_video(str(video)) or public_video_url(str(video))
   if not url:raise RuntimeError("Public Reel video URL unavailable")
@@ -120,7 +129,7 @@ def process_instagram(db,row,music):
 
 def repair_published_content(db,limit):
  if limit<=0:return 0
- rows=[dict(r) for r in db.latest(max(limit*4,limit),status="published") if not r.get("bot_article")][:limit]; repaired=0
+ rows=[dict(r) for r in db.latest(max(limit*8,limit),status="published") if _needs_content_repair(r)][:limit]; repaired=0
  for row in rows:
   if process_content(db,row):repaired+=1
  return repaired
