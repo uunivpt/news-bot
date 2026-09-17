@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
     "api/**/*.py": {
-      "excludeFiles": "{tests/**,data/**,Dockerfile,README.md}"
+      "excludeFiles": "{tests/**,data/**,scripts/**,.github/**,README.md,Dockerfile,app/collector.py,app/rss.py,app/telegram_public.py,app/publisher.py,app/instagram_reel.py,app/instagram_graphic.py,app/image_generator.py,app/content_pipeline.py,app/publish_policy.py,app/meta_instagram.py}"
     }
   }
 }
