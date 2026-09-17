@@ -1,3 +1,4 @@
+# Production deployment marker: deterministic newsroom + public source attribution.
 from __future__ import annotations
 
 import json, os, secrets, time
