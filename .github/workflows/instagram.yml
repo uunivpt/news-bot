@@ -5,8 +5,8 @@ on:
     - cron: '*/5 * * * *'
   workflow_dispatch:
 
-# Keep only one Instagram publisher active. A new pending run replaces an older
-# pending run, while an active upload is allowed to finish safely.
+# Keep only one Instagram publisher active. A new pending run waits while an
+# active upload is allowed to finish safely.
 concurrency:
   group: instagram-publisher
   cancel-in-progress: false
@@ -24,7 +24,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Install Python dependencies
         run: pip install -r requirements.txt
-      - name: Publish one Instagram Reel
+      - name: Publish Instagram Reels
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
@@ -38,6 +38,8 @@ jobs:
           PUBLISH_TO_INSTAGRAM: 'true'
           MAX_ITEMS: '1'
           AI_ENRICH_ITEMS: '0'
-          INSTAGRAM_NEW_ITEMS: '1'
-          INSTAGRAM_RETRY_ITEMS: '2'
+          # High workflow ceiling; the real daily limit is controlled from Admin.
+          # This prevents the GitHub workflow from overriding the Admin setting.
+          INSTAGRAM_NEW_ITEMS: '100'
+          INSTAGRAM_RETRY_ITEMS: '10'
         run: python scripts/auto_publish.py
