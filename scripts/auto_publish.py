@@ -9,7 +9,7 @@ if str(ROOT) not in sys.path:
 
 from app.database import NewsDatabase
 from app.publish_policy import risk_flags
-from app.instagram_graphic import generate_reel_cards
+from app.instagram_graphic import generate_reel_cards, clean_instagram_text
 from app.instagram_reel import build_reel
 from app.meta_instagram import publish_reel
 from app.media_storage import public_video_url, download_to
@@ -39,8 +39,11 @@ def _dedupe_caption_text(title: str, text: str) -> str:
 
 
 def caption(row):
-    title = re.sub(r"\s+", " ", str(row.get("title") or "")).strip()
-    text = _dedupe_caption_text(title, row.get("ai_summary") or row.get("summary") or "")
+    source_name = str(row.get("source_name") or "")
+    title = clean_instagram_text(row.get("title") or "", source_name)
+    text = clean_instagram_text(row.get("ai_summary") or row.get("summary") or "", source_name)
+    text = _dedupe_caption_text(title, text)
+    # No source names, @handles, JUST IN/BREAKING labels or source credits on Instagram.
     return f"{title}\n\n{text[:700]}\n\npoliticshub.in" if text else f"{title}\n\npoliticshub.in"
 
 
@@ -129,10 +132,12 @@ def process_instagram(db: NewsDatabase, row: dict, music: str | None) -> bool:
         cards = generate_reel_cards(
             title=row["title"], summary=summary,
             category=row.get("category") or "general", image_url=row.get("image_url"),
+            source_name=row.get("source_name") or "",
             output_dir=OUT / "reel_cards" / str(item_id),
         )
         video = OUT / f"{item_id}.mp4"
-        build_reel([str(p) for p in cards], str(video), audio_path=music, duration_per_image=6)
+        # One hero card is intentionally used for the complete 18-second Reel.
+        build_reel([str(p) for p in cards], str(video), audio_path=music, duration_per_image=18)
         url = upload_video(str(video)) or public_video_url(str(video))
         if not url:
             raise RuntimeError("Public Reel video URL unavailable")
@@ -226,8 +231,6 @@ def main():
             process_instagram(db, row, music)
             attempted_ids.add(int(row["id"]))
 
-        # In Instagram-only mode, pick already-published items that have never
-        # been attempted, then fall back to due failures.
         if not publish_website and instagram_items:
             fresh_rows = [dict(r) for r in db.latest(instagram_items, status="published", instagram_status="pending")]
             for row in fresh_rows:
