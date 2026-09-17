@@ -30,6 +30,8 @@ jobs:
           AI_API_URL: ${{ secrets.AI_API_URL }}
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
           AI_MODEL: ${{ secrets.AI_MODEL }}
+          AI_TIMEOUT_SECONDS: '90'
+          AI_REQUIRED_FOR_WEBSITE: 'true'
           META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
           META_INSTAGRAM_ACCOUNT_ID: ${{ secrets.META_INSTAGRAM_ACCOUNT_ID }}
           META_API_VERSION: ${{ secrets.META_API_VERSION }}
@@ -40,7 +42,8 @@ jobs:
           PUBLISH_WEBSITE: 'true'
           PUBLISH_TO_INSTAGRAM: 'true'
           MAX_ITEMS: '15'
-          AI_ENRICH_ITEMS: '5'
+          AI_ENRICH_ITEMS: '8'
+          AI_REPAIR_ITEMS: '5'
           INSTAGRAM_NEW_ITEMS: '5'
           INSTAGRAM_RETRY_ITEMS: '10'
         run: python scripts/auto_publish.py
