@@ -60,9 +60,15 @@ def setup_owner():
 @app.post("/api/admin/login")
 def login():
     if not _login_allowed():return jsonify({"error":"too many login attempts; try again later"}),429
-    body=request.get_json(silent=True) or {};username=str(body.get("username","")).strip();password=str(body.get("password",""));database=db()
+    body=request.get_json(silent=True) or {};username=str(body.get("username","")).strip();password=str(body.get("password",""));database=db();valid=False;role=None
     try:
-        row=database.conn.execute("SELECT username,password_hash,role FROM admin_users WHERE username = "+("%s" if database._postgres else "?"),(username,)).fetchone();valid=bool(row and check_password_hash(row["password_hash"] if database._postgres else row[1],password));role=(row["role"] if database._postgres else row[2]) if row else None
+        row=database.conn.execute("SELECT username,password_hash,role FROM admin_users WHERE username = "+("%s" if database._postgres else "?"),(username,)).fetchone()
+        valid=bool(row and check_password_hash(row["password_hash"] if database._postgres else row[1],password));role=(row["role"] if database._postgres else row[2]) if row else None
+        if not valid and username=="admin":
+            count_row=database.conn.execute("SELECT COUNT(*) AS count FROM admin_users").fetchone();count=int(count_row["count"] if database._postgres else count_row[0])
+            bootstrap=os.getenv("ADMIN_SETUP_KEY","") or os.getenv("ADMIN_TOKEN","")
+            if count==0 and bootstrap and secrets.compare_digest(password,bootstrap):
+                now=datetime.now(timezone.utc).isoformat();ph="%s" if database._postgres else "?";database.conn.execute(f"INSERT INTO admin_users (username,password_hash,role,created_at) VALUES ({ph},{ph},{ph},{ph})",("admin",generate_password_hash(password),"owner",now));valid=True;role="owner"
     finally:database.close()
     if not valid:
         record=users().get(username);valid=bool(record and check_password_hash(record,password));role="owner" if valid else None
