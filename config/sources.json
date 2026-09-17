@@ -6,21 +6,21 @@
       "username": "@WatcherGuru",
       "category": "business",
       "enabled": true,
-      "public_source": false
+      "public_source": true
     },
     {
       "name": "Middle East Spectator",
       "username": "@Middle_East_Spectator",
       "category": "world",
       "enabled": true,
-      "public_source": false
+      "public_source": true
     },
     {
       "name": "Geopolitics Prime",
       "username": "@geopolitics_prime",
       "category": "politics",
       "enabled": true,
-      "public_source": false
+      "public_source": true
     }
   ],
   "website": [
@@ -88,7 +88,7 @@
       "category": "india",
       "enabled": false,
       "collection_allowed": false,
-      "public_source": false,
+      "public_source": true,
       "requires_permission": true
     },
     {
@@ -97,7 +97,7 @@
       "category": "india",
       "enabled": false,
       "collection_allowed": false,
-      "public_source": false,
+      "public_source": true,
       "requires_permission": true
     },
     {
@@ -106,7 +106,7 @@
       "category": "business",
       "enabled": false,
       "collection_allowed": false,
-      "public_source": false,
+      "public_source": true,
       "requires_permission": true
     }
   ]
