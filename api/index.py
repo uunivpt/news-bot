@@ -103,7 +103,7 @@ def stats():
     if err:return err
     database=db()
     try:
-        s=database.get_settings();a,b=_india_day_bounds();return jsonify({"total":database.count(),"pending":len(database.latest(100,"all","pending")),"review_needed":len(database.latest(100,"all","published",None,"needs_review")),"published":len(database.latest(100,"all","published")),"instagram_failed":len(database.latest(100,"all","published",None,"all","failed")),"instagram_today":database.instagram_daily_count(a,b),"instagram_limit":int(s.get("instagram_daily_limit","5")),"instagram_interval_minutes":int(s.get("instagram_interval_minutes","60")),"instagram_enabled":s.get("instagram_enabled","true")=="true","website_enabled":s.get("website_enabled","true")=="true"})
+        s=database.get_settings();a,b=_india_day_bounds();return jsonify({"total":database.count(),"pending":len(database.latest(100,"all","pending")),"review_needed":len(database.latest(100,"all","published",None,"needs_review")),"published":len(database.latest(100,"all","published")),"instagram_failed":len(database.latest(100,"all","published",None,"all","failed")),"instagram_today":database.instagram_daily_count(a,b),"instagram_limit":int(s.get("instagram_daily_limit","5")),"instagram_interval_minutes":int(s.get("instagram_interval_minutes","60")),"instagram_enabled":s.get("instagram_enabled","true")=="true","instagram_paused":s.get("instagram_paused","false")=="true","instagram_priority_id":s.get("instagram_priority_id",""),"website_enabled":s.get("website_enabled","true")=="true"})
     finally:database.close()
 @app.get("/api/admin/settings")
 def admin_settings():
@@ -122,6 +122,7 @@ def save_settings():
     body=request.get_json(silent=True) or {};values={}
     if "instagram_enabled" in body:values["instagram_enabled"]="true" if bool(body["instagram_enabled"]) else "false"
     if "website_enabled" in body:values["website_enabled"]="true" if bool(body["website_enabled"]) else "false"
+    if "instagram_paused" in body:values["instagram_paused"]="true" if bool(body["instagram_paused"]) else "false"
     if "instagram_daily_limit" in body:
         try:v=int(body["instagram_daily_limit"])
         except(TypeError,ValueError):return jsonify({"error":"daily limit must be a number"}),400
@@ -174,6 +175,33 @@ def instagram_queue(item_id):return change(item_id,instagram_selected=1,instagra
 def instagram_unqueue(item_id):return change(item_id,instagram_selected=0)
 @app.post("/api/news/<int:item_id>/instagram/retry")
 def instagram_retry(item_id):return change(item_id,instagram_status="pending",instagram_error=None,instagram_next_retry_at=None,instagram_selected=1)
+@app.post("/api/news/<int:item_id>/instagram/publish-now")
+def instagram_publish_now(item_id):
+    err=require_admin()
+    if err:return err
+    err=require_csrf()
+    if err:return err
+    database=db()
+    try:
+        row=next((dict(r) for r in database.latest(1000,status="published",instagram_status="all") if int(r["id"])==item_id),None)
+        if not row:return jsonify({"error":"published story not found"}),404
+        if row.get("instagram_status")=="published":return jsonify({"error":"already published to Instagram"}),409
+        database.set_settings({"instagram_priority_id":str(item_id),"instagram_paused":"true"})
+        database.update(item_id,instagram_selected=1,instagram_status="pending",instagram_error=None,instagram_next_retry_at=None)
+        return jsonify({"ok":True,"priority_id":item_id,"queue_paused":True,"message":"Priority Instagram publish requested; normal queue is frozen until this story succeeds."})
+    finally:database.close()
+@app.post("/api/news/<int:item_id>/instagram/cancel-priority")
+def instagram_cancel_priority(item_id):
+    err=require_admin()
+    if err:return err
+    err=require_csrf()
+    if err:return err
+    database=db()
+    try:
+        s=database.get_settings()
+        if str(s.get("instagram_priority_id",""))!=str(item_id):return jsonify({"error":"this story is not the active priority"}),409
+        database.set_settings({"instagram_priority_id":"","instagram_paused":"false"});return jsonify({"ok":True})
+    finally:database.close()
 @app.post("/api/news/<int:item_id>/ai")
 def ai_process(item_id):
     err=require_admin()
