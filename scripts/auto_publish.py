@@ -19,6 +19,7 @@ from app.ai import AIService
 OUT = Path(os.getenv("MEDIA_OUTPUT_DIR", "data/media"))
 OUT.mkdir(parents=True, exist_ok=True)
 MAX_INSTAGRAM_ATTEMPTS = 6
+STALE_PROCESSING_MINUTES = 20
 
 
 def _dedupe_caption_text(title: str, text: str) -> str:
@@ -29,7 +30,6 @@ def _dedupe_caption_text(title: str, text: str) -> str:
         return ""
     if text.casefold().startswith(title.casefold()):
         text = text[len(title):].lstrip(" :–—-|\n")
-    # Remove an accidental immediate duplicate sentence/paragraph.
     parts = [p.strip() for p in re.split(r"\n+", text) if p.strip()]
     unique = []
     for part in parts:
@@ -41,7 +41,6 @@ def _dedupe_caption_text(title: str, text: str) -> str:
 def caption(row):
     title = re.sub(r"\s+", " ", str(row.get("title") or "")).strip()
     text = _dedupe_caption_text(title, row.get("ai_summary") or row.get("summary") or "")
-    # Title is deliberately present once; Instagram should not receive source attribution.
     return f"{title}\n\n{text[:700]}\n\npoliticshub.in" if text else f"{title}\n\npoliticshub.in"
 
 
@@ -82,6 +81,31 @@ def _next_retry(attempts: int) -> str:
     return (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat()
 
 
+def _recover_stale_processing(db: NewsDatabase, now: datetime) -> int:
+    """Recover jobs that died after setting processing, so they don't stay stuck forever."""
+    rows = [dict(r) for r in db.latest(50, status="published", instagram_status="processing")]
+    recovered = 0
+    cutoff = now - timedelta(minutes=STALE_PROCESSING_MINUTES)
+    for row in rows:
+        raw = row.get("instagram_last_attempt_at")
+        if not raw:
+            continue
+        try:
+            started = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+        if started <= cutoff:
+            attempts = int(row.get("instagram_attempts") or 0)
+            db.update(int(row["id"]), instagram_status="failed",
+                      instagram_error="Recovered stale Instagram processing job",
+                      instagram_next_retry_at=_next_retry(max(attempts, 1)))
+            recovered += 1
+            print(f"Recovered stale Instagram job: item {row['id']}")
+    return recovered
+
+
 def process_instagram(db: NewsDatabase, row: dict, music: str | None) -> bool:
     item_id = int(row["id"])
     attempts = int(row.get("instagram_attempts") or 0)
@@ -103,9 +127,11 @@ def process_instagram(db: NewsDatabase, row: dict, music: str | None) -> bool:
 
     try:
         summary = row.get("ai_summary") or row.get("summary") or ""
-        cards = generate_reel_cards(title=row["title"], summary=summary,
-                                    category=row.get("category") or "general", image_url=row.get("image_url"),
-                                    output_dir=OUT / "reel_cards" / str(item_id))
+        cards = generate_reel_cards(
+            title=row["title"], summary=summary,
+            category=row.get("category") or "general", image_url=row.get("image_url"),
+            output_dir=OUT / "reel_cards" / str(item_id),
+        )
         video = OUT / f"{item_id}.mp4"
         build_reel([str(p) for p in cards], str(video), audio_path=music, duration_per_image=6)
         url = upload_video(str(video)) or public_video_url(str(video))
@@ -113,10 +139,12 @@ def process_instagram(db: NewsDatabase, row: dict, music: str | None) -> bool:
             raise RuntimeError("Public Reel video URL unavailable")
         result = publish_reel(url, caption(row))
         media_id = result.get("id") if isinstance(result, dict) else None
+        container_id = result.get("container_id") if isinstance(result, dict) else None
         db.update(item_id, instagram_status="published", instagram_media_id=media_id,
+                  instagram_container_id=container_id,
                   instagram_published_at=datetime.now(timezone.utc).isoformat(),
                   instagram_error=None, instagram_next_retry_at=None)
-        print(f"Instagram LIVE: item {item_id} media={media_id}")
+        print(f"Instagram LIVE: item {item_id} media={media_id} container={container_id}")
         return True
     except Exception as exc:
         error = str(exc)[:2000]
@@ -190,6 +218,7 @@ def main():
             enrich_with_ai(db, row, ai)
 
     if publish_instagram:
+        _recover_stale_processing(db, now)
         attempted_ids: set[int] = set()
         for row in pending[:instagram_items]:
             process_instagram(db, row, music)
