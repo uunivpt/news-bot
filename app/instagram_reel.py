@@ -30,23 +30,27 @@ def _audio_codec_args() -> list[str]:
     return ["-c:a", "aac", "-profile:a", "aac_low", "-b:a", "128k", "-ar", "48000", "-ac", "2"]
 
 
-def _motion_filter(index: int, direction: str) -> str:
-    # Render each still as a 6s moving editorial shot. Different x/y motion keeps
-    # the three scenes from feeling like a static slideshow.
+def _motion_filter(index: int, direction: str, frames: int) -> str:
+    """Turn a still image into exactly `frames` moving frames.
+
+    d=1 is intentional: the image input already runs at 30fps. Using d=180
+    here would multiply frames and make the render unnecessarily huge.
+    """
     if direction == "left":
-        x = "iw/2-(iw/zoom/2)-min(90,(on/179)*90)"
+        x = "iw/2-(iw/zoom/2)-min(70,(on/max(1,\"%d\"))*70)" % max(frames - 1, 1)
         y = "ih/2-(ih/zoom/2)"
     elif direction == "right":
-        x = "iw/2-(iw/zoom/2)+min(90,(on/179)*90)"
+        x = "iw/2-(iw/zoom/2)+min(70,(on/max(1,\"%d\"))*70)" % max(frames - 1, 1)
         y = "ih/2-(ih/zoom/2)"
     else:
         x = "iw/2-(iw/zoom/2)"
-        y = "ih/2-(ih/zoom/2)-min(70,(on/179)*70)"
+        y = "ih/2-(ih/zoom/2)-min(55,(on/max(1,\"%d\"))*55)" % max(frames - 1, 1)
     return (
         f"[{index}:v]scale=1280:2276:force_original_aspect_ratio=increase,"
-        f"crop=1280:2276,zoompan=z='min(zoom+0.0008,1.14)':x='{x}':y='{y}':"
-        f"d=180:s={REEL_WIDTH}x{REEL_HEIGHT}:fps={DEFAULT_FPS},"
-        f"setsar=1,format=yuv420p,fade=t=in:st=0:d=0.18,fade=t=out:st=5.82:d=0.18[v{index}]"
+        f"crop=1280:2276,zoompan=z='min(1+0.14*on/{max(frames-1,1)},1.14)':"
+        f"x='{x}':y='{y}':d=1:s={REEL_WIDTH}x{REEL_HEIGHT}:fps={DEFAULT_FPS},"
+        f"setsar=1,format=yuv420p,fade=t=in:st=0:d=0.18,"
+        f"fade=t=out:st={(frames/DEFAULT_FPS)-0.18:.2f}:d=0.18[v{index}]"
     )
 
 
@@ -55,33 +59,36 @@ def build_reel(image_paths: list[str], output_path: str, audio_path: str | None 
         raise ValueError("At least one image is required")
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
+    duration_per_image = float(duration_per_image)
+    if duration_per_image <= 0:
+        raise ValueError("duration_per_image must be positive")
 
     if len(image_paths) == 1:
+        frames = int(round(REEL_DURATION * DEFAULT_FPS))
         args = ["ffmpeg", "-y", "-loop", "1", "-framerate", str(DEFAULT_FPS), "-i", image_paths[0]]
         if audio_path:
             args += ["-stream_loop", "-1", "-i", audio_path]
+        motion = _motion_filter(0, "right", frames)
         args += [
-            "-t", str(REEL_DURATION),
-            "-vf", f"scale=1280:2276:force_original_aspect_ratio=increase,crop=1280:2276,zoompan=z='min(zoom+0.0007,1.12)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=540:s={REEL_WIDTH}x{REEL_HEIGHT}:fps={DEFAULT_FPS},setsar=1,format=yuv420p,fade=t=in:st=0:d=0.2,fade=t=out:st=17.8:d=0.2",
-            "map", "0:v:0", "-r", str(DEFAULT_FPS), *_video_codec_args(),
+            "-filter_complex", motion,
+            "-map", "[v0]", "-r", str(DEFAULT_FPS), *_video_codec_args(),
         ]
-        # Correct ffmpeg option spelling after assembling the filter chain.
-        args[args.index("map")] = "-map"
         args += (["-map", "1:a:0", *_audio_codec_args()] if audio_path else ["-an"])
         args += ["-t", str(REEL_DURATION), "-movflags", "+faststart", "-video_track_timescale", "90000", str(output)]
         _run_ffmpeg(args)
         return str(output)
 
     args = ["ffmpeg", "-y"]
+    frames_per_scene = int(round(duration_per_image * DEFAULT_FPS))
     for image in image_paths:
-        args += ["-loop", "1", "-t", str(SCENE_SECONDS), "-i", image]
+        args += ["-loop", "1", "-framerate", str(DEFAULT_FPS), "-t", str(duration_per_image), "-i", image]
     if audio_path:
         args += ["-stream_loop", "-1", "-i", audio_path]
 
     filters = []
     directions = ("left", "right", "up")
     for i in range(len(image_paths)):
-        filters.append(_motion_filter(i, directions[i % len(directions)]))
+        filters.append(_motion_filter(i, directions[i % len(directions)], frames_per_scene))
     concat = "".join(f"[v{i}]" for i in range(len(image_paths)))
     filters.append(f"{concat}concat=n={len(image_paths)}:v=1:a=0[vout]")
     args += ["-filter_complex", ";".join(filters), "-map", "[vout]", "-r", str(DEFAULT_FPS), "-t", str(REEL_DURATION), *_video_codec_args()]
