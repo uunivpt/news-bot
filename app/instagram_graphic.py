@@ -386,7 +386,7 @@ def generate_reel_cards(
     d.text((84, badge_y + 18), category_label, font=_font(25, True), fill="white")
 
     # Main headline.
-    title_font, _ = _fit_title(clean_title, 930, 4)
+    title_font, _ = _fit_title(clean_title, 930, 3)
     headline_y = badge_y + 95
     headline_end = _highlight_title(
         d,
@@ -412,16 +412,16 @@ def generate_reel_cards(
         ).strip(" -–—|/:")
         if summary_text:
             summary_y = headline_end + 18
-            summary_lines = _wrap(summary_text, summary_font, 930)[:5]
+            summary_lines = _wrap(summary_text, summary_font, 930)[:4]
             for line in summary_lines:
                 d.text((60, summary_y), line, font=summary_font, fill="#454b53")
                 summary_y += 38
             summary_end = summary_y
-            if len(_wrap(summary_text, summary_font, 930)) > 5:
+            if len(_wrap(summary_text, summary_font, 930)) > 4:
                 d.text((60, summary_y - 4), "...", font=_font(28, True), fill=MUTED)
 
     # Keep source/site above Instagram's bottom controls and away from long text.
-    footer_y = min(1575, max(1510, summary_end + 34))
+    footer_y = min(1585, max(1515, summary_end + 28))
     d.rectangle((60, footer_y, 125, footer_y + 6), fill=RED)
     d.text(
         (60, footer_y + 34),
