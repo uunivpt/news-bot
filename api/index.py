@@ -218,7 +218,7 @@ def admin_health():
  if err:return err
  database=db()
  try:
-  s=database.get_settings(); return jsonify({"ok":True,"database":"connected","instagram":{"configured":bool(os.getenv("META_ACCESS_TOKEN") or os.getenv("INSTAGRAM_WORKER_CONFIGURED", "").strip().lower() == "true"),"enabled":s.get("instagram_enabled","true")=="true","paused":s.get("instagram_paused","false")=="true"},"worker_dispatch_configured":bool(os.getenv("WORKFLOW_TOKEN") or os.getenv("GITHUB_WORKFLOW_TOKEN")),"website_enabled":s.get("website_enabled","true")=="true","news_count":database.count()})
+  s=database.get_settings(); worker_ready=bool(os.getenv("WORKFLOW_TOKEN", "").strip() or os.getenv("GITHUB_WORKFLOW_TOKEN", "").strip()); instagram_marker=os.getenv("INSTAGRAM_WORKER_CONFIGURED", "").strip().lower()=="true"; return jsonify({"ok":True,"database":"connected","instagram":{"configured":bool(worker_ready or instagram_marker or os.getenv("META_ACCESS_TOKEN", "").strip()),"credentials_source":"github_actions" if worker_ready and not os.getenv("META_ACCESS_TOKEN", "").strip() else ("vercel" if os.getenv("META_ACCESS_TOKEN", "").strip() else "marker"),"enabled":s.get("instagram_enabled","true")=="true","paused":s.get("instagram_paused","false")=="true"},"worker_dispatch_configured":worker_ready,"website_enabled":s.get("website_enabled","true")=="true","news_count":database.count()})
  finally:database.close()
 
 @app.get("/api/admin/activity")
