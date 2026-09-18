@@ -70,10 +70,16 @@ class NewsDatabase:
    import psycopg
    from psycopg.rows import dict_row
    self.conn=psycopg.connect(self.database_url,row_factory=dict_row); self.conn.autocommit=True
-   self.conn.execute(SCHEMA); self.conn.execute(ADMIN_SCHEMA); self.conn.execute(ACTIVITY_SCHEMA); self._migrate_postgres()
+   # PostgreSQL drivers execute one statement at a time; keep schema creation explicit.
+   for statement in (SCHEMA, ADMIN_SCHEMA, ACTIVITY_SCHEMA):
+    self.conn.execute(statement.strip())
+   self._migrate_postgres()
    for statement in INDEXES.split(";"):
     if statement.strip(): self.conn.execute(statement.strip())
   else:
+   # Vercel's filesystem is read-only. SQLite is only a local-development fallback.
+   if os.getenv("VERCEL") and not self.database_url:
+    raise RuntimeError("DATABASE_URL is required on Vercel; refusing to use local SQLite")
    self.path=Path(path); self.path.parent.mkdir(parents=True,exist_ok=True); self.conn=sqlite3.connect(self.path); self.conn.row_factory=sqlite3.Row
    self.conn.executescript(SCHEMA.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")); self.conn.executescript(ADMIN_SCHEMA); self.conn.executescript(ACTIVITY_SCHEMA.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")); self._migrate_sqlite(); self.conn.executescript(INDEXES); self.conn.commit()
   self._seed_settings()
