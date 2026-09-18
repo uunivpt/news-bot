@@ -48,7 +48,7 @@
           "key": "password"
         }
       ],
-      "destination": "/admin/",
+      "destination": "/admin/?",
       "permanent": false
     },
     {
@@ -63,7 +63,7 @@
           "key": "password"
         }
       ],
-      "destination": "/admin/",
+      "destination": "/admin/?",
       "permanent": false
     }
   ]
