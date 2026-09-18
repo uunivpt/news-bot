@@ -1,12 +1,38 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
-    {"source":"/article.html","destination":"/story.html"},
-    {"source":"/","destination":"/home.html"}
+    {
+      "source": "/article.html",
+      "destination": "/story.html"
+    },
+    {
+      "source": "/",
+      "destination": "/home.html"
+    }
   ],
   "functions": {
     "api/**/*.py": {
-      "excludeFiles":"{tests/**,data/**,scripts/**,.github/**,README.md,Dockerfile,app/collector.py,app/rss.py,app/telegram_public.py,app/publisher.py,app/instagram_*.py,app/image_generator.py,app/content_pipeline.py,app/publish_policy.py,app/meta_instagram.py}"
+      "excludeFiles": "{tests/**,data/**,scripts/**,.github/**,README.md,Dockerfile,app/collector.py,app/rss.py,app/telegram_public.py,app/publisher.py,app/instagram_*.py,app/image_generator.py,app/content_pipeline.py,app/publish_policy.py,app/meta_instagram.py}"
     }
-  }
+  },
+  "headers": [
+    {
+      "source": "/admin/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
+        }
+      ]
+    },
+    {
+      "source": "/api/admin/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
+        }
+      ]
+    }
+  ]
 }
