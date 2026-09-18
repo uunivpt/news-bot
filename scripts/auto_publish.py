@@ -225,8 +225,10 @@ def main():
    if remaining>0 and slot_open:
     mode=settings.get("instagram_selection_mode","auto")
     # No artificial one-Reel-per-run bottleneck when interval is set to 0.
-    # Publish all remaining daily slots in this concurrency-protected worker run.
-    slots=remaining
+    # Limit each scheduled run to a small batch so Meta is not hammered by a backlog.
+    try:max_run=max(1,int(os.getenv("INSTAGRAM_MAX_PER_RUN","5")))
+    except ValueError:max_run=5
+    slots=min(remaining,max_run)
     while slots>0:
      candidates=_instagram_candidates(db,mode,1,now)
      if candidates:
