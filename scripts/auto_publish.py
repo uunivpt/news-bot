@@ -118,6 +118,13 @@ def repair_published_content(db,limit):
   if process_content(db,row):repaired+=1
  return repaired
 
+def _schedule_due(row,now):
+ raw=row.get("instagram_scheduled_at")
+ if not raw:return True
+ try:
+  due=datetime.fromisoformat(str(raw).replace("Z","+00:00")); due=due if due.tzinfo else due.replace(tzinfo=timezone.utc); return due<=now
+ except ValueError:return False
+
 def _retry_due(row,now):
  if int(row.get("instagram_attempts") or 0)>=MAX_INSTAGRAM_ATTEMPTS:return False
  raw=row.get("instagram_next_retry_at")
@@ -134,11 +141,13 @@ def _minutes_since_last(db,now):
  try:last=datetime.fromisoformat(str(raw).replace("Z","+00:00")); last=last if last.tzinfo else last.replace(tzinfo=timezone.utc); return max(0,(now-last).total_seconds()/60)
  except ValueError:return None
 
-def _instagram_candidates(db,mode,limit):
+def _instagram_candidates(db,mode,limit,now):
  if limit<=0:return []
- if mode=="manual":
-  rows=[dict(r) for r in db.latest(max(limit*5,50),status="published",instagram_status="pending")]; return [r for r in rows if int(r.get("instagram_selected") or 0)==1][:limit]
- return [dict(r) for r in db.latest(limit,status="published",instagram_status="pending")]
+ rows=[dict(r) for r in db.latest(max(limit*20,100),status="published",instagram_status="pending")]
+ rows=[r for r in rows if _schedule_due(r,now)]
+ if mode=="manual":rows=[r for r in rows if int(r.get("instagram_selected") or 0)==1]
+ rows.sort(key=lambda r:(0 if r.get("instagram_scheduled_at") else 1, int(r.get("instagram_queue_order") or 0) if int(r.get("instagram_queue_order") or 0)>0 else 10**9, -int(r.get("id") or 0)))
+ return rows[:limit]
 
 def main():
  db=NewsDatabase(); settings=db.get_settings(); env_ig=os.getenv("PUBLISH_TO_INSTAGRAM","false").lower() in {"1","true","yes"}; env_web=os.getenv("PUBLISH_WEBSITE","true").lower() in {"1","true","yes"}; priority_id=str(settings.get("instagram_priority_id","") or "").strip(); paused=settings.get("instagram_paused","false")=="true"; publish_instagram=env_ig and (settings.get("instagram_enabled","true")=="true" or bool(priority_id)); publish_website=env_web and settings.get("website_enabled","true")=="true"
@@ -152,8 +161,8 @@ def main():
  except ValueError:admin_daily=5
  try:env_daily=max(0,int(os.getenv("INSTAGRAM_NEW_ITEMS","100")))
  except ValueError:env_daily=100
- try:interval=max(5,int(os.getenv("INSTAGRAM_INTERVAL_MINUTES",settings.get("instagram_interval_minutes","5"))))
- except ValueError:interval=60
+ try:interval=max(0,int(os.getenv("INSTAGRAM_INTERVAL_MINUTES",settings.get("instagram_interval_minutes","0"))))
+ except ValueError:interval=0
  daily_limit=min(admin_daily,env_daily) if env_daily else 0; now=datetime.now(timezone.utc); music=audio_path() if publish_instagram else None; pending=[dict(r) for r in db.latest(max_items,status="pending")] if publish_website else []
  published=held=0
  for row in pending:
@@ -179,7 +188,7 @@ def main():
     # and the interval guard enforces a minimum 5-minute gap between successful Reels.
     slots=1
     while slots>0:
-     candidates=_instagram_candidates(db,mode,1)
+     candidates=_instagram_candidates(db,mode,1,now)
      if candidates:
       row=candidates[0]
       if int(row["id"]) in attempted:break
