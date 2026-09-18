@@ -40,8 +40,8 @@ def _motion_filter(index: int, direction: str, frames: int) -> str:
     # effect: the supplied photo stays visually unchanged throughout its scene.
     end = max(frames / DEFAULT_FPS - 0.18, 0.18)
     return (
-        f"[{index}:v]scale=1280:2276:force_original_aspect_ratio=increase,"
-        f"crop=1280:2276,setsar=1,format=yuv420p,"
+        f"[{index}:v]scale={REEL_WIDTH}:{REEL_HEIGHT}:force_original_aspect_ratio=increase,"
+        f"crop={REEL_WIDTH}:{REEL_HEIGHT},setsar=1,format=yuv420p,"
         f"fade=t=out:st={end:.2f}:d=0.18[v{index}]"
     )
 
