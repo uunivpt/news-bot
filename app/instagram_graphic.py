@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 import re
+import unicodedata
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -33,8 +34,25 @@ LIGHT = "#f5f6f8"
 MAP_DOT = "#dfe2e6"
 
 
+def _strip_unsupported_symbols(text: str) -> str:
+    """Remove emoji/symbol glyphs that DejaVu cannot reliably render.
+
+    The Instagram cards intentionally use typography, not emoji. Unsupported
+    emoji otherwise become visible tofu/square boxes in the exported PNG.
+    """
+    out = []
+    for ch in str(text or ""):
+        cp = ord(ch)
+        category = unicodedata.category(ch)
+        # Emoji and symbol glyphs are not part of the editorial card.
+        if category == "So" or 0x1F000 <= cp <= 0x1FAFF or cp == 0xFFFD:
+            continue
+        out.append(ch)
+    return "".join(out)
+
+
 def clean_instagram_text(text: str, source_name: str = "") -> str:
-    value = re.sub(r"\s+", " ", str(text or "")).strip()
+    value = _strip_unsupported_symbols(re.sub(r"\s+", " ", str(text or "")).strip())
     if not value:
         return ""
     source = re.sub(r"\s+", " ", str(source_name or "")).strip()
@@ -331,7 +349,7 @@ def generate_reel_cards(
             d.text((60, summary_y), line, font=summary_font, fill="#454b53")
             summary_y += 38
         if len(_wrap(clean_summary, summary_font, 930)) > 6:
-            d.text((60, summary_y - 4), "…", font=_font(28, True), fill=MUTED)
+            d.text((60, summary_y - 4), "...", font=_font(28, True), fill=MUTED)
 
     # Editorial footer.
     d.rectangle((60, 1660, 125, 1666), fill=RED)
