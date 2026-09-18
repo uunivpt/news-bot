@@ -148,7 +148,7 @@ def main():
  except ValueError:admin_daily=5
  try:env_daily=max(0,int(os.getenv("INSTAGRAM_NEW_ITEMS","100")))
  except ValueError:env_daily=100
- try:interval=max(0,int(os.getenv("INSTAGRAM_INTERVAL_MINUTES",settings.get("instagram_interval_minutes","0"))))
+ try:interval=max(5,int(os.getenv("INSTAGRAM_INTERVAL_MINUTES",settings.get("instagram_interval_minutes","5"))))
  except ValueError:interval=60
  daily_limit=min(admin_daily,env_daily) if env_daily else 0; now=datetime.now(timezone.utc); music=audio_path() if publish_instagram else None; pending=[dict(r) for r in db.latest(max_items,status="pending")] if publish_website else []
  published=held=0
@@ -171,10 +171,9 @@ def main():
    start,end=_today_bounds(); remaining=max(0,daily_limit-db.instagram_daily_count(start.isoformat(),end.isoformat())); since=_minutes_since_last(db,now); slot_open=since is None or since>=interval
    if remaining>0 and slot_open:
     mode=settings.get("instagram_selection_mode","auto")
-    # Drain the queue in the same worker run: after one Reel is published,
-    # immediately generate and publish the next eligible Reel. There is no
-    # artificial one-hour gap between posts.
-    slots=remaining
+    # Publish at most one normal Reel per worker run. The workflow runs every 5 minutes,
+    # and the interval guard enforces a minimum 5-minute gap between successful Reels.
+    slots=1
     while slots>0:
      candidates=_instagram_candidates(db,mode,1)
      if candidates:
