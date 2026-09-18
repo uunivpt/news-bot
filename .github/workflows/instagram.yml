@@ -22,6 +22,25 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Install Python dependencies
         run: pip install -r requirements.txt
+      - name: Verify Instagram worker configuration
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          META_INSTAGRAM_ACCOUNT_ID: ${{ secrets.META_INSTAGRAM_ACCOUNT_ID }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_UPLOAD_PRESET: ${{ secrets.CLOUDINARY_UPLOAD_PRESET }}
+        run: |
+          missing=()
+          for name in DATABASE_URL META_ACCESS_TOKEN META_INSTAGRAM_ACCOUNT_ID CLOUDINARY_CLOUD_NAME CLOUDINARY_UPLOAD_PRESET; do
+            if [ -z "${!name}" ]; then missing+=("$name"); fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "Missing Instagram worker secrets: ${missing[*]}"
+            echo "Add them under GitHub Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+          echo "Instagram worker core configuration is present."
+
       - name: Publish Instagram queue
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
