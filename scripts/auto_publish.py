@@ -48,11 +48,19 @@ def audio_path():
  path=os.getenv("FIXED_AUDIO_PATH","").strip()
  if path and Path(path).exists():return path
  url=os.getenv("FIXED_AUDIO_URL","").strip()
- if not url.startswith(("https://","http://")):return None
- source=OUT/"fixed_music_source"; normalized=OUT/"fixed_music_instagram.m4a"
+ if url.startswith(("https://","http://")):
+  source=OUT/"fixed_music_source"; normalized=OUT/"fixed_music_instagram.m4a"
+  try:
+   download_to(str(source),url); subprocess.run(["ffmpeg","-y","-i",str(source),"-t","18","-vn","-ac","2","-ar","48000","-c:a","aac","-profile:a","aac_low","-b:a","128k","-movflags","+faststart",str(normalized)],check=True,capture_output=True,text=True); return str(normalized)
+  except Exception as exc:print("Fixed audio preparation failed:",exc)
+ # Never block an otherwise valid Reel because the optional music asset is unavailable.
+ # Generate a short original pulse fallback locally; configured owner audio still takes precedence.
+ fallback=OUT/"fallback_news_pulse.m4a"
  try:
-  download_to(str(source),url); subprocess.run(["ffmpeg","-y","-i",str(source),"-t","18","-vn","-ac","2","-ar","48000","-c:a","aac","-profile:a","aac_low","-b:a","128k","-movflags","+faststart",str(normalized)],check=True,capture_output=True,text=True); return str(normalized)
- except Exception as exc:print("Fixed audio preparation failed:",exc); return None
+  subprocess.run(["ffmpeg","-y","-f","lavfi","-i","sine=frequency=880:duration=18","-f","lavfi","-i","sine=frequency=1320:duration=18","-filter_complex","[0:a]volume=0.10[a0];[1:a]volume=0.05[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=0[a]","-map","[a]","-c:a","aac","-b:a","96k","-ar","48000","-ac","2",str(fallback)],check=True,capture_output=True,text=True)
+  print("Using generated News Pulse fallback audio.")
+  return str(fallback)
+ except Exception as exc:print("Fallback audio generation failed:",exc); return None
 
 def _process_content(row):
  try:
