@@ -59,7 +59,7 @@ MIGRATIONS = {
  "instagram_scheduled_at":"ALTER TABLE news_items ADD COLUMN instagram_scheduled_at TEXT",
  "instagram_queue_order":"ALTER TABLE news_items ADD COLUMN instagram_queue_order INTEGER NOT NULL DEFAULT 0",
 }
-DEFAULT_SETTINGS={"instagram_enabled":"true","instagram_daily_limit":"5","instagram_selection_mode":"auto","instagram_interval_minutes":"5","website_enabled":"true","instagram_paused":"false","instagram_priority_id":""}
+DEFAULT_SETTINGS={"instagram_enabled":"true","instagram_daily_limit":"5","instagram_selection_mode":"auto","instagram_interval_minutes":"0","website_enabled":"true","instagram_paused":"false","instagram_priority_id":""}
 
 class NewsDatabase:
  def __init__(self,path="data/news.db",database_url=None):
