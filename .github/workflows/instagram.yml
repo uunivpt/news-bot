@@ -56,8 +56,8 @@ jobs:
           PUBLISH_TO_INSTAGRAM: 'true'
           MAX_ITEMS: '10'
           BOT_REPAIR_ITEMS: '0'
-          INSTAGRAM_NEW_ITEMS: '100'
-          INSTAGRAM_RETRY_ITEMS: '100'
+          INSTAGRAM_NEW_ITEMS: '1000'
+          INSTAGRAM_RETRY_ITEMS: '1000'
           INSTAGRAM_INTERVAL_MINUTES: '0'
           INSTAGRAM_MAX_PER_RUN: '5'
         run: python scripts/auto_publish.py
