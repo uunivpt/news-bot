@@ -5,9 +5,9 @@ import requests
 
 def dispatch_worker() -> dict:
     # Admin actions must dispatch the dedicated Instagram worker, never the news-only workflow.
-    token = os.getenv("WORKFLOW_TOKEN", "").strip()
+    token = (os.getenv("WORKFLOW_TOKEN", "").strip() or os.getenv("GITHUB_WORKFLOW_TOKEN", "").strip())
     if not token:
-        return {"ok": False, "configured": False, "error": "WORKFLOW_TOKEN is not configured"}
+        return {"ok": False, "configured": False, "queued": True, "error": "No GitHub workflow token is configured in Vercel; the action remains queued for the scheduled Instagram worker."}
 
     owner = os.getenv("GITHUB_REPO_OWNER", "uunivpt").strip()
     repo = os.getenv("GITHUB_REPO_NAME", "news-bot").strip()
@@ -23,12 +23,12 @@ def dispatch_worker() -> dict:
     try:
         response = requests.post(url, headers=headers, json={"ref": ref}, timeout=8)
         if response.status_code in (200, 201, 204):
-            return {"ok": True, "configured": True, "status_code": response.status_code}
+            return {"ok": True, "configured": True, "queued": False, "status_code": response.status_code}
         try:
             body = response.json()
             detail = body.get("message") or "GitHub rejected workflow dispatch"
         except Exception:
             detail = f"GitHub returned HTTP {response.status_code}"
-        return {"ok": False, "configured": True, "status_code": response.status_code, "error": detail}
+        return {"ok": False, "configured": True, "queued": True, "status_code": response.status_code, "error": detail}
     except requests.RequestException as exc:
-        return {"ok": False, "configured": True, "error": f"GitHub dispatch request failed: {exc}"}
+        return {"ok": False, "configured": True, "queued": True, "error": f"GitHub dispatch request failed: {exc}"}
