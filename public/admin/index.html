@@ -18,7 +18,7 @@
 <section id="settings" class="view"><div class="hero"><div><h1>Settings</h1><div class="muted">Distribution controls.</div></div></div><div class="panel"><h3>Website publishing</h3><p class="muted">This controls website publication; collection continues.</p><button id="settingsSiteToggle" class="btn"></button></div></section>
 </main></div></div>
 <script>
-(function(){'use strict';let csrf='',settings={},rows=[];const $=id=>document.getElementById(id);const esc=v=>String(v==null?'':v).replace(/[&<>\"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+(function(){'use strict';if(location.search){history.replaceState(null,document.title,location.pathname+location.hash);}let csrf='',settings={},rows=[];const $=id=>document.getElementById(id);const esc=v=>String(v==null?'':v).replace(/[&<>\"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
 function notice(text,type){const targets=[$('igNotice'),$('overviewNotice')].filter(Boolean);targets.forEach(el=>{el.innerHTML=text?'<div class="notice '+(type||'')+'">'+esc(text)+'</div>':''})}
 async function api(path,opt){opt=opt||{};const headers=Object.assign({},opt.headers||{});if(opt.body!=null)headers['Content-Type']='application/json';if(csrf&&opt.method&&opt.method!=='GET')headers['X-CSRF-Token']=csrf;const r=await fetch(path,Object.assign({},opt,{credentials:'same-origin',headers,cache:'no-store'}));const t=await r.text();let d={};try{d=t?JSON.parse(t):{}}catch(e){throw Error('Invalid server response ('+r.status+')')};if(!r.ok)throw Error(d.error||('Request failed ('+r.status+')'));if(d.csrf_token)csrf=d.csrf_token;return d}
 async function action(path,body){return api(path,{method:'POST',body:body==null?undefined:JSON.stringify(body)})}
