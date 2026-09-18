@@ -1,5 +1,54 @@
 {
-  "rss": [],
+  "rss": [
+    {
+      "name": "PIB Press Releases",
+      "url": "https://pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=1",
+      "source_class": "government",
+      "category": "india",
+      "enabled": true,
+      "public_source": true
+    },
+    {
+      "name": "PIB Media Invitations",
+      "url": "https://pib.gov.in/RssMain.aspx?ModId=10&Lang=1&Regid=1",
+      "source_class": "government",
+      "category": "india",
+      "enabled": true,
+      "public_source": true
+    },
+    {
+      "name": "GovInfo Congressional Bills",
+      "url": "https://www.govinfo.gov/rss/bills.xml",
+      "source_class": "government",
+      "category": "world",
+      "enabled": true,
+      "public_source": true
+    },
+    {
+      "name": "GovInfo Presidential Documents",
+      "url": "https://www.govinfo.gov/rss/dcpd.xml",
+      "source_class": "government",
+      "category": "world",
+      "enabled": true,
+      "public_source": true
+    },
+    {
+      "name": "GovInfo Federal Register",
+      "url": "https://www.govinfo.gov/rss/fr.xml",
+      "source_class": "government",
+      "category": "world",
+      "enabled": true,
+      "public_source": true
+    },
+    {
+      "name": "GovInfo Code of Federal Regulations",
+      "url": "https://www.govinfo.gov/rss/cfr.xml",
+      "source_class": "government",
+      "category": "world",
+      "enabled": true,
+      "public_source": true
+    }
+  ],
   "telegram": [
     {
       "name": "Watcher Guru",
@@ -32,9 +81,18 @@
       "enabled": true,
       "collection_allowed": true,
       "public_source": true,
-      "allowed_hosts": ["pib.gov.in"],
-      "sections": ["https://www.pib.gov.in/Allrel.aspx?lang=1&reg=1"],
-      "article_path_prefixes": ["/PressReleasePage.aspx", "/PressReleaseDetail.aspx", "/Allrel.aspx", "/newsite/PressReleaseDetail.aspx"],
+      "allowed_hosts": [
+        "pib.gov.in"
+      ],
+      "sections": [
+        "https://www.pib.gov.in/Allrel.aspx?lang=1&reg=1"
+      ],
+      "article_path_prefixes": [
+        "/PressReleasePage.aspx",
+        "/PressReleaseDetail.aspx",
+        "/Allrel.aspx",
+        "/newsite/PressReleaseDetail.aspx"
+      ],
       "max_links": 80,
       "check_every_minutes": 5
     },
@@ -46,9 +104,17 @@
       "enabled": true,
       "collection_allowed": true,
       "public_source": true,
-      "allowed_hosts": ["mha.gov.in"],
-      "sections": ["https://www.mha.gov.in/en/commoncontent/press-release-2026"],
-      "article_path_prefixes": ["/en/commoncontent/", "/en/press-releases/", "/en/"],
+      "allowed_hosts": [
+        "mha.gov.in"
+      ],
+      "sections": [
+        "https://www.mha.gov.in/en/commoncontent/press-release-2026"
+      ],
+      "article_path_prefixes": [
+        "/en/commoncontent/",
+        "/en/press-releases/",
+        "/en/"
+      ],
       "max_links": 60,
       "check_every_minutes": 5
     },
@@ -60,9 +126,19 @@
       "enabled": true,
       "collection_allowed": true,
       "public_source": true,
-      "allowed_hosts": ["whitehouse.gov"],
-      "sections": ["https://www.whitehouse.gov/news/", "https://www.whitehouse.gov/releases/", "https://www.whitehouse.gov/presidential-actions/"],
-      "article_path_prefixes": ["/news/", "/releases/", "/presidential-actions/"],
+      "allowed_hosts": [
+        "whitehouse.gov"
+      ],
+      "sections": [
+        "https://www.whitehouse.gov/news/",
+        "https://www.whitehouse.gov/releases/",
+        "https://www.whitehouse.gov/presidential-actions/"
+      ],
+      "article_path_prefixes": [
+        "/news/",
+        "/releases/",
+        "/presidential-actions/"
+      ],
       "max_links": 100,
       "check_every_minutes": 5
     },
@@ -74,9 +150,16 @@
       "enabled": true,
       "collection_allowed": true,
       "public_source": true,
-      "allowed_hosts": ["government.ru"],
-      "sections": ["https://government.ru/news/"],
-      "article_path_prefixes": ["/news/", "/docs/"],
+      "allowed_hosts": [
+        "government.ru"
+      ],
+      "sections": [
+        "https://government.ru/news/"
+      ],
+      "article_path_prefixes": [
+        "/news/",
+        "/docs/"
+      ],
       "max_links": 80,
       "check_every_minutes": 5
     }
