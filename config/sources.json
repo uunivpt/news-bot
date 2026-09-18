@@ -21,7 +21,7 @@
       "url": "https://www.govinfo.gov/rss/bills.xml",
       "source_class": "government",
       "category": "world",
-      "enabled": true,
+      "enabled": false,
       "public_source": true
     },
     {
