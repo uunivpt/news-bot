@@ -10,7 +10,7 @@ def dispatch_worker() -> dict:
 
     owner = os.getenv("GITHUB_REPO_OWNER", "uunivpt").strip()
     repo = os.getenv("GITHUB_REPO_NAME", "news-bot").strip()
-    workflow = os.getenv("GITHUB_WORKFLOW_FILE", "process.yml").strip()
+    workflow = os.getenv("GITHUB_WORKFLOW_FILE", "instagram.yml").strip()
     ref = os.getenv("GITHUB_WORKFLOW_REF", "main").strip()
     url = f"https://api.github.com/repos/{owner}/{repo}/actions/workflows/{workflow}/dispatches"
     headers = {
