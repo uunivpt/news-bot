@@ -52,7 +52,7 @@ def publish_reel(video_url,caption):
     if not token: raise RuntimeError("Instagram is not configured. Add META_ACCESS_TOKEN.")
     if not video_url.startswith(("https://","http://")): raise ValueError("Instagram requires a publicly reachable video URL.")
     _video_preflight(video_url); base=f"{host}/{version}"; account=_resolve_instagram_user(base,token,configured_account)
-    r=requests.post(f"{base}/{account}/media",data={"media_type":"REELS","video_url":video_url,"caption":caption,"access_token":token},timeout=60); _raise_meta(r,"media container creation")
+    r=requests.post(f"{base}/{account}/media",data={"media_type":"REELS","video_url":video_url,"caption":caption,"thumb_offset":"1000","access_token":token},timeout=60); _raise_meta(r,"media container creation")
     creation=r.json(); container=creation.get("id")
     if not container: raise RuntimeError(f"Instagram did not return a creation container id: {creation}")
     print(f"Instagram media container created: {container}")
