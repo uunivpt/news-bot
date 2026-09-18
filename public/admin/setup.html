@@ -12,13 +12,13 @@ body{margin:0;min-height:100vh;display:grid;place-items:center;background:#080b1
 <div class="box">
 <h1>Create Owner Account</h1>
 <div class="muted">One-time private setup for the politicshub.in admin control room.</div>
-<input id="key" class="field" type="password" placeholder="Private setup key" autocomplete="off">
+<input id="key" class="field" type="password" placeholder="Private setup key / admin token" autocomplete="off">
 <input id="user" class="field" placeholder="Owner username" autocomplete="username">
 <input id="pass" class="field" type="password" placeholder="Password — minimum 12 characters" autocomplete="new-password">
 <input id="pass2" class="field" type="password" placeholder="Confirm password" autocomplete="new-password">
 <button id="create" class="btn">Create owner securely</button>
 <div id="msg" class="msg"></div>
-<div class="note">This page does not create a public signup system. The server requires the private <b>ADMIN_SETUP_KEY</b>. After the first owner is created, setup is permanently closed in the database. The password is stored only as a server-side password hash.</div>
+<div class="note">This page does not create a public signup system. The server requires the private <b>ADMIN_SETUP_KEY</b> (or the existing <b>ADMIN_TOKEN</b>). After the first owner is created, setup is permanently closed in the database. The password is stored only as a server-side password hash.</div>
 <div class="muted" style="margin-top:14px"><a href="/admin/">Back to private sign in</a></div>
 </div>
 <script>
@@ -27,6 +27,8 @@ $('create').onclick=async()=>{
   const key=$('key').value,user=$('user').value.trim(),pass=$('pass').value,pass2=$('pass2').value;
   $('msg').className='msg'; $('msg').textContent='';
   if(pass!==pass2){$('msg').className='msg err';$('msg').textContent='Passwords do not match.';return;}
+  if(user.length<3||user.length>40){$('msg').className='msg err';$('msg').textContent='Username must be 3–40 characters.';return;}
+  if(pass.length<12){$('msg').className='msg err';$('msg').textContent='Password must be at least 12 characters.';return;}
   $('create').disabled=true;
   try{
     const r=await fetch('/api/admin/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({setup_key:key,username:user,password:pass})});
