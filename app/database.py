@@ -67,6 +67,9 @@ class NewsDatabase:
  def __init__(self,path="data/news.db",database_url=None):
   self.database_url=database_url or os.getenv("DATABASE_URL"); self._postgres=bool(self.database_url)
   if self._postgres:
+   # Render PostgreSQL requires TLS; add sslmode when a connection string does not specify it.
+   if "sslmode=" not in self.database_url.lower():
+    self.database_url += ("&" if "?" in self.database_url else "?") + "sslmode=require"
    import psycopg
    from psycopg.rows import dict_row
    self.conn=psycopg.connect(self.database_url,row_factory=dict_row); self.conn.autocommit=True
