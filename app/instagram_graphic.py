@@ -321,26 +321,61 @@ def generate_reel_cards(
     _draw_world_dots(d)
 
     # Image-aware layout:
-    # - With a real source image, keep the whole image visible (no crop).
-    #   The image can extend beyond the decorative frame so it is never clipped.
-    # - Without a source image, remove the image section completely and
-    #   position the news/update content around the middle of the Reel.
+    # Build the photo section from the SOURCE IMAGE'S aspect ratio.
+    # The complete image is always shown: never crop and never let it escape
+    # the section. The decorative section itself grows/shrinks to match it.
     if image:
-        frame = (42, 365, 1038, 850)
-        d.rounded_rectangle(frame, radius=28, fill="#eef0f3", outline="#ffffff", width=5)
+        image_top = 365
+        max_image_w = 1000
+        max_image_h = 560
 
-        # Preserve the complete source image. The target is taller than the
-        # frame, so common landscape images extend beyond the frame vertically.
-        fitted = ImageOps.contain(image, (1000, 560), method=Image.Resampling.LANCZOS)
-        image_x = (REEL_WIDTH - fitted.width) // 2
-        image_y = 350 + (560 - fitted.height) // 2
-        canvas.paste(fitted, (image_x, image_y))
+        source_w, source_h = image.size
+        scale = min(max_image_w / source_w, max_image_h / source_h)
+        fitted_w = max(1, round(source_w * scale))
+        fitted_h = max(1, round(source_h * scale))
 
-        # Keep the decorative frame visible while allowing the image to overflow.
+        image_x = (REEL_WIDTH - fitted_w) // 2
+        image_y = image_top
+
+        # The section is exactly the rendered image size + a small, consistent
+        # editorial border. This prevents the old "image outside the frame"
+        # problem for landscape, portrait, square, or unusual source images.
+        pad = 10
+        frame = (
+            image_x - pad,
+            image_y - pad,
+            image_x + fitted_w + pad,
+            image_y + fitted_h + pad,
+        )
+
+        d.rounded_rectangle(
+            frame,
+            radius=28,
+            fill="#eef0f3",
+            outline="#ffffff",
+            width=5,
+        )
+
+        fitted = image.resize((fitted_w, fitted_h), Image.Resampling.LANCZOS)
+
+        # Paste through a rounded mask so the photo follows the section shape.
+        mask = Image.new("L", (fitted_w, fitted_h), 0)
+        mask_draw = ImageDraw.Draw(mask)
+        radius = min(22, fitted_w // 12, fitted_h // 12)
+        mask_draw.rounded_rectangle(
+            (0, 0, fitted_w - 1, fitted_h - 1),
+            radius=max(8, radius),
+            fill=255,
+        )
+        canvas.paste(fitted, (image_x, image_y), mask)
+
+        # Re-draw the border on top of the photo.
         d.rounded_rectangle(frame, radius=28, outline="#ffffff", width=5)
-        content_y = 925
+
+        # Keep a predictable gap before the category badge.
+        content_y = frame[3] + 70
     else:
-        # No placeholder and no empty image box.
+        # No image means no image placeholder/section at all.
         content_y = 720
 
     # Category badge.
