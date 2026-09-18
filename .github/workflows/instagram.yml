@@ -52,11 +52,11 @@ jobs:
           CLOUDINARY_UPLOAD_PRESET: ${{ secrets.CLOUDINARY_UPLOAD_PRESET }}
           FIXED_AUDIO_PATH: ${{ secrets.FIXED_AUDIO_PATH }}
           FIXED_AUDIO_URL: ${{ secrets.FIXED_AUDIO_URL }}
-          PUBLISH_WEBSITE: 'false'
+          PUBLISH_WEBSITE: 'true'
           PUBLISH_TO_INSTAGRAM: 'true'
-          MAX_ITEMS: '1'
+          MAX_ITEMS: '10'
           BOT_REPAIR_ITEMS: '0'
-          INSTAGRAM_NEW_ITEMS: '20'
-          INSTAGRAM_RETRY_ITEMS: '20'
+          INSTAGRAM_NEW_ITEMS: '100'
+          INSTAGRAM_RETRY_ITEMS: '100'
           INSTAGRAM_INTERVAL_MINUTES: '0'
         run: python scripts/auto_publish.py
