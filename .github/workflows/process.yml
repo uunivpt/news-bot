@@ -49,7 +49,7 @@ jobs:
           FIXED_AUDIO_PATH: ${{ secrets.FIXED_AUDIO_PATH }}
           FIXED_AUDIO_URL: ${{ secrets.FIXED_AUDIO_URL }}
           PUBLISH_WEBSITE: 'true'
-          PUBLISH_TO_INSTAGRAM: 'true'
+          PUBLISH_TO_INSTAGRAM: 'false'
           MAX_ITEMS: '15'
           BOT_REPAIR_ITEMS: '10'
           INSTAGRAM_NEW_ITEMS: '20'
