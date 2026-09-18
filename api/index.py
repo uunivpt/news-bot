@@ -14,7 +14,7 @@ from app.worker import dispatch_worker
 
 app=Flask(__name__, static_folder="../public", static_url_path="")
 _secret=os.getenv("FLASK_SECRET_KEY") or os.getenv("ADMIN_TOKEN") or os.getenv("ADMIN_SETUP_KEY")
-if not _secret:raise RuntimeError("Configure FLASK_SECRET_KEY in Vercel Environment Variables")
+if not _secret:_secret=secrets.token_urlsafe(32)
 app.secret_key=_secret
 app.config.update(SESSION_COOKIE_NAME="politicshub_admin_session",SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SECURE=True,SESSION_COOKIE_SAMESITE="Lax",SESSION_COOKIE_PATH="/",SESSION_COOKIE_REFRESH_EACH_REQUEST=False)
 _LOGIN_WINDOW_SECONDS=300; _LOGIN_MAX_FAILURES=8; _login_failures={}
@@ -419,4 +419,13 @@ def fact_check():
  finally:database.close()
 
 
-# Render web-service compatibility: serve the existing public frontend from the same Flask app.\n@app.route("/", defaults={"path": ""})\n@app.route("/<path:path>")\ndef _render_public(path):\n if path.startswith("api/"):\n  return jsonify({"error":"not found"}),404\n target=path or "home.html"\n if target.endswith("/"):\n  target += "index.html"\n return send_from_directory(app.static_folder, target)\n
+# Render web-service compatibility: serve the existing public frontend from the same Flask app.
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def _render_public(path):
+ if path.startswith("api/"):
+  return jsonify({"error":"not found"}),404
+ target=path or "home.html"
+ if target.endswith("/"):
+  target += "index.html"
+ return send_from_directory(app.static_folder, target)
