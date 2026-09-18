@@ -4,3 +4,4 @@ beautifulsoup4==4.13.5
 psycopg[binary]==3.2.10
 Flask==3.1.2
 Pillow==11.3.0
+gunicorn==23.0.0
