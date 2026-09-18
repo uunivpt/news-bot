@@ -309,28 +309,39 @@ def generate_reel_cards(
     # Faint world map sits behind the hero card.
     _draw_world_dots(d)
 
-    # Hero image with the same large rounded editorial frame.
-    frame = (42, 365, 1038, 850)
-    d.rounded_rectangle(frame, radius=28, fill="#eef0f3", outline="#ffffff", width=5)
+    # Image-aware layout:
+    # - With a real source image, keep the whole image visible (no crop).
+    #   The image can extend beyond the decorative frame so it is never clipped.
+    # - Without a source image, remove the image section completely and
+    #   position the news/update content around the middle of the Reel.
     if image:
-        fitted = ImageOps.fit(image, (1000, 455), method=Image.Resampling.LANCZOS)
-        mask = Image.new("L", (1000, 455), 0)
-        md = ImageDraw.Draw(mask)
-        md.rounded_rectangle((0, 0, 999, 454), radius=23, fill=255)
-        canvas.paste(fitted, (40, 375), mask)
+        frame = (42, 365, 1038, 850)
+        d.rounded_rectangle(frame, radius=28, fill="#eef0f3", outline="#ffffff", width=5)
+
+        # Preserve the complete source image. The target is taller than the
+        # frame, so common landscape images extend beyond the frame vertically.
+        fitted = ImageOps.contain(image, (1000, 560), method=Image.Resampling.LANCZOS)
+        image_x = (REEL_WIDTH - fitted.width) // 2
+        image_y = 350 + (560 - fitted.height) // 2
+        canvas.paste(fitted, (image_x, image_y))
+
+        # Keep the decorative frame visible while allowing the image to overflow.
+        d.rounded_rectangle(frame, radius=28, outline="#ffffff", width=5)
+        content_y = 925
     else:
-        d.rounded_rectangle((55, 378, 1025, 837), radius=22, fill="#e7e9ec")
-        d.text((330, 570), "POLITICSHUB", font=_font(50, True), fill="#9aa0a8")
+        # No placeholder and no empty image box.
+        content_y = 720
 
     # Category badge.
     category_label = (category or "news").upper()[:15]
     badge_w = max(190, d.textbbox((0, 0), category_label, font=_font(25, True))[2] + 56)
-    d.rounded_rectangle((58, 885, 58 + badge_w, 950), radius=15, fill=RED)
-    d.text((84, 903), category_label, font=_font(25, True), fill="white")
+    badge_y = content_y
+    d.rounded_rectangle((58, badge_y, 58 + badge_w, badge_y + 65), radius=15, fill=RED)
+    d.text((84, badge_y + 18), category_label, font=_font(25, True), fill="white")
 
     # Main headline.
     title_font, _ = _fit_title(clean_title, 930, 4)
-    headline_y = 980
+    headline_y = badge_y + 95
     headline_end = _highlight_title(
         d,
         clean_title,
@@ -343,7 +354,7 @@ def generate_reel_cards(
     # Compact summary below headline.
     if clean_summary:
         summary_font = _font(25)
-        summary_y = min(headline_end + 18, 1450)
+        summary_y = headline_end + 18
         summary_lines = _wrap(clean_summary, summary_font, 930)[:6]
         for line in summary_lines:
             d.text((60, summary_y), line, font=summary_font, fill="#454b53")
