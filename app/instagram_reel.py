@@ -36,22 +36,12 @@ def _motion_filter(index: int, direction: str, frames: int) -> str:
     d=1 is intentional: the image input already runs at 30fps. Using d=180
     here would multiply frames and make the render unnecessarily huge.
     """
-    last = max(frames - 1, 1)
-    if direction == "left":
-        x = f"iw/2-(iw/zoom/2)-min(70,on/{last}*70)"
-        y = "ih/2-(ih/zoom/2)"
-    elif direction == "right":
-        x = f"iw/2-(iw/zoom/2)+min(70,on/{last}*70)"
-        y = "ih/2-(ih/zoom/2)"
-    else:
-        x = "iw/2-(iw/zoom/2)"
-        y = f"ih/2-(ih/zoom/2)-min(55,on/{last}*55)"
+    # Keep every news image completely static. No zoom, pan, or Ken Burns
+    # effect: the supplied photo stays visually unchanged throughout its scene.
     end = max(frames / DEFAULT_FPS - 0.18, 0.18)
     return (
         f"[{index}:v]scale=1280:2276:force_original_aspect_ratio=increase,"
-        f"crop=1280:2276,zoompan=z='min(1+0.14*on/{last},1.14)':"
-        f"x='{x}':y='{y}':d=1:s={REEL_WIDTH}x{REEL_HEIGHT}:fps={DEFAULT_FPS},"
-        f"setsar=1,format=yuv420p,fade=t=in:st=0:d=0.18,"
+        f"crop=1280:2276,setsar=1,format=yuv420p,fade=t=in:st=0:d=0.18,"
         f"fade=t=out:st={end:.2f}:d=0.18[v{index}]"
     )
 
