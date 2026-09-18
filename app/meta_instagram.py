@@ -5,7 +5,7 @@ from urllib.parse import urlsplit
 import requests
 
 def _cfg():
-    token=os.getenv("META_ACCESS_TOKEN","").strip(); account=os.getenv("META_INSTAGRAM_ACCOUNT_ID","").strip(); version=os.getenv("META_API_VERSION","v25.0").strip(); host=os.getenv("META_API_BASE_URL","https://graph.instagram.com").rstrip("/")
+    token=os.getenv("META_ACCESS_TOKEN","").strip(); account=os.getenv("META_INSTAGRAM_ACCOUNT_ID","").strip(); version=os.getenv("META_API_VERSION","").strip() or "v25.0"; host=(os.getenv("META_API_BASE_URL","").strip() or "https://graph.instagram.com").rstrip("/")
     return token,account,version,host
 
 def _safe_url(url):
