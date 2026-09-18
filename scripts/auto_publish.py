@@ -40,9 +40,12 @@ def _dedupe_caption_text(title,text):
   if not any(part.casefold()==old.casefold() for old in unique):unique.append(part)
  return " ".join(unique)
 
+REEL_HASHTAGS="#reel #update #news #politics #global"
+
 def caption(row):
  title=clean_instagram_text(row.get("title") or "",""); text=clean_instagram_text(row.get("bot_summary") or row.get("summary") or "",""); text=_dedupe_caption_text(title,text)
- return f"{title}\n\n{text}\n\nSource: {row.get('source_name') or 'PoliticsHub'}\npoliticshub.in" if text else f"{title}\n\nSource: {row.get('source_name') or 'PoliticsHub'}\npoliticshub.in"
+ base=f"{title}\n\n{text}\n\nSource: {row.get('source_name') or 'PoliticsHub'}\npoliticshub.in" if text else f"{title}\n\nSource: {row.get('source_name') or 'PoliticsHub'}\npoliticshub.in"
+ return f"{base}\n\n{REEL_HASHTAGS}"
 
 def audio_path():
  path=os.getenv("FIXED_AUDIO_PATH","").strip()
@@ -73,10 +76,30 @@ def _process_content(row):
   row.update(fields); return fields
  except Exception as exc:print(f"Bot processing failed for item {row.get('id')}: {exc}"); return False
 
-def process_content(db,row):
+def _direct_fallback_content(row):
+ # Very short alerts cannot be expanded safely by the newsroom processor.
+ # Publish the source wording directly after removing source-name fragments and emoji.
+ title=clean_instagram_text(row.get("title") or "",row.get("source_name") or "")
+ raw=row.get("summary") or row.get("title") or ""
+ summary=clean_instagram_text(raw,row.get("source_name") or "")
+ if not summary:
+  summary=title
+ if not title and not summary:return False
+ article=summary
+ return {"title":title or "Latest news update","summary":summary,"bot_summary":summary,"bot_article":article}
+
+def prepare_content(db,row):
  fields=_process_content(row)
- if not fields:return False
- db.update(int(row["id"]),**fields); return True
+ if fields:
+  db.update(int(row["id"]),**fields); return True
+ fallback=_direct_fallback_content(row)
+ if not fallback:return False
+ db.update(int(row["id"]),**fallback); row.update(fallback)
+ print(f"Using direct source fallback for short item {row['id']}")
+ return True
+
+def process_content(db,row):
+ return prepare_content(db,row)
 
 def _needs_content_repair(row):
  title=str(row.get("title") or "").strip(); summary=str(row.get("bot_summary") or row.get("summary") or "").strip(); article=str(row.get("bot_article") or "").strip()
@@ -179,9 +202,10 @@ def main():
  daily_limit=min(admin_daily,env_daily) if env_daily else 0; now=datetime.now(timezone.utc); music=audio_path() if publish_instagram else None; pending=[dict(r) for r in db.latest(max_items,status="pending")] if publish_website else []
  published=held=0
  for row in pending:
-  # Always regenerate pending content from the freshest source; never publish stale bot fields.
-  ready=process_content(db,row)
-  if not ready:held+=1; print(f"Website publish held for item {row['id']}: bot could not produce complete content"); continue
+  # Always regenerate pending content from the freshest source. If the newsroom
+  # processor rejects a very short alert, fall back to cleaned source wording.
+  ready=prepare_content(db,row)
+  if not ready:held+=1; print(f"Website publish held for item {row['id']}: no usable source text"); continue
   publish_website_first(db,row,now.isoformat()); published+=1
  repaired=repair_published_content(db,repair_items); attempted=set(); priority_handled=False
  if publish_instagram:
