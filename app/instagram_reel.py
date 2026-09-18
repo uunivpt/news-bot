@@ -41,7 +41,7 @@ def _motion_filter(index: int, direction: str, frames: int) -> str:
     end = max(frames / DEFAULT_FPS - 0.18, 0.18)
     return (
         f"[{index}:v]scale=1280:2276:force_original_aspect_ratio=increase,"
-        f"crop=1280:2276,setsar=1,format=yuv420p,fade=t=in:st=0:d=0.18,"
+        f"crop=1280:2276,setsar=1,format=yuv420p,"
         f"fade=t=out:st={end:.2f}:d=0.18[v{index}]"
     )
 
