@@ -34,5 +34,37 @@
         }
       ]
     }
+  ],
+  "redirects": [
+    {
+      "source": "/admin",
+      "has": [
+        {
+          "type": "query",
+          "key": "username"
+        },
+        {
+          "type": "query",
+          "key": "password"
+        }
+      ],
+      "destination": "/admin/",
+      "permanent": false
+    },
+    {
+      "source": "/admin/",
+      "has": [
+        {
+          "type": "query",
+          "key": "username"
+        },
+        {
+          "type": "query",
+          "key": "password"
+        }
+      ],
+      "destination": "/admin/",
+      "permanent": false
+    }
   ]
 }
