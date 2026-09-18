@@ -19,7 +19,7 @@ from app.meta_instagram import publish_reel, InstagramRateLimitError
 from app.newsroom import process_news
 from app.publish_policy import risk_flags
 OUT=Path(os.getenv("MEDIA_OUTPUT_DIR","data/media")); OUT.mkdir(parents=True,exist_ok=True)
-MAX_INSTAGRAM_ATTEMPTS=6; STALE_PROCESSING_MINUTES=20
+MAX_INSTAGRAM_ATTEMPTS=999999; STALE_PROCESSING_MINUTES=20
 TRAILING_FRAGMENT_RE=re.compile(r"\b(?:a|an|and|as|at|by|for|from|in|including|into|of|on|or|the|their|this|to|under|via|was|were|with|without)\.?$",re.I)
 SHORT_FINAL_TOKEN_RE=re.compile(r"\b[a-zA-Z]{1,2}\.$")
 KNOWN_SHORT_ENDINGS={"US.","UK.","EU.","UN.","AI.","PM.","MP.","CM.","UP.","U.S.","U.K."}
@@ -193,10 +193,10 @@ def main():
  except ValueError:repair_items=5
  try:retry_limit=max(0,int(os.getenv("INSTAGRAM_RETRY_ITEMS","10")))
  except ValueError:retry_limit=10
- try:admin_daily=max(100,int(settings.get("instagram_daily_limit","100")))
- except ValueError:admin_daily=100
- try:env_daily=max(0,int(os.getenv("INSTAGRAM_NEW_ITEMS","100")))
- except ValueError:env_daily=100
+ try:admin_daily=max(1000,int(settings.get("instagram_daily_limit","1000")))
+ except ValueError:admin_daily=1000
+ try:env_daily=max(0,int(os.getenv("INSTAGRAM_NEW_ITEMS","1000")))
+ except ValueError:env_daily=1000
  try:interval=max(0,int(os.getenv("INSTAGRAM_INTERVAL_MINUTES",settings.get("instagram_interval_minutes","0"))))
  except ValueError:interval=0
  daily_limit=min(admin_daily,env_daily) if env_daily else 0; now=datetime.now(timezone.utc); music=audio_path() if publish_instagram else None; pending=[dict(r) for r in db.latest(max_items,status="pending")] if publish_website else []
