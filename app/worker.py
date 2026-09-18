@@ -7,7 +7,7 @@ def dispatch_worker() -> dict:
     # Admin actions must dispatch the dedicated Instagram worker, never the news-only workflow.
     token = os.getenv("WORKFLOW_TOKEN", "").strip()
     if not token:
-        return {"ok": False, "configured": False, "error": "GITHUB_WORKFLOW_TOKEN is not configured"}
+        return {"ok": False, "configured": False, "error": "WORKFLOW_TOKEN is not configured"}
 
     owner = os.getenv("GITHUB_REPO_OWNER", "uunivpt").strip()
     repo = os.getenv("GITHUB_REPO_NAME", "news-bot").strip()
