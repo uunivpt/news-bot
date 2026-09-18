@@ -26,6 +26,10 @@ CREATE TABLE IF NOT EXISTS news_items (
 ADMIN_SCHEMA = """
 CREATE TABLE IF NOT EXISTS admin_settings (
  key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS admin_activity (
+ id BIGSERIAL PRIMARY KEY, username TEXT NOT NULL, action TEXT NOT NULL, item_id BIGINT,
+ details TEXT, created_at TEXT NOT NULL
 )
 """
 INDEXES = """
@@ -37,6 +41,8 @@ CREATE INDEX IF NOT EXISTS idx_news_review ON news_items(fact_check_status);
 CREATE INDEX IF NOT EXISTS idx_news_instagram ON news_items(instagram_status);
 CREATE INDEX IF NOT EXISTS idx_news_instagram_retry ON news_items(instagram_status, instagram_next_retry_at);
 CREATE INDEX IF NOT EXISTS idx_news_instagram_selected ON news_items(instagram_selected, instagram_status);
+CREATE INDEX IF NOT EXISTS idx_news_instagram_schedule ON news_items(instagram_status, instagram_scheduled_at);
+CREATE INDEX IF NOT EXISTS idx_news_instagram_queue_order ON news_items(instagram_selected, instagram_queue_order);
 """
 MIGRATIONS = {
  "category":"ALTER TABLE news_items ADD COLUMN category TEXT NOT NULL DEFAULT 'general'", "status":"ALTER TABLE news_items ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'",
@@ -50,6 +56,8 @@ MIGRATIONS = {
  "instagram_attempts":"ALTER TABLE news_items ADD COLUMN instagram_attempts INTEGER NOT NULL DEFAULT 0", "instagram_last_attempt_at":"ALTER TABLE news_items ADD COLUMN instagram_last_attempt_at TEXT",
  "instagram_next_retry_at":"ALTER TABLE news_items ADD COLUMN instagram_next_retry_at TEXT", "instagram_container_id":"ALTER TABLE news_items ADD COLUMN instagram_container_id TEXT",
  "reel_cloudinary_public_id":"ALTER TABLE news_items ADD COLUMN reel_cloudinary_public_id TEXT", "instagram_selected":"ALTER TABLE news_items ADD COLUMN instagram_selected INTEGER NOT NULL DEFAULT 0",
+ "instagram_scheduled_at":"ALTER TABLE news_items ADD COLUMN instagram_scheduled_at TEXT",
+ "instagram_queue_order":"ALTER TABLE news_items ADD COLUMN instagram_queue_order INTEGER NOT NULL DEFAULT 0",
 }
 DEFAULT_SETTINGS={"instagram_enabled":"true","instagram_daily_limit":"5","instagram_selection_mode":"auto","instagram_interval_minutes":"5","website_enabled":"true","instagram_paused":"false","instagram_priority_id":""}
 
@@ -117,9 +125,18 @@ class NewsDatabase:
   if search:clauses.append(f"(LOWER(title) LIKE LOWER({ph}) OR LOWER(summary) LIKE LOWER({ph}))");params.extend([f"%{search}%",f"%{search}%"])
   where=(" WHERE "+" AND ".join(clauses)) if clauses else ""; return self.conn.execute(f"SELECT * FROM news_items{where} ORDER BY id DESC LIMIT {ph}",(*params,limit)).fetchall()
  def update(self,item_id:int,**fields:Any):
-  allowed={"title","summary","category","status","bot_summary","bot_article","ai_summary","ai_article","fact_check_status","fact_check_notes","image_url","approved_at","published_at_site","instagram_status","instagram_media_id","instagram_error","instagram_published_at","instagram_attempts","instagram_last_attempt_at","instagram_next_retry_at","instagram_container_id","reel_cloudinary_public_id","instagram_selected","public_source"}; fields={k:v for k,v in fields.items() if k in allowed}
+  allowed={"title","summary","category","status","bot_summary","bot_article","ai_summary","ai_article","fact_check_status","fact_check_notes","image_url","approved_at","published_at_site","instagram_status","instagram_media_id","instagram_error","instagram_published_at","instagram_attempts","instagram_last_attempt_at","instagram_next_retry_at","instagram_scheduled_at","instagram_container_id","reel_cloudinary_public_id","instagram_selected","instagram_queue_order","public_source"}; fields={k:v for k,v in fields.items() if k in allowed}
   if not fields:return
   ph="%s" if self._postgres else "?";sets=[];params=[]
   for k,v in fields.items():sets.append(f"{k} = {ph}");params.append(v)
   params.append(item_id);self.conn.execute(f"UPDATE news_items SET {', '.join(sets)} WHERE id = {ph}",params)
   if not self._postgres:self.conn.commit()
+
+ def log_activity(self,username,action,item_id=None,details=None):
+  now=NewsItem.now_iso(); payload=str(details or "")[:4000];
+  if self._postgres:self.conn.execute("INSERT INTO admin_activity (username,action,item_id,details,created_at) VALUES (%s,%s,%s,%s,%s)",(str(username),str(action),item_id,payload,now))
+  else:self.conn.execute("INSERT INTO admin_activity (username,action,item_id,details,created_at) VALUES (?,?,?,?,?)",(str(username),str(action),item_id,payload,now)); self.conn.commit()
+ def recent_activity(self,limit=50):
+  limit=max(1,min(int(limit),200)); ph="%s" if self._postgres else "?"; return self.conn.execute(f"SELECT id,username,action,item_id,details,created_at FROM admin_activity ORDER BY id DESC LIMIT {ph}",(limit,)).fetchall()
+ def next_instagram_queue_order(self):
+  row=self.conn.execute("SELECT COALESCE(MAX(instagram_queue_order),0) AS value FROM news_items").fetchone(); return int(row["value"] if self._postgres else row[0])+1
