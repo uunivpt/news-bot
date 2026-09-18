@@ -41,7 +41,7 @@ def _publicize(row):
  if not admin_ok():
   # Public readers may see the originating source and its public article URL.
   # Internal moderation, Instagram state, hashes and processing fields stay private.
-  for key in ("normalized_url","external_id","url_hash","title_hash","collected_at","fact_check_status","fact_check_notes","approved_at","instagram_status","instagram_media_id","instagram_error","instagram_published_at","instagram_attempts","instagram_last_attempt_at","instagram_next_retry_at","instagram_container_id","reel_cloudinary_public_id","instagram_selected","ai_summary","ai_article","bot_summary","bot_article","published_at_site"):
+  for key in ("normalized_url","external_id","url_hash","title_hash","collected_at","fact_check_status","fact_check_notes","approved_at","instagram_status","instagram_media_id","instagram_error","instagram_published_at","instagram_attempts","instagram_last_attempt_at","instagram_next_retry_at","instagram_scheduled_at","instagram_queue_order","instagram_container_id","reel_cloudinary_public_id","instagram_selected","ai_summary","ai_article","bot_summary","bot_article","published_at_site"):
    r.pop(key,None)
   raw=dict(row).get("published_at_site") or dict(row).get("published_at")
   if raw:
@@ -57,7 +57,7 @@ def rows_json(rows,compact=False):
   if not (admin_ok() or (row.get("status")=="published" and row.get("bot_article"))):continue
   item=_publicize(row)
   if compact and admin_ok():
-   item={k:item.get(k) for k in ("id","title","source_name","category","status","instagram_status","instagram_attempts","instagram_error","instagram_selected","fact_check_status","bot_summary")}
+   item={k:item.get(k) for k in ("id","title","source_name","category","status","instagram_status","instagram_attempts","instagram_error","instagram_selected","instagram_scheduled_at","instagram_queue_order","fact_check_status","bot_summary")}
   out.append(item)
  return out
 def users():
