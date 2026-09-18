@@ -178,7 +178,9 @@ def main():
    if priority_row and priority_row.get("instagram_status")!="published":
     ok=process_instagram(db,priority_row,music); attempted.add(int(priority_row["id"])); priority_handled=True
     if ok:db.set_settings({"instagram_priority_id":"","instagram_paused":"false"}); priority_id=""; paused=False
-    else:print(f"Instagram priority item {priority_id} failed; normal queue remains paused")
+    else:
+     print(f"Instagram priority item {priority_id} failed; continuing normal queue")
+     db.set_settings({"instagram_priority_id":""}); priority_id=""
    else:db.set_settings({"instagram_priority_id":"","instagram_paused":"false"}); priority_id=""; paused=False
   if not priority_id and not paused and daily_limit>0 and not priority_handled:
    start,end=_today_bounds(); remaining=max(0,daily_limit-db.instagram_daily_count(start.isoformat(),end.isoformat())); since=_minutes_since_last(db,now); slot_open=since is None or since>=interval
