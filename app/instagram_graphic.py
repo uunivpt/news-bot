@@ -55,6 +55,14 @@ def clean_instagram_text(text: str, source_name: str = "") -> str:
     value = _strip_unsupported_symbols(re.sub(r"\s+", " ", str(text or "")).strip())
     if not value:
         return ""
+    # Remove feed bullets/slashes and repeated editorial prefixes.
+    value = re.sub(r"^[\s•·▪◦○●◉◌◍\-/|:]+", " ", value)
+    value = re.sub(
+        r"^(?:(?:just\s*in|breaking(?:\s+news)?|latest\s+news|latest\s+update|news\s+alert|alert|exclusive)\s*[:\-–—|/]+\s*)+",
+        "",
+        value,
+        flags=re.I,
+    )
     source = re.sub(r"\s+", " ", str(source_name or "")).strip()
     if source:
         value = re.sub(re.escape(source), "", value, flags=re.I)
@@ -179,18 +187,21 @@ def _draw_logo(draw: ImageDraw.ImageDraw) -> None:
     politics = _font(35, True)
     hub = _font(35, True)
     draw.text((x, y), "POLITICS", font=politics, fill=DARK)
-    pw = draw.textbbox((x, y), "POLITICS", font=politics)[2]
-    draw.text((pw + 7, y), "HUB", font=hub, fill=RED)
-    end = draw.textbbox((pw + 7, y), "HUB", font=hub)[2]
-    draw.line((end + 22, y + 19, end + 210, y + 19), fill="#20242a", width=3)
+    politics_w = draw.textbbox((0, 0), "POLITICS", font=politics)[2]
+    hub_x = x + politics_w + 10
+    draw.text((hub_x, y), "HUB", font=hub, fill=RED)
+    hub_w = draw.textbbox((0, 0), "HUB", font=hub)[2]
+    line_x = min(hub_x + hub_w + 22, 820)
+    draw.line((line_x, y + 19, min(line_x + 150, 1030), y + 19), fill="#20242a", width=3)
     draw.text((x + 2, y + 48), "N E W S    |    A N A L Y S I S    |    F A C T S", font=_font(13, True), fill=DARK)
 
 
 def _draw_tagline(draw: ImageDraw.ImageDraw) -> None:
-    x = 760
-    draw.text((x, 54), "STAY INFORMED", font=_font(22, True), fill=DARK)
-    draw.text((x, 84), "STAY AHEAD", font=_font(22, True), fill=DARK)
-    draw.rectangle((x, 124, x + 68, 130), fill=RED)
+    x = 700
+    font = _font(19, True)
+    draw.text((x, 54), "STAY INFORMED", font=font, fill=DARK)
+    draw.text((x, 82), "STAY AHEAD", font=font, fill=DARK)
+    draw.rectangle((x, 112, x + 62, 118), fill=RED)
 
 
 def _highlight_title(draw: ImageDraw.ImageDraw, title: str, font, x: int, y: int, max_width: int) -> int:
@@ -351,26 +362,39 @@ def generate_reel_cards(
         930,
     )
 
-    # Compact summary below headline.
+    # Compact summary below headline. Do not repeat the headline in the summary.
+    summary_end = headline_end
     if clean_summary:
         summary_font = _font(25)
-        summary_y = headline_end + 18
-        summary_lines = _wrap(clean_summary, summary_font, 930)[:6]
-        for line in summary_lines:
-            d.text((60, summary_y), line, font=summary_font, fill="#454b53")
-            summary_y += 38
-        if len(_wrap(clean_summary, summary_font, 930)) > 6:
-            d.text((60, summary_y - 4), "...", font=_font(28, True), fill=MUTED)
+        summary_text = clean_summary
+        if summary_text.casefold().startswith(clean_title.casefold()):
+            summary_text = summary_text[len(clean_title):].lstrip(" :–—|/-")
+        summary_text = re.sub(
+            r"^(?:(?:just\s*in|breaking(?:\s+news)?|latest\s+news|latest\s+update|news\s+alert|alert|exclusive)\s*[:\-–—|/]+\s*)+",
+            "",
+            summary_text,
+            flags=re.I,
+        ).strip(" -–—|/:")
+        if summary_text:
+            summary_y = headline_end + 18
+            summary_lines = _wrap(summary_text, summary_font, 930)[:5]
+            for line in summary_lines:
+                d.text((60, summary_y), line, font=summary_font, fill="#454b53")
+                summary_y += 38
+            summary_end = summary_y
+            if len(_wrap(summary_text, summary_font, 930)) > 5:
+                d.text((60, summary_y - 4), "...", font=_font(28, True), fill=MUTED)
 
-    # Editorial footer.
-    d.rectangle((60, 1660, 125, 1666), fill=RED)
+    # Keep source/site above Instagram's bottom controls and away from long text.
+    footer_y = min(1575, max(1510, summary_end + 34))
+    d.rectangle((60, footer_y, 125, footer_y + 6), fill=RED)
     d.text(
-        (60, 1710),
+        (60, footer_y + 34),
         f"Source: {clean_source}",
-        font=_font(24, True),
+        font=_font(21, True),
         fill=DARK,
     )
-    d.text((60, 1760), "politicshub.in", font=_font(24, True), fill=DARK)
+    d.text((60, footer_y + 76), "politicshub.in", font=_font(21, True), fill=DARK)
 
     # Keep the exact 1080x1920 PNG used by the existing Reel pipeline.
     path = out / "01_editorial.png"
