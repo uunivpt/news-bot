@@ -71,8 +71,8 @@ def security_headers(response):
 @app.post("/api/admin/setup")
 def setup_owner():
  if session.get("admin_user"):return jsonify({"error":"owner setup is disabled after sign-in"}),403
- key=os.getenv("ADMIN_SETUP_KEY",""); body=request.get_json(silent=True) or {}
- if not key:return jsonify({"error":"owner setup is disabled; configure ADMIN_SETUP_KEY first"}),503
+ key=os.getenv("ADMIN_SETUP_KEY","").strip() or os.getenv("ADMIN_TOKEN","").strip(); body=request.get_json(silent=True) or {}
+ if not key:return jsonify({"error":"owner setup is disabled; configure ADMIN_SETUP_KEY or ADMIN_TOKEN first"}),503
  if not secrets.compare_digest(str(body.get("setup_key","")),key):return jsonify({"error":"invalid setup key"}),403
  username=str(body.get("username","")).strip(); password=str(body.get("password",""))
  if len(username)<3 or len(username)>40 or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-" for c in username):return jsonify({"error":"invalid username"}),400
