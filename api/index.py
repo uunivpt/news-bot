@@ -392,7 +392,7 @@ def instagram_publish_now(item_id):
    if source.get("image_url") and not row.get("image_url"):fields["image_url"]=source["image_url"]
    database.update(item_id,**fields); row.update(fields); log_admin(database,"news.process",item_id,"auto before Instagram")
   if row.get("instagram_status")=="published":return jsonify({"error":"already published to Instagram"}),409
-  database.set_settings({"instagram_priority_id":str(item_id),"instagram_paused":"true"}); database.update(item_id,instagram_selected=1,instagram_status="pending",instagram_error=None,instagram_next_retry_at=None,instagram_scheduled_at=None); log_admin(database,"instagram.priority",item_id,"post_now")
+  database.set_settings({"instagram_priority_id":str(item_id),"instagram_paused":"false"}); database.update(item_id,instagram_selected=1,instagram_status="pending",instagram_error=None,instagram_next_retry_at=None,instagram_scheduled_at=None); log_admin(database,"instagram.priority",item_id,"post_now")
  finally:database.close()
  dispatch=dispatch_worker(); return jsonify({"ok":True,"priority_id":item_id,"queue_paused":True,"worker_dispatched":dispatch.get("ok",False),"worker_dispatch":dispatch})
 
