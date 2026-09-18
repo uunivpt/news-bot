@@ -4,6 +4,7 @@ import requests
 
 
 def dispatch_worker() -> dict:
+    # Admin actions must dispatch the dedicated Instagram worker, never the news-only workflow.
     token = os.getenv("GITHUB_WORKFLOW_TOKEN", "").strip()
     if not token:
         return {"ok": False, "configured": False, "error": "GITHUB_WORKFLOW_TOKEN is not configured"}
