@@ -11,23 +11,25 @@ def _cfg():
 def _safe_url(url):
     parts=urlsplit(url); return f"{parts.scheme}://{parts.netloc}{parts.path}"
 
+class InstagramRateLimitError(RuntimeError):
+    pass
+
 def _raise_meta(r,action):
     if r.ok:return
     try: detail=r.json()
     except Exception: detail=r.text[:2000]
     token=os.getenv("META_ACCESS_TOKEN",""); text=str(detail).replace(token,"[REDACTED]")
+    detail_text=str(detail)
+    if r.status_code==429 or '"code": 4' in detail_text or "'code': 4" in detail_text or "Rate Limit Exceeded" in detail_text or "Application request limit reached" in detail_text:
+        raise InstagramRateLimitError(f"Instagram {action} rate limit reached; retry later.")
     raise RuntimeError(f"Instagram {action} failed ({r.status_code}): {text}")
 
 def _resolve_instagram_user(base,token,configured_account):
     # With Instagram Login, /me resolves the IG user. With Facebook Login,
     # the configured Business/Creator IG account ID is the reliable target.
     if configured_account:
-        r=requests.get(f"{base}/{configured_account}",params={"fields":"id,username","access_token":token},timeout=30)
-        if r.ok:
-            data=r.json(); resolved=str(data.get("id",configured_account)).strip(); username=str(data.get("username","")).strip()
-            print(f"Instagram account resolved: @{username}" if username else f"Instagram account resolved: {resolved}")
-            return resolved
-        print(f"Configured Instagram account lookup failed ({r.status_code}); trying /me fallback.")
+        print(f"Using configured Instagram account ID: {configured_account}")
+        return configured_account
     r=requests.get(f"{base}/me",params={"fields":"id,username","access_token":token},timeout=30)
     _raise_meta(r,"token/account lookup")
     data=r.json(); resolved=str(data.get("id","")).strip(); username=str(data.get("username","")).strip()
@@ -62,7 +64,7 @@ def publish_reel(video_url,caption):
         print(f"Instagram container check {attempt+1}: status_code={code}, status={status}")
         if code in {"FINISHED","PUBLISHED"} or status in {"FINISHED","PUBLISHED"}: break
         if code=="ERROR" or status=="ERROR": raise RuntimeError(f"Instagram media container ERROR: container={container}; status={data}")
-        time.sleep(5)
+        time.sleep(min(20, 5 + attempt * 2))
     else: raise TimeoutError(f"Instagram media container timeout: container={container}; last_status={last}")
     p=requests.post(f"{base}/{account}/media_publish",data={"creation_id":container,"access_token":token},timeout=60); _raise_meta(p,"media publish")
     result=p.json();
