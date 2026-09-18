@@ -4,7 +4,7 @@ from __future__ import annotations
 import json, os, secrets, time
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
-from flask import Flask, jsonify, request, session
+from flask import Flask, jsonify, request, session, send_from_directory
 from werkzeug.security import check_password_hash, generate_password_hash
 from app.article_fetcher import enrich_source_text
 from app.database import NewsDatabase
@@ -12,7 +12,7 @@ from app.factcheck import run_cross_source_check
 from app.newsroom import process_news
 from app.worker import dispatch_worker
 
-app=Flask(__name__)
+app=Flask(__name__, static_folder="../public", static_url_path="")
 _secret=os.getenv("FLASK_SECRET_KEY") or os.getenv("ADMIN_TOKEN") or os.getenv("ADMIN_SETUP_KEY")
 if not _secret:raise RuntimeError("Configure FLASK_SECRET_KEY in Vercel Environment Variables")
 app.secret_key=_secret
@@ -417,3 +417,6 @@ def fact_check():
  try:
   checked=run_cross_source_check(database); log_admin(database,"fact_check.run",None,str(checked)); return jsonify({"ok":True,"checked":checked})
  finally:database.close()
+
+
+# Render web-service compatibility: serve the existing public frontend from the same Flask app.\n@app.route("/", defaults={"path": ""})\n@app.route("/<path:path>")\ndef _render_public(path):\n if path.startswith("api/"):\n  return jsonify({"error":"not found"}),404\n target=path or "home.html"\n if target.endswith("/"):\n  target += "index.html"\n return send_from_directory(app.static_folder, target)\n
