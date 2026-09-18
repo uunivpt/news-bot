@@ -184,9 +184,9 @@ def main():
    start,end=_today_bounds(); remaining=max(0,daily_limit-db.instagram_daily_count(start.isoformat(),end.isoformat())); since=_minutes_since_last(db,now); slot_open=since is None or since>=interval
    if remaining>0 and slot_open:
     mode=settings.get("instagram_selection_mode","auto")
-    # Publish at most one normal Reel per worker run. The workflow runs every 5 minutes,
-    # and the interval guard enforces a minimum 5-minute gap between successful Reels.
-    slots=1
+    # No artificial one-Reel-per-run bottleneck when interval is set to 0.
+    # Publish all remaining daily slots in this concurrency-protected worker run.
+    slots=remaining
     while slots>0:
      candidates=_instagram_candidates(db,mode,1,now)
      if candidates:
