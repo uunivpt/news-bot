@@ -176,7 +176,7 @@ def admin_health():
  if err:return err
  database=db()
  try:
-  s=database.get_settings(); return jsonify({"ok":True,"database":"connected","instagram":{"configured":bool(os.getenv("META_ACCESS_TOKEN") and os.getenv("META_INSTAGRAM_ACCOUNT_ID")),"enabled":s.get("instagram_enabled","true")=="true","paused":s.get("instagram_paused","false")=="true"},"worker_dispatch_configured":bool(os.getenv("GITHUB_WORKFLOW_TOKEN")),"website_enabled":s.get("website_enabled","true")=="true","news_count":database.count()})
+  s=database.get_settings(); return jsonify({"ok":True,"database":"connected","instagram":{"configured":bool(os.getenv("META_ACCESS_TOKEN")),"enabled":s.get("instagram_enabled","true")=="true","paused":s.get("instagram_paused","false")=="true"},"worker_dispatch_configured":bool(os.getenv("GITHUB_WORKFLOW_TOKEN")),"website_enabled":s.get("website_enabled","true")=="true","news_count":database.count()})
  finally:database.close()
 
 @app.get("/api/admin/activity")
