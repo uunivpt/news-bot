@@ -148,7 +148,7 @@ def main():
  except ValueError:admin_daily=5
  try:env_daily=max(0,int(os.getenv("INSTAGRAM_NEW_ITEMS","100")))
  except ValueError:env_daily=100
- try:interval=max(0,int(settings.get("instagram_interval_minutes","60")))
+ try:interval=max(0,int(settings.get("instagram_interval_minutes","0")))
  except ValueError:interval=60
  daily_limit=min(admin_daily,env_daily) if env_daily else 0; now=datetime.now(timezone.utc); music=audio_path() if publish_instagram else None; pending=[dict(r) for r in db.latest(max_items,status="pending")] if publish_website else []
  published=held=0
@@ -170,12 +170,24 @@ def main():
   if not priority_id and not paused and daily_limit>0:
    start,end=_today_bounds(); remaining=max(0,daily_limit-db.instagram_daily_count(start.isoformat(),end.isoformat())); since=_minutes_since_last(db,now); slot_open=since is None or since>=interval
    if remaining>0 and slot_open:
-    mode=settings.get("instagram_selection_mode","auto"); candidates=_instagram_candidates(db,mode,1)
-    if candidates:row=candidates[0]; process_instagram(db,row,music); attempted.add(int(row["id"]))
-    elif retry_limit:
-     for row in [dict(r) for r in db.latest(retry_limit,status="published",instagram_status="failed")]:
-      if int(row["id"]) in attempted or not _retry_due(row,now):continue
-      process_instagram(db,row,music); attempted.add(int(row["id"])); break
+    mode=settings.get("instagram_selection_mode","auto")
+    # Drain the queue in the same worker run: after one Reel is published,
+    # immediately generate and publish the next eligible Reel. There is no
+    # artificial one-hour gap between posts.
+    slots=remaining
+    while slots>0:
+     candidates=_instagram_candidates(db,mode,1)
+     if candidates:
+      row=candidates[0]
+      if int(row["id"]) in attempted:break
+      process_instagram(db,row,music); attempted.add(int(row["id"])); slots-=1
+      continue
+     if retry_limit:
+      retry_row=next((dict(r) for r in db.latest(retry_limit,status="published",instagram_status="failed") if int(r["id"]) not in attempted and _retry_due(r,now)),None)
+      if retry_row:
+       process_instagram(db,retry_row,music); attempted.add(int(retry_row["id"])); slots-=1
+       continue
+     break
    else:print(f"Instagram slot closed: last_publish_minutes={since}, interval={interval}, remaining_today={remaining}")
   elif paused and not priority_id:print("Instagram queue paused by admin")
  print(f"Website published={published}; held_for_bot={held}; repaired={repaired}; Instagram enabled={publish_instagram}; paused={paused}; priority={priority_id or 'none'}; attempted={len(attempted)}"); db.close()
