@@ -380,11 +380,19 @@ def instagram_order(item_id):
  if err:return err
  err=require_csrf()
  if err:return err
- body=request.get_json(silent=True) or {}
- try:order=max(0,int(body.get("order")))
- except (TypeError,ValueError):return jsonify({"error":"order must be a number"}),400
+ body=request.get_json(silent=True) or {}; direction=str(body.get("direction","")).lower()
+ if direction not in {"up","down"}:return jsonify({"error":"direction must be up or down"}),400
  database=db()
- try:database.update(item_id,instagram_queue_order=order); log_admin(database,"instagram.reorder",item_id,str(order)); return jsonify({"ok":True,"order":order})
+ try:
+  rows=[dict(r) for r in database.latest(200,"all","published",None,"all","pending") if int(r.get("instagram_selected") or 0)==1]
+  rows.sort(key=lambda r:(int(r.get("instagram_queue_order") or 0) if int(r.get("instagram_queue_order") or 0)>0 else 10**9,-int(r["id"])))
+  index=next((i for i,r in enumerate(rows) if int(r["id"])==item_id),-1)
+  target=index-1 if direction=="up" else index+1
+  if index<0 or target<0 or target>=len(rows):return jsonify({"ok":True,"moved":False})
+  a,b=rows[index],rows[target]; ao=int(a.get("instagram_queue_order") or 0); bo=int(b.get("instagram_queue_order") or 0)
+  if ao<=0:ao=database.next_instagram_queue_order()
+  if bo<=0:bo=max(1,ao-1)
+  database.update(int(a["id"]),instagram_queue_order=bo); database.update(int(b["id"]),instagram_queue_order=ao); log_admin(database,"instagram.reorder",item_id,direction); return jsonify({"ok":True,"moved":True})
  finally:database.close()
 
 @app.post("/api/news/<int:item_id>/instagram/cancel-priority")
