@@ -54,4 +54,5 @@ jobs:
           BOT_REPAIR_ITEMS: '10'
           INSTAGRAM_NEW_ITEMS: '5'
           INSTAGRAM_RETRY_ITEMS: '10'
+          INSTAGRAM_INTERVAL_MINUTES: '0'
         run: python scripts/auto_publish.py
