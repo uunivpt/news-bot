@@ -26,7 +26,9 @@ CREATE TABLE IF NOT EXISTS news_items (
 ADMIN_SCHEMA = """
 CREATE TABLE IF NOT EXISTS admin_settings (
  key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL
-);
+)
+"""
+ACTIVITY_SCHEMA = """
 CREATE TABLE IF NOT EXISTS admin_activity (
  id BIGSERIAL PRIMARY KEY, username TEXT NOT NULL, action TEXT NOT NULL, item_id BIGINT,
  details TEXT, created_at TEXT NOT NULL
@@ -68,12 +70,12 @@ class NewsDatabase:
    import psycopg
    from psycopg.rows import dict_row
    self.conn=psycopg.connect(self.database_url,row_factory=dict_row); self.conn.autocommit=True
-   self.conn.execute(SCHEMA); self.conn.execute(ADMIN_SCHEMA); self._migrate_postgres()
+   self.conn.execute(SCHEMA); self.conn.execute(ADMIN_SCHEMA); self.conn.execute(ACTIVITY_SCHEMA); self._migrate_postgres()
    for statement in INDEXES.split(";"):
     if statement.strip(): self.conn.execute(statement.strip())
   else:
    self.path=Path(path); self.path.parent.mkdir(parents=True,exist_ok=True); self.conn=sqlite3.connect(self.path); self.conn.row_factory=sqlite3.Row
-   self.conn.executescript(SCHEMA.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")); self.conn.executescript(ADMIN_SCHEMA.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")); self._migrate_sqlite(); self.conn.executescript(INDEXES); self.conn.commit()
+   self.conn.executescript(SCHEMA.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")); self.conn.executescript(ADMIN_SCHEMA); self.conn.executescript(ACTIVITY_SCHEMA.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")); self._migrate_sqlite(); self.conn.executescript(INDEXES); self.conn.commit()
   self._seed_settings()
  def _migrate_postgres(self):
   for sql in MIGRATIONS.values():
