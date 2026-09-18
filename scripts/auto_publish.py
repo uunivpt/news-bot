@@ -100,6 +100,10 @@ def process_instagram(db,row,music):
  attempts+=1; started=datetime.now(timezone.utc).isoformat(); db.update(item_id,instagram_status="processing",instagram_error=None,instagram_attempts=attempts,instagram_last_attempt_at=started,instagram_next_retry_at=None)
  if not music:db.update(item_id,instagram_status="failed",instagram_error="News Pulse audio unavailable",instagram_next_retry_at=_next_retry(attempts)); return False
  try:
+  # Ensure manually published stories are processed before any Instagram Reel is built.
+  if not row.get("bot_article") or not row.get("bot_summary"):
+   if not process_content(db,row):
+    raise RuntimeError("Story could not be processed by the newsroom bot")
   cards=generate_reel_cards(title=row["title"],summary=row.get("bot_summary") or row.get("summary") or "",category=row.get("category") or "general",image_url=row.get("image_url"),source_name=row.get("source_name") or "",output_dir=OUT/"reel_cards"/str(item_id)); video=OUT/f"{item_id}.mp4"; build_reel([str(p) for p in cards],str(video),audio_path=music,duration_per_image=18); url=upload_video(str(video)) or public_video_url(str(video))
   if not url:raise RuntimeError("Public Reel video URL unavailable")
   result=publish_reel(url,caption(row)); media_id=result.get("id") if isinstance(result,dict) else None; container_id=result.get("container_id") if isinstance(result,dict) else None
