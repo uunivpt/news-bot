@@ -17,14 +17,6 @@
       "public_source": true
     },
     {
-      "name": "GovInfo Congressional Bills",
-      "url": "https://www.govinfo.gov/rss/bills.xml",
-      "source_class": "government",
-      "category": "world",
-      "enabled": false,
-      "public_source": true
-    },
-    {
       "name": "GovInfo Presidential Documents",
       "url": "https://www.govinfo.gov/rss/dcpd.xml",
       "source_class": "government",
@@ -68,6 +60,13 @@
       "name": "Geopolitics Prime",
       "username": "@geopolitics_prime",
       "category": "politics",
+      "enabled": true,
+      "public_source": true
+    },
+    {
+      "name": "DD Geopolitics",
+      "username": "@DDGeopolitics",
+      "category": "world",
       "enabled": true,
       "public_source": true
     }
@@ -159,6 +158,26 @@
       "article_path_prefixes": [
         "/news/",
         "/docs/"
+      ],
+      "max_links": 80,
+      "check_every_minutes": 5
+    },
+    {
+      "name": "Prime Minister of India - PMO",
+      "source_class": "government",
+      "source_type": "government",
+      "category": "india",
+      "enabled": true,
+      "collection_allowed": true,
+      "public_source": true,
+      "allowed_hosts": [
+        "pmindia.gov.in"
+      ],
+      "sections": [
+        "https://www.pmindia.gov.in/en/news-updates/"
+      ],
+      "article_path_prefixes": [
+        "/en/news-updates/"
       ],
       "max_links": 80,
       "check_every_minutes": 5
