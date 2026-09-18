@@ -170,17 +170,17 @@ def main():
   ready=process_content(db,row)
   if not ready:held+=1; print(f"Website publish held for item {row['id']}: bot could not produce complete content"); continue
   publish_website_first(db,row,now.isoformat()); published+=1
- repaired=repair_published_content(db,repair_items); attempted=set()
+ repaired=repair_published_content(db,repair_items); attempted=set(); priority_handled=False
  if publish_instagram:
   _recover_stale_processing(db,now)
   if priority_id:
    priority_row=next((dict(r) for r in db.latest(1000,status="published",instagram_status="all") if str(r["id"])==priority_id),None)
    if priority_row and priority_row.get("instagram_status")!="published":
-    ok=process_instagram(db,priority_row,music); attempted.add(int(priority_row["id"]))
+    ok=process_instagram(db,priority_row,music); attempted.add(int(priority_row["id"])); priority_handled=True
     if ok:db.set_settings({"instagram_priority_id":"","instagram_paused":"false"}); priority_id=""; paused=False
     else:print(f"Instagram priority item {priority_id} failed; normal queue remains paused")
    else:db.set_settings({"instagram_priority_id":"","instagram_paused":"false"}); priority_id=""; paused=False
-  if not priority_id and not paused and daily_limit>0:
+  if not priority_id and not paused and daily_limit>0 and not priority_handled:
    start,end=_today_bounds(); remaining=max(0,daily_limit-db.instagram_daily_count(start.isoformat(),end.isoformat())); since=_minutes_since_last(db,now); slot_open=since is None or since>=interval
    if remaining>0 and slot_open:
     mode=settings.get("instagram_selection_mode","auto")
