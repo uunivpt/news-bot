@@ -30,3 +30,5 @@ Generate admin hashes with `python scripts/hash_password.py`.
 `python scripts/auto_publish.py`
 
 The worker uses PostgreSQL when `DATABASE_URL` is present and otherwise falls back to SQLite.
+
+<!-- deployment refresh -->
