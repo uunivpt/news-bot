@@ -59,12 +59,12 @@ def publish_reel(video_url,caption):
     if not container: raise RuntimeError(f"Instagram did not return a creation container id: {creation}")
     print(f"Instagram media container created: {container}")
     last={}
-    for attempt in range(48):
+    for attempt in range(24):
         data=_container_status(base,token,container); last=data; code=str(data.get("status_code") or "").upper(); status=str(data.get("status") or "").upper()
         print(f"Instagram container check {attempt+1}: status_code={code}, status={status}")
         if code in {"FINISHED","PUBLISHED"} or status in {"FINISHED","PUBLISHED"}: break
         if code=="ERROR" or status=="ERROR": raise RuntimeError(f"Instagram media container ERROR: container={container}; status={data}")
-        time.sleep(min(20, 5 + attempt * 2))
+        time.sleep(min(15, 8 + attempt))
     else: raise TimeoutError(f"Instagram media container timeout: container={container}; last_status={last}")
     p=requests.post(f"{base}/{account}/media_publish",data={"creation_id":container,"access_token":token},timeout=60); _raise_meta(p,"media publish")
     result=p.json();
