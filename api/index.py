@@ -71,7 +71,7 @@ def security_headers(response):
 @app.post("/api/admin/setup")
 def setup_owner():
  if session.get("admin_user"):return jsonify({"error":"owner setup is disabled after sign-in"}),403
- key=os.getenv("ADMIN_SETUP_KEY","").strip() or os.getenv("ADMIN_TOKEN","").strip(); body=request.get_json(silent=True) or {}
+ key=os.getenv("ADMIN_SETUP_KEY","").strip() or os.getenv("ADMIN_TOKEN","").strip(); body=request.get_json(silent=True) or request.form.to_dict() or {}
  if not key:return jsonify({"error":"owner setup is disabled; configure ADMIN_SETUP_KEY or ADMIN_TOKEN first"}),503
  if not secrets.compare_digest(str(body.get("setup_key","")),key):return jsonify({"error":"invalid setup key"}),403
  username=str(body.get("username","")).strip(); password=str(body.get("password",""))
@@ -89,7 +89,7 @@ def setup_owner():
 @app.post("/api/admin/login")
 def login():
  if not _login_allowed():return jsonify({"error":"too many login attempts; try again later"}),429
- body=request.get_json(silent=True) or {}; username=str(body.get("username","")).strip(); password=str(body.get("password","")); database=db(); valid=False; role=None
+ body=request.get_json(silent=True) or request.form.to_dict() or {}; username=str(body.get("username","")).strip(); password=str(body.get("password","")); database=db(); valid=False; role=None
  try:
   ph="%s" if database._postgres else "?"; row=database.conn.execute("SELECT username,password_hash,role FROM admin_users WHERE username = "+ph,(username,)).fetchone(); valid=bool(row and check_password_hash(row["password_hash"] if database._postgres else row[1],password)); role=(row["role"] if database._postgres else row[2]) if row else None
   if not valid and username=="admin":
