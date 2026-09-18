@@ -190,7 +190,7 @@ def main():
    priority_row=next((dict(r) for r in db.latest(1000,status="published",instagram_status="all") if str(r["id"])==priority_id),None)
    if priority_row and priority_row.get("instagram_status")!="published":
     ok=process_instagram(db,priority_row,music); attempted.add(int(priority_row["id"])); priority_handled=True
-     if ok=="rate_limited": return
+    if ok=="rate_limited": return
     if ok:db.set_settings({"instagram_priority_id":"","instagram_paused":"false"}); priority_id=""; paused=False
     else:
      print(f"Instagram priority item {priority_id} failed; continuing normal queue")
@@ -209,13 +209,13 @@ def main():
       row=candidates[0]
       if int(row["id"]) in attempted:break
       ok=process_instagram(db,row,music); attempted.add(int(row["id"])); slots-=1
-       if ok=="rate_limited": break
+      if ok=="rate_limited": break
       continue
      if retry_limit:
       retry_row=next((dict(r) for r in db.latest(retry_limit,status="published",instagram_status="failed") if int(r["id"]) not in attempted and _retry_due(r,now)),None)
       if retry_row:
        ok=process_instagram(db,retry_row,music); attempted.add(int(retry_row["id"])); slots-=1
-        if ok=="rate_limited": break
+       if ok=="rate_limited": break
        continue
      break
    else:print(f"Instagram slot closed: last_publish_minutes={since}, interval={interval}, remaining_today={remaining}")
