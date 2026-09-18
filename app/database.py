@@ -140,6 +140,9 @@ class NewsDatabase:
   else:self.conn.execute("INSERT INTO admin_activity (username,action,item_id,details,created_at) VALUES (?,?,?,?,?)",(str(username),str(action),item_id,payload,now)); self.conn.commit()
  def recent_activity(self,limit=50):
   try:limit=max(1,min(int(limit),200))
-  except (TypeError,ValueError):\n   limit=50\n  ph="%s" if self._postgres else "?"\n  return self.conn.execute(f"SELECT id,username,action,item_id,details,created_at FROM admin_activity ORDER BY id DESC LIMIT {ph}",(limit,)).fetchall()
+  except (TypeError,ValueError):
+   limit=50
+  ph="%s" if self._postgres else "?"
+  return self.conn.execute(f"SELECT id,username,action,item_id,details,created_at FROM admin_activity ORDER BY id DESC LIMIT {ph}",(limit,)).fetchall()
  def next_instagram_queue_order(self):
   row=self.conn.execute("SELECT COALESCE(MAX(instagram_queue_order),0) AS value FROM news_items").fetchone(); return int(row["value"] if self._postgres else row[0])+1
