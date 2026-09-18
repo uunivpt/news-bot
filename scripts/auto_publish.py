@@ -170,8 +170,8 @@ def main():
  except ValueError:repair_items=5
  try:retry_limit=max(0,int(os.getenv("INSTAGRAM_RETRY_ITEMS","10")))
  except ValueError:retry_limit=10
- try:admin_daily=max(0,int(settings.get("instagram_daily_limit","5")))
- except ValueError:admin_daily=5
+ try:admin_daily=max(100,int(settings.get("instagram_daily_limit","100")))
+ except ValueError:admin_daily=100
  try:env_daily=max(0,int(os.getenv("INSTAGRAM_NEW_ITEMS","100")))
  except ValueError:env_daily=100
  try:interval=max(0,int(os.getenv("INSTAGRAM_INTERVAL_MINUTES",settings.get("instagram_interval_minutes","0"))))
