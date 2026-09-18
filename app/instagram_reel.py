@@ -20,8 +20,8 @@ def _run_ffmpeg(args: list[str]) -> None:
 
 def _video_codec_args() -> list[str]:
     return [
-        "-c:v", "libx264", "-preset", "medium", "-profile:v", "high", "-level:v", "4.1",
-        "-crf", "21", "-maxrate", "8M", "-bufsize", "16M", "-pix_fmt", "yuv420p",
+        "-c:v", "libx264", "-preset", "medium", "-profile:v", "baseline", "-level:v", "4.0",
+        "-crf", "21", "-maxrate", "6M", "-bufsize", "12M", "-pix_fmt", "yuv420p",
         "-g", "60", "-keyint_min", "60", "-sc_threshold", "0",
     ]
 
