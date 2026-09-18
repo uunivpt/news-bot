@@ -148,7 +148,7 @@ def main():
  except ValueError:admin_daily=5
  try:env_daily=max(0,int(os.getenv("INSTAGRAM_NEW_ITEMS","100")))
  except ValueError:env_daily=100
- try:interval=max(0,int(settings.get("instagram_interval_minutes","0")))
+ try:interval=max(0,int(os.getenv("INSTAGRAM_INTERVAL_MINUTES",settings.get("instagram_interval_minutes","0"))))
  except ValueError:interval=60
  daily_limit=min(admin_daily,env_daily) if env_daily else 0; now=datetime.now(timezone.utc); music=audio_path() if publish_instagram else None; pending=[dict(r) for r in db.latest(max_items,status="pending")] if publish_website else []
  published=held=0
