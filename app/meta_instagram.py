@@ -25,17 +25,29 @@ def _raise_meta(r,action):
     raise RuntimeError(f"Instagram {action} failed ({r.status_code}): {text}")
 
 def _resolve_instagram_user(base,token,configured_account):
-    # With Instagram Login, /me resolves the IG user. With Facebook Login,
-    # the configured Business/Creator IG account ID is the reliable target.
+    # The ID must belong to the Instagram user represented by this access token.
     if configured_account:
         print(f"Using configured Instagram account ID: {configured_account}")
         return configured_account
+    return _resolve_from_token(base,token)
+
+def _resolve_from_token(base,token):
     r=requests.get(f"{base}/me",params={"fields":"id,username","access_token":token},timeout=30)
     _raise_meta(r,"token/account lookup")
     data=r.json(); resolved=str(data.get("id","")).strip(); username=str(data.get("username","")).strip()
     if not resolved: raise RuntimeError(f"Instagram token/account lookup returned no user id: {data}")
     print(f"Instagram account resolved: @{username}" if username else f"Instagram user ID resolved: {resolved}")
     return resolved
+
+def _is_missing_object_error(response):
+    if response.status_code != 400:
+        return False
+    try:
+        detail=response.json()
+    except Exception:
+        return False
+    error=detail.get("error") if isinstance(detail,dict) else None
+    return isinstance(error,dict) and str(error.get("code")) == "100" and str(error.get("error_subcode")) == "33"
 
 def _container_status(base,token,container):
     r=requests.get(
@@ -70,7 +82,16 @@ def publish_reel(video_url,caption):
     if not token: raise RuntimeError("Instagram is not configured. Add META_ACCESS_TOKEN.")
     if not video_url.startswith(("https://","http://")): raise ValueError("Instagram requires a publicly reachable video URL.")
     _video_preflight(video_url); base=f"{host}/{version}"; account=_resolve_instagram_user(base,token,configured_account)
-    r=requests.post(f"{base}/{account}/media",data={"media_type":"REELS","video_url":video_url,"caption":caption,"thumb_offset":"1000","access_token":token},timeout=60); _raise_meta(r,"media container creation")
+    media_data={"media_type":"REELS","video_url":video_url,"caption":caption,"thumb_offset":"1000","access_token":token}
+    r=requests.post(f"{base}/{account}/media",data=media_data,timeout=60)
+    # Recover once when a stale/wrong configured account ID is rejected by Meta.
+    if configured_account and _is_missing_object_error(r):
+        resolved=_resolve_from_token(base,token)
+        if resolved != configured_account:
+            print(f"Configured Instagram account ID is invalid for this token; retrying with token-resolved ID {resolved}")
+            account=resolved
+            r=requests.post(f"{base}/{account}/media",data=media_data,timeout=60)
+    _raise_meta(r,"media container creation")
     creation=r.json(); container=creation.get("id")
     if not container: raise RuntimeError(f"Instagram did not return a creation container id: {creation}")
     print(f"Instagram media container created: {container}")
