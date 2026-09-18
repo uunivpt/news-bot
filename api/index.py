@@ -51,7 +51,15 @@ def _publicize(row):
   r["summary"]=dict(row).get("bot_summary") or ""; r["article"]=dict(row).get("bot_article") or ""
  return r
 
-def rows_json(rows):return [_publicize(r) for r in rows if admin_ok() or (r.get("status")=="published" and r.get("bot_article"))]
+def rows_json(rows,compact=False):
+ out=[]
+ for row in rows:
+  if not (admin_ok() or (row.get("status")=="published" and row.get("bot_article"))):continue
+  item=_publicize(row)
+  if compact and admin_ok():
+   item={k:item.get(k) for k in ("id","title","source_name","category","status","instagram_status","instagram_attempts","instagram_error","instagram_selected","fact_check_status","bot_summary")}
+  out.append(item)
+ return out
 def users():
  try:return json.loads(os.getenv("ADMIN_USERS_JSON","{}"))
  except Exception:return {}
@@ -119,12 +127,12 @@ def health():
 
 @app.get("/api/news")
 def news():
- category=request.args.get("category","all"); status=request.args.get("status","published"); review=request.args.get("review_status","all"); ig=request.args.get("instagram_status","all"); search=request.args.get("search")
+ category=request.args.get("category","all"); status=request.args.get("status","published"); review=request.args.get("review_status","all"); ig=request.args.get("instagram_status","all"); search=request.args.get("search"); compact=request.args.get("compact","0")=="1"
  try:limit=min(max(int(request.args.get("limit","100")),1),100)
  except ValueError:limit=100
  if not admin_ok():status,review,ig="published","all","all"
  database=db()
- try:return jsonify(rows_json(database.latest(limit,category,status,search,review,ig)))
+ try:return jsonify(rows_json(database.latest(limit,category,status,search,review,ig),compact=compact))
  finally:database.close()
 
 @app.get("/api/news/<int:item_id>")
