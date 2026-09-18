@@ -55,8 +55,12 @@ def clean_instagram_text(text: str, source_name: str = "") -> str:
     value = _strip_unsupported_symbols(re.sub(r"\s+", " ", str(text or "")).strip())
     if not value:
         return ""
-    # Remove feed bullets/slashes and repeated editorial prefixes.
-    value = re.sub(r"^[\s•·▪◦○●◉◌◍\-/|:]+", " ", value)
+    # Instagram-safe text sanitizer:
+    # strip stray glyphs/punctuation that feeds sometimes prepend (for example
+    # dotted-circle markers, bullets, slash separators, or invisible marks).
+    # Keep normal punctuation inside the actual headline intact.
+    value = re.sub(r"^[^\w\s]+", "", value, flags=re.UNICODE)
+    value = re.sub(r"^[\s•·▪◦○●◉◌◍\-/|:]+", "", value)
     value = re.sub(
         r"^(?:(?:just\s*in|breaking(?:\s+news)?|latest\s+news|latest\s+update|news\s+alert|alert|exclusive)\s*[:\-–—|/]+\s*)+",
         "",
