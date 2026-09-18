@@ -68,22 +68,42 @@ def make_headline(title,source_text):
   clause=_headline_from_sentence(items[0]); return clause[:140].rstrip(" .:-")
  return value[:140].rstrip(" .:-") or "Latest news update"
 
+def _norm_words(text):
+    return set(_words(re.sub(r"[^A-Za-z0-9' -]", " ", text or "")))
+
+def _is_duplicate_of_title(sentence,title):
+    """Reject source lead text that merely repeats the headline/title."""
+    sentence_words=_norm_words(sentence); title_words=_norm_words(title)
+    if not sentence_words or not title_words:return False
+    overlap=len(sentence_words & title_words)/max(1,len(title_words))
+    reverse=len(sentence_words & title_words)/max(1,len(sentence_words))
+    return overlap>=0.72 and reverse>=0.55
+
+def _unique_news_sentences(title,source_text,limit):
+    chosen=select_sentences(source_text,max(limit+3,6)); result=[]; seen=set()
+    for item in chosen:
+        key=re.sub(r"[^a-z0-9]+"," ",item.lower()).strip()
+        if not key or key in seen:continue
+        if _is_duplicate_of_title(item,title):continue
+        seen.add(key); result.append(item)
+        if len(result)>=limit:break
+    return result
+
 def make_summary(title,source_text):
- chosen=select_sentences(source_text,3)
- if not chosen:
-  headline=make_headline(title,source_text); return headline+"." if headline else ""
- return " ".join(chosen)
+    chosen=_unique_news_sentences(title,source_text,3)
+    if not chosen:return ""
+    return " ".join(chosen)
 
 def make_article(title,source_text):
- chosen=select_sentences(source_text,40)
- if not chosen:return ""
- paragraphs=[]
- if chosen[:3]:paragraphs.append(f"What happened: {' '.join(chosen[:3])}")
- buckets=[chosen[3:8],chosen[8:14],chosen[14:20],chosen[20:28],chosen[28:40]]
- labels=["Key details","What is known","Context","What comes next","Additional details"]
- for label,bucket in zip(labels,buckets):
-  if bucket:paragraphs.append(f"{label}: {' '.join(bucket)}")
- return "\n\n".join(paragraphs).strip()
+    chosen=_unique_news_sentences(title,source_text,40)
+    if not chosen:return ""
+    paragraphs=[]
+    if chosen[:3]:paragraphs.append(f"What happened: {' '.join(chosen[:3])}")
+    buckets=[chosen[3:8],chosen[8:14],chosen[14:20],chosen[20:28],chosen[28:40]]
+    labels=["Key details","What is known","Context","What comes next","Additional details"]
+    for label,bucket in zip(labels,buckets):
+        if bucket:paragraphs.append(f"{label}: {' '.join(bucket)}")
+    return "\n\n".join(paragraphs).strip()
 
 def process_news(title,source_text,category="general"):
  material=clean_text(source_text)
