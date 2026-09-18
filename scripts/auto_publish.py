@@ -15,7 +15,7 @@ from app.database import NewsDatabase
 from app.instagram_graphic import clean_instagram_text, generate_reel_cards
 from app.instagram_reel import build_reel
 from app.media_storage import download_to, public_video_url
-from app.meta_instagram import publish_reel
+from app.meta_instagram import publish_reel, InstagramRateLimitError
 from app.newsroom import process_news
 from app.publish_policy import risk_flags
 OUT=Path(os.getenv("MEDIA_OUTPUT_DIR","data/media")); OUT.mkdir(parents=True,exist_ok=True)
@@ -116,6 +116,11 @@ def process_instagram(db,row,music):
   if not url:raise RuntimeError("Public Reel video URL unavailable")
   result=publish_reel(url,caption(row)); media_id=result.get("id") if isinstance(result,dict) else None; container_id=result.get("container_id") if isinstance(result,dict) else None
   db.update(item_id,instagram_status="published",instagram_media_id=media_id,instagram_container_id=container_id,instagram_selected=0,instagram_published_at=datetime.now(timezone.utc).isoformat(),instagram_error=None,instagram_next_retry_at=None); return True
+ except InstagramRateLimitError as exc:
+  retry_at=(datetime.now(timezone.utc)+timedelta(minutes=30)).isoformat()
+  db.update(item_id,instagram_status="pending",instagram_error=str(exc)[:3000],instagram_next_retry_at=retry_at)
+  print(f"Instagram app rate limit reached; pausing this worker run for item {item_id}: {exc}")
+  return "rate_limited"
  except Exception as exc:
   db.update(item_id,instagram_status="failed",instagram_error=str(exc)[:3000],instagram_next_retry_at=_next_retry(attempts)); print(f"Instagram failed item {item_id}: {exc}"); return False
 
@@ -185,6 +190,7 @@ def main():
    priority_row=next((dict(r) for r in db.latest(1000,status="published",instagram_status="all") if str(r["id"])==priority_id),None)
    if priority_row and priority_row.get("instagram_status")!="published":
     ok=process_instagram(db,priority_row,music); attempted.add(int(priority_row["id"])); priority_handled=True
+     if ok=="rate_limited": return
     if ok:db.set_settings({"instagram_priority_id":"","instagram_paused":"false"}); priority_id=""; paused=False
     else:
      print(f"Instagram priority item {priority_id} failed; continuing normal queue")
@@ -202,12 +208,14 @@ def main():
      if candidates:
       row=candidates[0]
       if int(row["id"]) in attempted:break
-      process_instagram(db,row,music); attempted.add(int(row["id"])); slots-=1
+      ok=process_instagram(db,row,music); attempted.add(int(row["id"])); slots-=1
+       if ok=="rate_limited": break
       continue
      if retry_limit:
       retry_row=next((dict(r) for r in db.latest(retry_limit,status="published",instagram_status="failed") if int(r["id"]) not in attempted and _retry_due(r,now)),None)
       if retry_row:
-       process_instagram(db,retry_row,music); attempted.add(int(retry_row["id"])); slots-=1
+       ok=process_instagram(db,retry_row,music); attempted.add(int(retry_row["id"])); slots-=1
+        if ok=="rate_limited": break
        continue
      break
    else:print(f"Instagram slot closed: last_publish_minutes={since}, interval={interval}, remaining_today={remaining}")
