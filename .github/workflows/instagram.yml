@@ -1,4 +1,4 @@
-name: Instagram Publisher
+name: Instagram Reel Worker
 
 on:
   schedule:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: instagram-publisher
+  group: instagram-reel-worker
   cancel-in-progress: false
 
 jobs:
@@ -22,7 +22,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Install Python dependencies
         run: pip install -r requirements.txt
-      - name: Publish Instagram Reels
+      - name: Publish Instagram queue
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
@@ -36,7 +36,7 @@ jobs:
           PUBLISH_WEBSITE: 'false'
           PUBLISH_TO_INSTAGRAM: 'true'
           MAX_ITEMS: '1'
-          AI_ENRICH_ITEMS: '0'
-          INSTAGRAM_NEW_ITEMS: '100'
+          BOT_REPAIR_ITEMS: '0'
+          INSTAGRAM_NEW_ITEMS: '20'
           INSTAGRAM_RETRY_ITEMS: '10'
         run: python scripts/auto_publish.py
