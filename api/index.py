@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import json, os, secrets, time
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from flask import Flask, jsonify, request, session, send_from_directory
 from werkzeug.security import check_password_hash, generate_password_hash
 from app.article_fetcher import enrich_source_text
 from app.database import NewsDatabase
+from app.models import NewsItem
 from app.factcheck import run_cross_source_check
 from app.newsroom import process_news
 from app.worker import dispatch_worker
@@ -24,8 +26,48 @@ def _ensure_admin_users(database):
  database.conn.execute("CREATE TABLE IF NOT EXISTS admin_users (username TEXT PRIMARY KEY,password_hash TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'owner',created_at TEXT NOT NULL)")
  if not database._postgres:database.conn.commit()
 
+def _bootstrap_news_snapshot(database):
+ try:
+  if database.count() != 0:return 0
+  path=Path(app.static_folder or "public") / "news-data.json"
+  if not path.exists():return 0
+  payload=json.loads(path.read_text(encoding="utf-8"))
+  if not isinstance(payload,list):return 0
+  imported=0
+  for item in payload[:500]:
+   if not isinstance(item,dict) or not item.get("title") or not item.get("url"):continue
+   news=NewsItem(
+    source_name=str(item.get("source_name") or "PoliticsHub"),
+    source_type=str(item.get("source_type") or "snapshot"),
+    title=str(item.get("title")),
+    url=str(item.get("url")),
+    published_at=item.get("published_at"),
+    summary=str(item.get("summary") or ""),
+    external_id=None,
+    category=str(item.get("category") or "general"),
+    image_url=item.get("image_url"),
+    public_source=bool(item.get("public_source")),
+   )
+   if not database.insert(news):continue
+   ph="%s" if database._postgres else "?"
+   row=database.conn.execute("SELECT id FROM news_items WHERE url = "+ph+" ORDER BY id DESC LIMIT 1",(news.url,)).fetchone()
+   if not row:continue
+   item_id=int(row["id"] if database._postgres else row[0])
+   database.update(item_id,
+    status="published",
+    bot_summary=str(item.get("bot_summary") or item.get("summary") or ""),
+    bot_article=str(item.get("bot_article") or ""),
+    published_at_site=item.get("published_at_site") or item.get("published_at"),
+    fact_check_status="pending",
+   )
+   imported+=1
+  return imported
+ except Exception as exc:
+  print(f"News snapshot bootstrap skipped: {exc}")
+  return 0
+
 def db():
- database=NewsDatabase(); _ensure_admin_users(database); return database
+ database=NewsDatabase(); _ensure_admin_users(database); _bootstrap_news_snapshot(database); return database
 
 def admin_ok():
  if session.get("admin_user"):return True
