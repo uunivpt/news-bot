@@ -38,7 +38,23 @@ def _resolve_instagram_user(base,token,configured_account):
     return resolved
 
 def _container_status(base,token,container):
-    r=requests.get(f"{base}/{container}",params={"fields":"id,status_code,status","access_token":token},timeout=30); _raise_meta(r,"container status check"); data=r.json(); print(f"Instagram container status: {data}"); return data
+    r=requests.get(
+        f"{base}/{container}",
+        params={"fields":"id,status_code,status","access_token":token},
+        timeout=30,
+    )
+    _raise_meta(r,"container status check")
+    try:
+        data=r.json()
+    except ValueError:
+        raise RuntimeError(
+            f"Instagram container status returned non-JSON response "
+            f"(HTTP {r.status_code}): {r.text[:2000]}"
+        )
+    # Keep the complete status payload in Actions logs. Meta's ERROR response
+    # can include diagnostic fields depending on API version; never discard them.
+    print(f"Instagram container status payload: {data}")
+    return data
 
 def _video_preflight(video_url):
     try:
