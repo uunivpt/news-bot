@@ -18,7 +18,7 @@ from app.media_storage import download_to, public_video_url
 from app.meta_instagram import publish_reel, InstagramRateLimitError
 from app.newsroom import process_news
 from app.publish_policy import risk_flags
-from app.phase_system import ensure_schema, run as agent_run
+from app.phase_system import ensure_schema, run as agent_run, start as agent_start, finish as agent_finish
 OUT=Path(os.getenv("MEDIA_OUTPUT_DIR","data/media")); OUT.mkdir(parents=True,exist_ok=True)
 MAX_INSTAGRAM_ATTEMPTS=999999; STALE_PROCESSING_MINUTES=20
 TRAILING_FRAGMENT_RE=re.compile(r"\b(?:a|an|and|as|at|by|for|from|in|including|into|of|on|or|the|their|this|to|under|via|was|were|with|without)\.?$",re.I)
@@ -126,7 +126,7 @@ def _recover_stale_processing(db,now):
    attempts=int(row.get("instagram_attempts") or 0); db.update(int(row["id"]),instagram_status="failed",instagram_error="Recovered stale Instagram processing job",instagram_next_retry_at=_next_retry(max(attempts,1))); recovered+=1
  return recovered
 
-def process_instagram(db,row,music):
+def _process_instagram_untracked(db,row,music):
  item_id=int(row["id"]); attempts=int(row.get("instagram_attempts") or 0)
  if attempts>=MAX_INSTAGRAM_ATTEMPTS:return False
  attempts+=1; started=datetime.now(timezone.utc).isoformat(); db.update(item_id,instagram_status="processing",instagram_error=None,instagram_attempts=attempts,instagram_last_attempt_at=started,instagram_next_retry_at=None)
@@ -147,6 +147,17 @@ def process_instagram(db,row,music):
   return "rate_limited"
  except Exception as exc:
   db.update(item_id,instagram_status="failed",instagram_error=str(exc)[:3000],instagram_next_retry_at=_next_retry(attempts)); print(f"Instagram failed item {item_id}: {exc}"); return False
+
+def process_instagram(db,row,music):
+ item_id=int(row["id"])
+ run_id,started=agent_start(db,"instagram","publish_reel",item_id,{"title":str(row.get("title") or "")[:180]})
+ try:
+  result=_process_instagram_untracked(db,row,music)
+  agent_finish(db,run_id,started,result is True, None if result is True else str(row.get("instagram_error") or result))
+  return result
+ except Exception as exc:
+  agent_finish(db,run_id,started,False,exc)
+  raise
 
 def repair_published_content(db,limit):
  if limit<=0:return 0
