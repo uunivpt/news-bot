@@ -356,11 +356,13 @@ def generate_reel_cards(
     output_dir: str | Path,
     source_name: str = "",
 ) -> list[Path]:
-    """PoliticsHub's new clean editorial 9:16 Instagram template.
+    """Generate the supplied PoliticsHub 9:16 editorial layout.
 
-    Matches the supplied reference: white newsroom page, PoliticsHub masthead,
-    right-side tagline, faint world map, framed photo, red category badge,
-    bold black/red headline, compact summary and source attribution.
+    Layout:
+      masthead -> faint world map -> fixed hero image panel -> category ->
+      large bold headline -> short summary -> source -> footer branding.
+    The layout is intentionally fixed so long/short source images cannot
+    move the headline into the Instagram UI-safe area.
     """
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -373,99 +375,113 @@ def generate_reel_cards(
     canvas = Image.new("RGBA", (REEL_WIDTH, REEL_HEIGHT), "white")
     d = ImageDraw.Draw(canvas)
 
-    # Editorial side accents and top masthead.
-    d.polygon([(0, 0), (70, 0), (0, 220)], fill=RED)
-    d.polygon([(REEL_WIDTH, 0), (REEL_WIDTH - 28, 0), (REEL_WIDTH, 270)], fill="#e5e7eb")
-    d.polygon([(REEL_WIDTH, 1450), (REEL_WIDTH, 1920), (930, 1920)], fill="#f0f1f3")
-    d.polygon([(0, 1620), (0, 1920), (65, 1920)], fill="#f0f1f3")
-
+    # --- Header / supplied visual identity ---
+    d.polygon([(0, 0), (72, 0), (0, 225)], fill=RED)
+    d.polygon([(REEL_WIDTH, 0), (REEL_WIDTH - 18, 0), (REEL_WIDTH, 265)], fill="#eceef1")
     _draw_logo(d)
     _draw_tagline(d)
-
-    # Faint world map sits behind the hero card.
     _draw_world_dots(d)
 
-    # Image-aware layout:
-    # Build the photo section from the SOURCE IMAGE'S aspect ratio.
-    # The complete image is always shown: never crop and never let it escape
-    # the section. The decorative section itself grows/shrinks to match it.
+    # Small right-side vertical topic list from the reference.
+    topic_font = _font(14, True)
+    for i, label in enumerate(("POLITICS", "ECONOMY", "GLOBAL", "UPDATES")):
+        d.text((930, 150 + i * 27), label, font=topic_font, fill="#cfd2d6")
+
+    # --- Fixed hero image panel ---
+    # A fixed panel prevents the source image aspect ratio from changing the
+    # typography position. Images are cropped/fitted into the same editorial
+    # frame every time, matching the supplied reference.
+    frame = (50, 315, 1030, 800)
+    d.rounded_rectangle(frame, radius=28, fill="#172038", outline="#ffffff", width=6)
+
     if image:
-        image_top = 365
-        max_image_w = 1000
-        max_image_h = 560
-
-        source_w, source_h = image.size
-        scale = min(max_image_w / source_w, max_image_h / source_h)
-        fitted_w = max(1, round(source_w * scale))
-        fitted_h = max(1, round(source_h * scale))
-
-        image_x = (REEL_WIDTH - fitted_w) // 2
-        image_y = image_top
-
-        # The section is exactly the rendered image size + a small, consistent
-        # editorial border. This prevents the old "image outside the frame"
-        # problem for landscape, portrait, square, or unusual source images.
-        pad = 10
-        frame = (
-            image_x - pad,
-            image_y - pad,
-            image_x + fitted_w + pad,
-            image_y + fitted_h + pad,
+        inner = (62, 327, 1018, 788)
+        fitted = ImageOps.fit(
+            image,
+            (inner[2] - inner[0], inner[3] - inner[1]),
+            method=Image.Resampling.LANCZOS,
+            centering=(0.5, 0.5),
         )
-
-        d.rounded_rectangle(
-            frame,
-            radius=28,
-            fill="#eef0f3",
-            outline="#ffffff",
-            width=5,
-        )
-
-        fitted = image.resize((fitted_w, fitted_h), Image.Resampling.LANCZOS)
-
-        # Paste through a rounded mask so the photo follows the section shape.
-        mask = Image.new("L", (fitted_w, fitted_h), 0)
-        mask_draw = ImageDraw.Draw(mask)
-        radius = min(22, fitted_w // 12, fitted_h // 12)
-        mask_draw.rounded_rectangle(
-            (0, 0, fitted_w - 1, fitted_h - 1),
-            radius=max(8, radius),
+        mask = Image.new("L", fitted.size, 0)
+        md = ImageDraw.Draw(mask)
+        md.rounded_rectangle(
+            (0, 0, fitted.width - 1, fitted.height - 1),
+            radius=20,
             fill=255,
         )
-        canvas.paste(fitted, (image_x, image_y), mask)
-
-        # Re-draw the border on top of the photo.
-        d.rounded_rectangle(frame, radius=28, outline="#ffffff", width=5)
-
-        # Keep a predictable gap before the category badge.
-        content_y = frame[3] + 70
+        canvas.paste(fitted, (inner[0], inner[1]), mask)
     else:
-        # No image means no image placeholder/section at all.
-        content_y = 720
+        # Keep the supplied dark panel even when no image is available.
+        placeholder = _font(22, True)
+        label = "ADD IMAGE / VIDEO HERE"
+        bbox = d.textbbox((0, 0), label, font=placeholder)
+        d.text(
+            ((WIDTH - (bbox[2] - bbox[0])) // 2, 560),
+            label,
+            font=placeholder,
+            fill="#e9edf2",
+        )
 
-    # Category badge.
+    d.rounded_rectangle(frame, radius=28, outline="#ffffff", width=6)
+
+    # --- Category ---
+    badge_y = 845
     category_label = (category or "news").upper()[:15]
-    badge_w = max(190, d.textbbox((0, 0), category_label, font=_font(25, True))[2] + 56)
-    badge_y = content_y
-    d.rounded_rectangle((58, badge_y, 58 + badge_w, badge_y + 65), radius=15, fill=RED)
-    d.text((84, badge_y + 18), category_label, font=_font(25, True), fill="white")
-
-    # Main headline.
-    title_font, _ = _fit_title(clean_title, 940, 4)
-    headline_y = badge_y + 92
-    headline_end = _highlight_title(
-        d,
-        clean_title,
-        title_font,
-        58,
-        headline_y,
-        930,
+    badge_font = _font(25, True)
+    badge_w = max(190, d.textbbox((0, 0), category_label, font=badge_font)[2] + 56)
+    d.rounded_rectangle(
+        (58, badge_y, 58 + badge_w, badge_y + 64),
+        radius=15,
+        fill=RED,
     )
+    d.text((84, badge_y + 17), category_label, font=badge_font, fill="white")
 
-    # Compact summary below headline. Do not repeat the headline in the summary.
-    summary_end = headline_end
+    # --- Main headline ---
+    # Use the largest size that fits into four lines. The regular Android
+    # Roboto fallback is given a small stroke so it remains visually bold.
+    title_font, title_lines = _fit_title(clean_title, 930, 4)
+    headline_y = 940
+    words = clean_title.split()
+    highlight_word = None
+    priority = (
+        "America's", "America", "India", "India's", "Russia", "Ukraine",
+        "Israel", "Iran", "China", "Trump", "Modi", "White", "House",
+        "Europe", "NATO", "UN", "UK", "US",
+    )
+    for candidate in priority:
+        for word in words:
+            if word.strip(".,:;!?()") == candidate:
+                highlight_word = candidate
+                break
+        if highlight_word:
+            break
+    if highlight_word is None and len(words) >= 3:
+        highlight_word = words[1].strip(".,:;!?()")
+
+    # Re-wrap using the exact font selected above and draw each word so the
+    # selected emphasis word stays red without changing line geometry.
+    title_lines = _wrap(clean_title, title_font, 930)[:4]
+    y = headline_y
+    for line in title_lines:
+        x = 58
+        for word in line.split():
+            clean_word = word.strip(".,:;!?()")
+            bbox = d.textbbox((0, 0), word, font=title_font, stroke_width=2)
+            fill = RED if highlight_word and clean_word == highlight_word else DARK
+            d.text(
+                (x, y),
+                word,
+                font=title_font,
+                fill=fill,
+                stroke_width=2,
+                stroke_fill=fill,
+            )
+            x += bbox[2] + max(8, title_font.size // 8)
+        y += title_font.size + 8
+
+    # --- Summary ---
+    summary_end = y
     if clean_summary:
-        summary_font = _font(36)
         summary_text = clean_summary
         if summary_text.casefold().startswith(clean_title.casefold()):
             summary_text = summary_text[len(clean_title):].lstrip(" :–—|/-")
@@ -476,27 +492,37 @@ def generate_reel_cards(
             flags=re.I,
         ).strip(" -–—|/:")
         if summary_text:
-            summary_y = headline_end + 18
-            summary_lines = _wrap(summary_text, summary_font, 930)[:3]
+            summary_font = _font(28)
+            summary_y = y + 22
+            summary_lines = _wrap(summary_text, summary_font, 900)[:3]
             for line in summary_lines:
-                d.text((60, summary_y), line, font=summary_font, fill="#454b53")
-                summary_y += 50
+                d.text((62, summary_y), line, font=summary_font, fill="#454b53")
+                summary_y += 39
             summary_end = summary_y
-            if len(_wrap(summary_text, summary_font, 930)) > 3:
-                d.text((60, summary_y - 4), "...", font=_font(32, True), fill=MUTED)
 
-    # Keep source/site above Instagram's bottom controls and away from long text.
-    footer_y = min(1585, max(1515, summary_end + 28))
-    d.rectangle((60, footer_y, 125, footer_y + 6), fill=RED)
+    # --- Source / footer ---
+    # Keep this safely above the bottom Instagram controls.
+    footer_y = 1615
+    d.rectangle((62, footer_y, 122, footer_y + 6), fill=RED)
     d.text(
-        (60, footer_y + 34),
+        (62, footer_y + 26),
         f"Source: {clean_source}",
-        font=_font(21, True),
+        font=_font(20, True),
         fill=DARK,
     )
-    d.text((60, footer_y + 76), "politicshub.in", font=_font(21, True), fill=DARK)
 
-    # Keep the exact 1080x1920 PNG used by the existing Reel pipeline.
+    # Reference-style bottom band.
+    band_y = 1760
+    d.polygon([(0, band_y), (700, band_y), (585, REEL_HEIGHT), (0, REEL_HEIGHT)], fill=RED)
+    d.polygon([(700, band_y), (REEL_WIDTH, band_y), (REEL_WIDTH, REEL_HEIGHT), (585, REEL_HEIGHT)], fill="#151b2b")
+    d.text((60, band_y + 40), "R E A L  N E W S", font=_font(18, True), fill="white")
+    d.text((60, band_y + 68), "R E A L  P E R S P E C T I V E", font=_font(16, True), fill="white")
+    d.rectangle((60, band_y + 108, 110, band_y + 113), fill="white")
+
+    follow = _font(16, True)
+    d.text((770, band_y + 38), "FOLLOW", font=follow, fill="white")
+    d.text((770, band_y + 68), "FOR MORE", font=follow, fill="white")
+
     path = out / "01_editorial.png"
     canvas.convert("RGB").save(path, format="PNG", optimize=True)
     return [path]
