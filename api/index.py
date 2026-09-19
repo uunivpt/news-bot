@@ -13,7 +13,7 @@ from app.models import NewsItem
 from app.factcheck import run_cross_source_check
 from app.newsroom import process_news
 from app.worker import dispatch_worker
-from app.phase_system import analytics as phase_analytics, phase_analytics as _phase_analytics, cluster_stories, cluster_summary, train as train_agent
+from app.phase_system import analytics as phase_analytics, cluster_stories, cluster_summary, train as train_agent
 
 app=Flask(__name__, static_folder="../public", static_url_path="")
 _secret=os.getenv("FLASK_SECRET_KEY") or os.getenv("ADMIN_TOKEN") or os.getenv("ADMIN_SETUP_KEY")
@@ -259,7 +259,8 @@ def admin_operations():
  database=db()
  try:
   cluster_stories(database,250)
-  ops=phase_analytics(database,7)
+  with __import__("app.phase_system",fromlist=["run"]).run(database,"reporting","generate_operations_report"):
+   ops=phase_analytics(database,7)
   recent_errors=[dict(r) for r in database.conn.execute("SELECT agent_id,operation,error,started_at FROM ph_agent_runs WHERE status='failed' ORDER BY id DESC LIMIT 20").fetchall()]
   clusters=cluster_summary(database)
   total=database.count()
@@ -284,7 +285,8 @@ def admin_training():
  if not agent_id or agent_id not in __import__("app.phase_system",fromlist=["AGENTS"]).AGENTS:return jsonify({"error":"unknown agent"}),400
  database=db()
  try:
-  train_agent(database,agent_id,str(body.get("event_type") or "knowledge_update"),notes)
+  with __import__("app.phase_system",fromlist=["run"]).run(database,"hr","record_training",metadata={"agent_id":agent_id}):
+   train_agent(database,agent_id,str(body.get("event_type") or "knowledge_update"),notes)
   log_admin(database,"agent.training",None,agent_id)
   return jsonify({"ok":True,"agent_id":agent_id})
  finally:database.close()
