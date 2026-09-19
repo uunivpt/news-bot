@@ -191,8 +191,10 @@ def _minutes_since_last(db,now):
 
 def _instagram_candidates(db,mode,limit,now):
  if limit<=0:return []
- rows=[dict(r) for r in db.latest(max(limit*20,100),status="published",instagram_status="pending")]
- rows=[r for r in rows if _schedule_due(r,now)]
+ # Phone/Instagram-only workers may intentionally leave website items in "pending".
+ # Instagram should still be able to consume those queued stories.
+ rows=[dict(r) for r in db.latest(max(limit*20,100),status="all",instagram_status="pending")]
+ rows=[r for r in rows if r.get("status") in {"pending","published"} and _schedule_due(r,now)]
  if mode=="manual":rows=[r for r in rows if int(r.get("instagram_selected") or 0)==1]
  rows.sort(key=lambda r:(0 if r.get("instagram_scheduled_at") else 1, int(r.get("instagram_queue_order") or 0) if int(r.get("instagram_queue_order") or 0)>0 else 10**9, -int(r.get("id") or 0)))
  return rows[:limit]
