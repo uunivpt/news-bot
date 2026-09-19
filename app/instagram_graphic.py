@@ -108,13 +108,13 @@ def _wrap(text: str, font, max_width: int) -> list[str]:
     return lines
 
 
-def _fit_title(text: str, max_width: int, max_lines: int = 4):
-    for size in range(72, 31, -2):
+def _fit_title(text: str, max_width: int, max_lines: int = 3):
+    for size in range(108, 47, -2):
         font = _font(size, True)
         lines = _wrap(text, font, max_width)
         if len(lines) <= max_lines:
             return font, lines
-    font = _font(32, True)
+    font = _font(48, True)
     return font, _wrap(text, font, max_width)[:max_lines]
 
 
@@ -408,7 +408,7 @@ def generate_reel_cards(
     # Compact summary below headline. Do not repeat the headline in the summary.
     summary_end = headline_end
     if clean_summary:
-        summary_font = _font(25)
+        summary_font = _font(32)
         summary_text = clean_summary
         if summary_text.casefold().startswith(clean_title.casefold()):
             summary_text = summary_text[len(clean_title):].lstrip(" :–—|/-")
@@ -423,7 +423,7 @@ def generate_reel_cards(
             summary_lines = _wrap(summary_text, summary_font, 930)[:4]
             for line in summary_lines:
                 d.text((60, summary_y), line, font=summary_font, fill="#454b53")
-                summary_y += 38
+                summary_y += 46
             summary_end = summary_y
             if len(_wrap(summary_text, summary_font, 930)) > 4:
                 d.text((60, summary_y - 4), "...", font=_font(28, True), fill=MUTED)
