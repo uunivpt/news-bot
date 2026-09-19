@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import os
 import re
 import unicodedata
 from pathlib import Path
@@ -14,8 +15,19 @@ WIDTH, HEIGHT = 1080, 1350
 REEL_WIDTH, REEL_HEIGHT = 1080, 1920
 OUTPUT_DIR = Path("data/generated_images")
 
-FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-FONT_REG = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+# The old /usr/share path exists on standard Linux runners, but not on
+# Termux. If the font cannot be found, Pillow's tiny bitmap fallback makes
+# the Reel text look microscopic. Search both Linux and Termux locations.
+FONT_BOLD_CANDIDATES = (
+    os.getenv("POLITICSHUB_FONT_BOLD", ""),
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/data/data/com.termux/files/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+)
+FONT_REG_CANDIDATES = (
+    os.getenv("POLITICSHUB_FONT_REG", ""),
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/data/data/com.termux/files/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+)
 
 EDITORIAL_PREFIX_RE = re.compile(
     r"^\s*(?:just\s*in|breaking(?:\s+news)?|latest\s+news|latest\s+update|news\s+alert|alert|exclusive)\s*[:\-–—|]+\s*",
@@ -84,10 +96,18 @@ def clean_instagram_text(text: str, source_name: str = "") -> str:
 
 
 def _font(size: int, bold: bool = False):
-    try:
-        return ImageFont.truetype(FONT_BOLD if bold else FONT_REG, size)
-    except OSError:
-        return ImageFont.load_default()
+    candidates = FONT_BOLD_CANDIDATES if bold else FONT_REG_CANDIDATES
+    for path in candidates:
+        if path and Path(path).exists():
+            try:
+                return ImageFont.truetype(path, size)
+            except OSError:
+                pass
+    # Do not silently use Pillow's tiny bitmap font: that was the reason
+    # Termux-generated Reels had microscopic headlines and labels.
+    raise RuntimeError(
+        "DejaVu font not found. On Termux run: pkg install ttf-dejavu"
+    )
 
 
 def _wrap(text: str, font, max_width: int) -> list[str]:
