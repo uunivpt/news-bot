@@ -22,6 +22,9 @@ EDITORIAL_PREFIX_RE = re.compile(
     re.I,
 )
 HANDLE_RE = re.compile(r"(?<!\w)@[A-Za-z0-9_]{2,64}", re.I)
+# Remove promotional/navigation fragments from generated editorial text.
+PROMO_NAV_RE = re.compile(r"\b(?:socials|donate|advertising)\b(?:\s*[|•·/,-]\s*\b(?:socials|donate|advertising)\b)*", re.I)
+
 SOURCE_FRAGMENT_RE = re.compile(
     r"(?:\bsource\s*:\s*|\bvia\s+|\baccording\s+to\s+|\breported\s+by\s+|\bcredit\s*:\s*)[^|•\n]+",
     re.I,
@@ -72,6 +75,7 @@ def clean_instagram_text(text: str, source_name: str = "") -> str:
         value = re.sub(re.escape(source), "", value, flags=re.I)
         value = re.sub(re.escape(source.lstrip("@")), "", value, flags=re.I)
     value = SOURCE_FRAGMENT_RE.sub(" ", value)
+    value = PROMO_NAV_RE.sub(" ", value)
     value = HANDLE_RE.sub(" ", value)
     value = EDITORIAL_PREFIX_RE.sub("", value)
     value = re.sub(r"\s+", " ", value)
