@@ -7,6 +7,7 @@ from .database import NewsDatabase
 from .rss import collect_rss
 from .telegram_public import collect_public_telegram
 from .website_monitor import collect_website
+from .phase_system import ensure_schema, run as agent_run, cluster_stories
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ def load_sources(path: str = "config/sources.json") -> dict[str, Any]:
 
 
 def collect_once(config: dict[str, Any], db: NewsDatabase) -> tuple[int, int]:
+    ensure_schema(db)
     added = skipped = 0
     for source_type, sources in config.items():
         collector = COLLECTORS.get(source_type)
@@ -38,8 +40,9 @@ def collect_once(config: dict[str, Any], db: NewsDatabase) -> tuple[int, int]:
             if not source.get("enabled", True):
                 continue
             try:
-                items = collector(source)
-                source_added, source_skipped = db.insert_many(items)
+                with agent_run(db, "trend", "collect_source", metadata={"source": source.get("name","unknown"), "type": source_type}):
+                    items = collector(source)
+                    source_added, source_skipped = db.insert_many(items)
                 added += source_added
                 skipped += source_skipped
                 logger.info(
@@ -52,4 +55,9 @@ def collect_once(config: dict[str, Any], db: NewsDatabase) -> tuple[int, int]:
                 )
             except Exception:
                 logger.exception("Collector failed for %s", source.get("name", "unknown"))
+    try:
+        with agent_run(db, "research", "cluster_stories"):
+            cluster_stories(db, 250)
+    except Exception:
+        logger.exception("Story clustering failed")
     return added, skipped
