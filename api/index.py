@@ -264,8 +264,9 @@ def admin_operations():
   clusters=cluster_summary(database)
   total=database.count()
   published=len(database.latest(1000,"all","published"))
-  with_article=len([r for r in database.latest(1000,"all","published") if r.get("bot_article")])
-  images=len([r for r in database.latest(1000,"all","published") if r.get("image_url")])
+  published_rows=[dict(r) for r in database.latest(1000,"all","published")]
+  with_article=len([r for r in published_rows if r.get("bot_article")])
+  images=len([r for r in published_rows if r.get("image_url")])
   ops["content_quality"]={"published":published,"with_article":with_article,"article_coverage_percent":round(with_article/published*100,1) if published else None,"with_image":images,"image_coverage_percent":round(images/published*100,1) if published else None,"cluster_count":len(clusters)}
   ops["recent_errors"]=recent_errors
   return jsonify(ops)
