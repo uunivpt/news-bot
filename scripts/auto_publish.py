@@ -18,6 +18,7 @@ from app.media_storage import download_to, public_video_url
 from app.meta_instagram import publish_reel, InstagramRateLimitError
 from app.newsroom import process_news
 from app.publish_policy import risk_flags
+from app.phase_system import ensure_schema, run as agent_run
 OUT=Path(os.getenv("MEDIA_OUTPUT_DIR","data/media")); OUT.mkdir(parents=True,exist_ok=True)
 MAX_INSTAGRAM_ATTEMPTS=999999; STALE_PROCESSING_MINUTES=20
 TRAILING_FRAGMENT_RE=re.compile(r"\b(?:a|an|and|as|at|by|for|from|in|including|into|of|on|or|the|their|this|to|under|via|was|were|with|without)\.?$",re.I)
@@ -186,7 +187,7 @@ def _instagram_candidates(db,mode,limit,now):
  return rows[:limit]
 
 def main():
- db=NewsDatabase(); settings=db.get_settings(); env_ig=os.getenv("PUBLISH_TO_INSTAGRAM","false").lower() in {"1","true","yes"}; env_web=os.getenv("PUBLISH_WEBSITE","true").lower() in {"1","true","yes"}; priority_id=str(settings.get("instagram_priority_id","") or "").strip(); paused=settings.get("instagram_paused","false")=="true"; publish_instagram=env_ig and (settings.get("instagram_enabled","true")=="true" or bool(priority_id)); publish_website=env_web and settings.get("website_enabled","true")=="true"
+ db=NewsDatabase(); ensure_schema(db); settings=db.get_settings(); env_ig=os.getenv("PUBLISH_TO_INSTAGRAM","false").lower() in {"1","true","yes"}; env_web=os.getenv("PUBLISH_WEBSITE","true").lower() in {"1","true","yes"}; priority_id=str(settings.get("instagram_priority_id","") or "").strip(); paused=settings.get("instagram_paused","false")=="true"; publish_instagram=env_ig and (settings.get("instagram_enabled","true")=="true" or bool(priority_id)); publish_website=env_web and settings.get("website_enabled","true")=="true"
  try:max_items=max(1,int(os.getenv("MAX_ITEMS","15")))
  except ValueError:max_items=15
  try:repair_items=max(0,int(os.getenv("BOT_REPAIR_ITEMS","5")))
@@ -204,9 +205,12 @@ def main():
  for row in pending:
   # Always regenerate pending content from the freshest source. If the newsroom
   # processor rejects a very short alert, fall back to cleaned source wording.
-  ready=prepare_content(db,row)
+  with agent_run(db, "writer", "prepare_story", int(row["id"])):
+   ready=prepare_content(db,row)
   if not ready:held+=1; print(f"Website publish held for item {row['id']}: no usable source text"); continue
-  publish_website_first(db,row,now.isoformat()); published+=1
+  with agent_run(db, "publisher", "publish_website", int(row["id"])):
+   publish_website_first(db,row,now.isoformat())
+  published+=1
  repaired=repair_published_content(db,repair_items); attempted=set(); priority_handled=False
  if publish_instagram:
   _recover_stale_processing(db,now)
