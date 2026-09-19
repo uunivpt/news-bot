@@ -1,7 +1,7 @@
 # Production deployment marker: deterministic newsroom + public source attribution.
 from __future__ import annotations
 
-import json, os, secrets, time
+import json, os, re, secrets, time
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -13,6 +13,7 @@ from app.models import NewsItem
 from app.factcheck import run_cross_source_check
 from app.newsroom import process_news
 from app.worker import dispatch_worker
+from app.phase_system import analytics as phase_analytics, phase_analytics as _phase_analytics, cluster_stories, cluster_summary, train as train_agent
 
 app=Flask(__name__, static_folder="../public", static_url_path="")
 _secret=os.getenv("FLASK_SECRET_KEY") or os.getenv("ADMIN_TOKEN") or os.getenv("ADMIN_SETUP_KEY")
@@ -249,6 +250,42 @@ def instagram_analytics():
     except ValueError:pass
   recent=[{"id":r["id"],"title":r["title"],"published_at":r.get("instagram_published_at"),"media_id":r.get("instagram_media_id")} for r in published[:20]]
   return jsonify({"last_7_days":{k:v for k,v in daily.items() if k>=start.astimezone(ZoneInfo("Asia/Kolkata")).date().isoformat()},"total_published":len(published),"failed":len([r for r in rows if r.get("instagram_status")=="failed"]),"processing":len([r for r in rows if r.get("instagram_status")=="processing"]),"queued":len([r for r in rows if r.get("instagram_status")=="pending" and int(r.get("instagram_selected") or 0)==1]),"recent":recent})
+ finally:database.close()
+
+@app.get("/api/admin/operations")
+def admin_operations():
+ err=require_admin()
+ if err:return err
+ database=db()
+ try:
+  cluster_stories(database,250)
+  ops=phase_analytics(database,7)
+  recent_errors=[dict(r) for r in database.conn.execute("SELECT agent_id,operation,error,started_at FROM ph_agent_runs WHERE status='failed' ORDER BY id DESC LIMIT 20").fetchall()]
+  clusters=cluster_summary(database)
+  total=database.count()
+  published=len(database.latest(1000,"all","published"))
+  with_article=len([r for r in database.latest(1000,"all","published") if r.get("bot_article")])
+  images=len([r for r in database.latest(1000,"all","published") if r.get("image_url")])
+  ops["content_quality"]={"published":published,"with_article":with_article,"article_coverage_percent":round(with_article/published*100,1) if published else None,"with_image":images,"image_coverage_percent":round(images/published*100,1) if published else None,"cluster_count":len(clusters)}
+  ops["recent_errors"]=recent_errors
+  return jsonify(ops)
+ finally:database.close()
+
+@app.post("/api/admin/training")
+def admin_training():
+ err=require_admin()
+ if err:return err
+ err=require_csrf()
+ if err:return err
+ body=request.get_json(silent=True) or {}
+ agent_id=str(body.get("agent_id","")).strip()
+ notes=str(body.get("notes","")).strip()
+ if not agent_id or agent_id not in __import__("app.phase_system",fromlist=["AGENTS"]).AGENTS:return jsonify({"error":"unknown agent"}),400
+ database=db()
+ try:
+  train_agent(database,agent_id,str(body.get("event_type") or "knowledge_update"),notes)
+  log_admin(database,"agent.training",None,agent_id)
+  return jsonify({"ok":True,"agent_id":agent_id})
  finally:database.close()
 
 @app.get("/api/admin/settings")
