@@ -112,7 +112,7 @@ def _fit_title(text: str, max_width: int, max_lines: int = 3):
     # Keep Reel headlines visibly large on a 1080x1920 canvas. The previous
     # 48px fallback made long headlines look tiny once Instagram displayed the
     # full Reel in the feed.
-    for size in range(132, 71, -2)
+    for size in range(132, 71, -2):
         font = _font(size, True)
         lines = _wrap(text, font, max_width)
         if len(lines) <= max_lines:
