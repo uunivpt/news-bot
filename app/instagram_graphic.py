@@ -109,12 +109,15 @@ def _wrap(text: str, font, max_width: int) -> list[str]:
 
 
 def _fit_title(text: str, max_width: int, max_lines: int = 3):
-    for size in range(108, 47, -2):
+    # Keep Reel headlines visibly large on a 1080x1920 canvas. The previous
+    # 48px fallback made long headlines look tiny once Instagram displayed the
+    # full Reel in the feed.
+    for size in range(124, 63, -2):
         font = _font(size, True)
         lines = _wrap(text, font, max_width)
         if len(lines) <= max_lines:
             return font, lines
-    font = _font(48, True)
+    font = _font(64, True)
     return font, _wrap(text, font, max_width)[:max_lines]
 
 
@@ -394,8 +397,8 @@ def generate_reel_cards(
     d.text((84, badge_y + 18), category_label, font=_font(25, True), fill="white")
 
     # Main headline.
-    title_font, _ = _fit_title(clean_title, 930, 3)
-    headline_y = badge_y + 95
+    title_font, _ = _fit_title(clean_title, 940, 3)
+    headline_y = badge_y + 92
     headline_end = _highlight_title(
         d,
         clean_title,
@@ -408,7 +411,7 @@ def generate_reel_cards(
     # Compact summary below headline. Do not repeat the headline in the summary.
     summary_end = headline_end
     if clean_summary:
-        summary_font = _font(32)
+        summary_font = _font(36)
         summary_text = clean_summary
         if summary_text.casefold().startswith(clean_title.casefold()):
             summary_text = summary_text[len(clean_title):].lstrip(" :–—|/-")
@@ -423,10 +426,10 @@ def generate_reel_cards(
             summary_lines = _wrap(summary_text, summary_font, 930)[:4]
             for line in summary_lines:
                 d.text((60, summary_y), line, font=summary_font, fill="#454b53")
-                summary_y += 46
+                summary_y += 50
             summary_end = summary_y
             if len(_wrap(summary_text, summary_font, 930)) > 4:
-                d.text((60, summary_y - 4), "...", font=_font(28, True), fill=MUTED)
+                d.text((60, summary_y - 4), "...", font=_font(32, True), fill=MUTED)
 
     # Keep source/site above Instagram's bottom controls and away from long text.
     footer_y = min(1585, max(1515, summary_end + 28))
