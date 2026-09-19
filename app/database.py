@@ -72,7 +72,22 @@ class NewsDatabase:
     self.database_url += ("&" if "?" in self.database_url else "?") + "sslmode=require"
    import psycopg
    from psycopg.rows import dict_row
-   self.conn=psycopg.connect(self.database_url,row_factory=dict_row); self.conn.autocommit=True
+   # Mobile DNS/Wi-Fi can briefly lose the database hostname. Retry the initial
+   # connection here so a transient network drop does not kill the whole worker.
+   last_error = None
+   for attempt, delay in enumerate((0, 5, 15, 30), start=1):
+    if delay:
+     import time
+     time.sleep(delay)
+    try:
+     self.conn=psycopg.connect(self.database_url,row_factory=dict_row,connect_timeout=15)
+     break
+    except psycopg.OperationalError as exc:
+     last_error = exc
+     print(f"Database connection attempt {attempt}/4 failed; retrying: {exc}")
+   else:
+    raise last_error
+   self.conn.autocommit=True
    # PostgreSQL drivers execute one statement at a time; keep schema creation explicit.
    for statement in (SCHEMA, ADMIN_SCHEMA, ACTIVITY_SCHEMA):
     self.conn.execute(statement.strip())
