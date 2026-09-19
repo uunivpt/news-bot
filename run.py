@@ -4,6 +4,7 @@ import time
 
 from app.collector import collect_once, load_sources
 from app.database import NewsDatabase
+from app.phase_system import ensure_schema, run as agent_run
 
 
 def main() -> None:
@@ -20,10 +21,12 @@ def main() -> None:
     )
     config = load_sources(args.config)
     db = NewsDatabase(args.db)
+    ensure_schema(db)
 
     try:
         while True:
-            added, skipped = collect_once(config, db)
+            with agent_run(db, "manager", "orchestrate_collection"):
+                added, skipped = collect_once(config, db)
             logging.info("Cycle complete: added=%d skipped=%d total=%d", added, skipped, db.count())
             if args.once:
                 break
