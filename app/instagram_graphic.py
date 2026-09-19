@@ -24,6 +24,10 @@ FONT_BOLD_CANDIDATES = (
     "/data/data/com.termux/files/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/system/fonts/Roboto-Bold.ttf",
     "/system/product/fonts/Roboto-Bold.ttf",
+    # Some Android builds expose only the regular Roboto TTF. It is still
+    # a valid TrueType font and is preferable to failing the whole Reel.
+    "/system/fonts/Roboto-Regular.ttf",
+    "/system/product/fonts/Roboto-Regular.ttf",
 )
 FONT_REG_CANDIDATES = (
     os.getenv("POLITICSHUB_FONT_REG", ""),
