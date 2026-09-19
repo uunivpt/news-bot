@@ -263,6 +263,17 @@ def admin_operations():
   with __import__("app.phase_system",fromlist=["run"]).run(database,"reporting","generate_operations_report"):
    ops=phase_analytics(database,7)
   recent_errors=[dict(r) for r in database.conn.execute("SELECT agent_id,operation,error,started_at FROM ph_agent_runs WHERE status='failed' ORDER BY id DESC LIMIT 20").fetchall()]
+  # Instagram failures are stored on news_items as well as agent telemetry. Surface them
+  # in the Command Center so a failed Reel never looks like a silent queue stall.
+  instagram_errors=[dict(r) for r in database.conn.execute("SELECT id,title,instagram_error,instagram_status,instagram_attempts,instagram_last_attempt_at FROM news_items WHERE instagram_error IS NOT NULL AND instagram_error <> '' ORDER BY id DESC LIMIT 20").fetchall()]
+  for item in instagram_errors:
+   recent_errors.append({
+    "agent_id":"instagram",
+    "operation":"publish_reel",
+    "error":f"#{item.get('id')} {item.get('title')}: {item.get('instagram_error')}",
+    "started_at":item.get("instagram_last_attempt_at") or ""
+   })
+  recent_errors=recent_errors[-20:]
   clusters=cluster_summary(database)
   total=database.count()
   published=len(database.latest(1000,"all","published"))
