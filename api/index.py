@@ -78,6 +78,11 @@ def require_csrf():
  if not session.get("admin_user"):return None
  token=request.headers.get("X-CSRF-Token",""); expected=session.get("csrf_token",""); return None if token and expected and secrets.compare_digest(token,expected) else (jsonify({"error":"invalid CSRF token"}),403)
 
+def _strip_promo_nav(value):
+ r=str(value or "")
+ r=re.sub(r"\b(?:socials|donate|advertising)\b(?:\s*[|•·/,-]\s*\b(?:socials|donate|advertising)\b)*"," ",r,flags=re.I)
+ return re.sub(r"\s{2,}"," ",r).strip(" |•·/-")
+
 def _publicize(row):
  r=dict(row)
  if not admin_ok():
@@ -90,7 +95,7 @@ def _publicize(row):
    try:
     dt=datetime.fromisoformat(str(raw).replace("Z","+00:00")); dt=dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc); r["published_at"]=dt.astimezone(ZoneInfo("Asia/Kolkata")).strftime("%d %b %Y · %H:%M")
    except ValueError:pass
-  r["summary"]=dict(row).get("bot_summary") or ""; r["article"]=dict(row).get("bot_article") or ""
+  r["title"]=_strip_promo_nav(r.get("title")); r["summary"]=_strip_promo_nav(dict(row).get("bot_summary") or ""); r["article"]=_strip_promo_nav(dict(row).get("bot_article") or "")
  return r
 
 def rows_json(rows,compact=False):
