@@ -20,7 +20,7 @@ def _raise_meta(r,action):
     except Exception: detail=r.text[:2000]
     token=os.getenv("META_ACCESS_TOKEN",""); text=str(detail).replace(token,"[REDACTED]")
     detail_text=str(detail)
-    if r.status_code==429 or '"code": 4' in detail_text or "'code': 4" in detail_text or "Rate Limit Exceeded" in detail_text or "Application request limit reached" in detail_text:
+    if r.status_code==429 or '"code": 4' in detail_text or "'code': 4" in detail_text or '"code": 9' in detail_text or "'code': 9" in detail_text or "Rate Limit Exceeded" in detail_text or "Application request limit reached" in detail_text or "Media Publish Limit Exceeded" in detail_text or "maximum number of posts" in detail_text:
         raise InstagramRateLimitError(f"Instagram {action} rate limit reached; retry later.")
     raise RuntimeError(f"Instagram {action} failed ({r.status_code}): {text}")
 
