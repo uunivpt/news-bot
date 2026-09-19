@@ -5,6 +5,11 @@ from urllib.request import Request, urlopen
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 W,H=1080,1350; RW,RH=1080,1920
 
+PROMO_NAV_RE = re.compile(r"\b(?:socials|donate|advertising)\b(?:\s*[|•·/,-]\s*\b(?:socials|donate|advertising)\b)*", re.I)
+
+def _clean_editorial_text(value):
+    return PROMO_NAV_RE.sub(" ", str(value or "")).strip(" |•·/-")
+
 def _font(size,bold=False):
     paths=[os.getenv("NEWS_FONT_BOLD" if bold else "NEWS_FONT","")]+["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf","/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"]
     for p in paths:
@@ -29,6 +34,8 @@ def _wrap(draw,text,font,width):
 
 def build_graphic(title,category="general",image_url=None,label="NEWS",reel=False,out_path="graphic.jpg"):
     size=(RW,RH) if reel else (W,H); margin=70
+    title=_clean_editorial_text(title)
+    label=_clean_editorial_text(label)
     key=(label or category).lower()
     styles={"breaking_news":"#b42318","geopolitics_map":"#0f4c81","market_data":"#14532d","tech_news":"#3730a3","sports_news":"#9a3412","entertainment_news":"#7c2d12","science_news":"#155e75","health_news":"#166534","politics_news":"#344054","world_news":"#175cd3","general_news":"#111827"}
     accent=styles.get(key,styles.get(f"{category}_news","#111827")); canvas=Image.new("RGB",size,"#f5f7fa"); draw=ImageDraw.Draw(canvas); draw.rectangle((0,0,size[0],18),fill=accent)
