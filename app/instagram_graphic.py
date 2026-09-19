@@ -106,9 +106,19 @@ def _font(size: int, bold: bool = False):
             except (OSError, TypeError):
                 pass
 
+    # Pillow wheels may ship their own DejaVu TTFs. Prefer these because
+    # they work inside the Termux Python sandbox without Android filesystem
+    # permissions or extra fontconfig packages.
+    try:
+        pil_fonts = Path(ImageFont.__file__).resolve().parent / "fonts"
+        bundled = pil_fonts / ("DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf")
+        return ImageFont.truetype(str(bundled), size)
+    except (OSError, TypeError):
+        pass
+
     # Termux package layouts can differ, and some Android/Termux filesystem
     # operations report "Function not implemented" for direct path checks.
-    # fontconfig can resolve the installed TTF without relying on that lookup.
+    # fontconfig is only an optional final resolver; it is NOT required.
     try:
         import subprocess
         pattern = "DejaVu Sans:style=Bold" if bold else "DejaVu Sans:style=Book"
@@ -123,10 +133,8 @@ def _font(size: int, bold: bool = False):
     except Exception:
         pass
 
-    # Do not silently use Pillow's tiny bitmap font: that was the reason
-    # Termux-generated Reels had microscopic headlines and labels.
     raise RuntimeError(
-        "DejaVu font not found. On Termux run: pkg install ttf-dejavu fontconfig"
+        "No TrueType font available. Pillow DejaVu fonts and Termux fonts were not found."
     )
 
 
