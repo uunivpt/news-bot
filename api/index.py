@@ -14,6 +14,7 @@ from app.factcheck import run_cross_source_check
 from app.newsroom import process_news
 from app.worker import dispatch_worker
 from app.phase_system import analytics as phase_analytics, cluster_stories, cluster_summary, train as train_agent
+from app.reporting import operations_pdf
 
 app=Flask(__name__, static_folder="../public", static_url_path="")
 _secret=os.getenv("FLASK_SECRET_KEY") or os.getenv("ADMIN_TOKEN") or os.getenv("ADMIN_SETUP_KEY")
@@ -271,6 +272,17 @@ def admin_operations():
   ops["content_quality"]={"published":published,"with_article":with_article,"article_coverage_percent":round(with_article/published*100,1) if published else None,"with_image":images,"image_coverage_percent":round(images/published*100,1) if published else None,"cluster_count":len(clusters)}
   ops["recent_errors"]=recent_errors
   return jsonify(ops)
+ finally:database.close()
+
+@app.get("/api/admin/operations.pdf")
+def admin_operations_pdf():
+ err=require_admin()
+ if err:return err
+ database=db()
+ try:
+  pdf=operations_pdf(database,7)
+  from flask import Response
+  return Response(pdf,mimetype="application/pdf",headers={"Content-Disposition":"attachment; filename=politicshub-operations-report.pdf","Cache-Control":"no-store"})
  finally:database.close()
 
 @app.post("/api/admin/training")
