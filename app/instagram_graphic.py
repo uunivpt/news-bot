@@ -112,12 +112,12 @@ def _fit_title(text: str, max_width: int, max_lines: int = 3):
     # Keep Reel headlines visibly large on a 1080x1920 canvas. The previous
     # 48px fallback made long headlines look tiny once Instagram displayed the
     # full Reel in the feed.
-    for size in range(124, 63, -2):
+    for size in range(132, 71, -2)
         font = _font(size, True)
         lines = _wrap(text, font, max_width)
         if len(lines) <= max_lines:
             return font, lines
-    font = _font(64, True)
+    font = _font(72, True)
     return font, _wrap(text, font, max_width)[:max_lines]
 
 
@@ -397,7 +397,7 @@ def generate_reel_cards(
     d.text((84, badge_y + 18), category_label, font=_font(25, True), fill="white")
 
     # Main headline.
-    title_font, _ = _fit_title(clean_title, 940, 3)
+    title_font, _ = _fit_title(clean_title, 940, 4)
     headline_y = badge_y + 92
     headline_end = _highlight_title(
         d,
@@ -423,12 +423,12 @@ def generate_reel_cards(
         ).strip(" -–—|/:")
         if summary_text:
             summary_y = headline_end + 18
-            summary_lines = _wrap(summary_text, summary_font, 930)[:4]
+            summary_lines = _wrap(summary_text, summary_font, 930)[:3]
             for line in summary_lines:
                 d.text((60, summary_y), line, font=summary_font, fill="#454b53")
                 summary_y += 50
             summary_end = summary_y
-            if len(_wrap(summary_text, summary_font, 930)) > 4:
+            if len(_wrap(summary_text, summary_font, 930)) > 3:
                 d.text((60, summary_y - 4), "...", font=_font(32, True), fill=MUTED)
 
     # Keep source/site above Instagram's bottom controls and away from long text.
