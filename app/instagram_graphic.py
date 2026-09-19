@@ -23,12 +23,14 @@ FONT_BOLD_CANDIDATES = (
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/data/data/com.termux/files/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/system/fonts/Roboto-Bold.ttf",
+    "/system/product/fonts/Roboto-Bold.ttf",
 )
 FONT_REG_CANDIDATES = (
     os.getenv("POLITICSHUB_FONT_REG", ""),
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "/data/data/com.termux/files/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "/system/fonts/Roboto-Regular.ttf",
+    "/system/product/fonts/Roboto-Regular.ttf",
 )
 
 EDITORIAL_PREFIX_RE = re.compile(
