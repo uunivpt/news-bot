@@ -98,15 +98,33 @@ def clean_instagram_text(text: str, source_name: str = "") -> str:
 def _font(size: int, bold: bool = False):
     candidates = FONT_BOLD_CANDIDATES if bold else FONT_REG_CANDIDATES
     for path in candidates:
-        if path and Path(path).exists():
+        if path:
             try:
                 return ImageFont.truetype(path, size)
-            except OSError:
+            except (OSError, TypeError):
                 pass
+
+    # Termux package layouts can differ, and some Android/Termux filesystem
+    # operations report "Function not implemented" for direct path checks.
+    # fontconfig can resolve the installed TTF without relying on that lookup.
+    try:
+        import subprocess
+        pattern = "DejaVu Sans:style=Bold" if bold else "DejaVu Sans:style=Book"
+        resolved = subprocess.check_output(
+            ["fc-match", "-f", "%{file}", pattern],
+            text=True,
+            stderr=subprocess.DEVNULL,
+            timeout=3,
+        ).strip()
+        if resolved:
+            return ImageFont.truetype(resolved, size)
+    except Exception:
+        pass
+
     # Do not silently use Pillow's tiny bitmap font: that was the reason
     # Termux-generated Reels had microscopic headlines and labels.
     raise RuntimeError(
-        "DejaVu font not found. On Termux run: pkg install ttf-dejavu"
+        "DejaVu font not found. On Termux run: pkg install ttf-dejavu fontconfig"
     )
 
 
