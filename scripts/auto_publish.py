@@ -57,14 +57,19 @@ def audio_path():
   try:
    download_to(str(source),url); subprocess.run(["ffmpeg","-y","-i",str(source),"-t","18","-vn","-ac","2","-ar","48000","-c:a","aac","-profile:a","aac_low","-b:a","128k","-movflags","+faststart",str(normalized)],check=True,capture_output=True,text=True); return str(normalized)
   except Exception as exc:print("Fixed audio preparation failed:",exc)
- # Never block an otherwise valid Reel because the optional music asset is unavailable.
- # Generate a short original pulse fallback locally; configured owner audio still takes precedence.
- fallback=OUT/"fallback_news_pulse.m4a"
+ # Built-in PoliticsHub News Pulse: keeps the selected beat available
+ # on the phone without requiring another URL or environment variable.
+ embedded=OUT/"politicshub_news_pulse_15s.mp3"
  try:
-  subprocess.run(["ffmpeg","-y","-f","lavfi","-i","sine=frequency=880:duration=18","-f","lavfi","-i","sine=frequency=1320:duration=18","-filter_complex","[0:a]volume=0.10[a0];[1:a]volume=0.05[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=0[a]","-map","[a]","-c:a","aac","-b:a","96k","-ar","48000","-ac","2",str(fallback)],check=True,capture_output=True,text=True)
-  print("Using generated News Pulse fallback audio.")
-  return str(fallback)
- except Exception as exc:print("Fallback audio generation failed:",exc); return None
+  if not embedded.exists():
+   import base64
+   from app.news_pulse_audio import AUDIO_B64
+   embedded.write_bytes(base64.b64decode(AUDIO_B64))
+  print("Using embedded PoliticsHub News Pulse audio.")
+  return str(embedded)
+ except Exception as exc:
+  print("Embedded News Pulse preparation failed:",exc)
+  return None
 
 def _process_content(row):
  try:
