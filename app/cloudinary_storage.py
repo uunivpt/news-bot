@@ -9,7 +9,7 @@ def _deterministic_url(cloud: str, public_id: str, suffix: str = ".mp4") -> str:
 
 def upload_video(path:str, public_id:str|None=None)->str|None:
     cloud=os.getenv("CLOUDINARY_CLOUD_NAME",""); preset=os.getenv("CLOUDINARY_UPLOAD_PRESET","")
-    if not cloud or not preset:return None
+    if not cloud or not preset:\n        raise RuntimeError(f"Cloudinary configuration missing: cloud_name={bool(cloud)} upload_preset={bool(preset)}")
     url=f"https://api.cloudinary.com/v1_1/{cloud}/video/upload"
     # A stable public_id makes retries idempotent. If the first upload succeeded
     # but the response was lost, reuse the existing public delivery URL instead
