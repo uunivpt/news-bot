@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS news_items (
  fact_check_status TEXT NOT NULL DEFAULT 'pending', fact_check_notes TEXT, approved_at TEXT, published_at_site TEXT,
  instagram_status TEXT NOT NULL DEFAULT 'pending', instagram_media_id TEXT, instagram_error TEXT,
  instagram_published_at TEXT, instagram_attempts INTEGER NOT NULL DEFAULT 0, instagram_last_attempt_at TEXT,
- instagram_next_retry_at TEXT, instagram_container_id TEXT, reel_cloudinary_public_id TEXT,
+ instagram_next_retry_at TEXT, instagram_container_id TEXT, reel_cloudinary_public_id TEXT, reel_cloudinary_url TEXT,
  instagram_selected INTEGER NOT NULL DEFAULT 0, UNIQUE(source_name, external_id)
 )
 """
@@ -57,7 +57,7 @@ MIGRATIONS = {
  "instagram_error":"ALTER TABLE news_items ADD COLUMN instagram_error TEXT", "instagram_published_at":"ALTER TABLE news_items ADD COLUMN instagram_published_at TEXT",
  "instagram_attempts":"ALTER TABLE news_items ADD COLUMN instagram_attempts INTEGER NOT NULL DEFAULT 0", "instagram_last_attempt_at":"ALTER TABLE news_items ADD COLUMN instagram_last_attempt_at TEXT",
  "instagram_next_retry_at":"ALTER TABLE news_items ADD COLUMN instagram_next_retry_at TEXT", "instagram_container_id":"ALTER TABLE news_items ADD COLUMN instagram_container_id TEXT",
- "reel_cloudinary_public_id":"ALTER TABLE news_items ADD COLUMN reel_cloudinary_public_id TEXT", "instagram_selected":"ALTER TABLE news_items ADD COLUMN instagram_selected INTEGER NOT NULL DEFAULT 0",
+ "reel_cloudinary_public_id":"ALTER TABLE news_items ADD COLUMN reel_cloudinary_public_id TEXT", "reel_cloudinary_url":"ALTER TABLE news_items ADD COLUMN reel_cloudinary_url TEXT", "instagram_selected":"ALTER TABLE news_items ADD COLUMN instagram_selected INTEGER NOT NULL DEFAULT 0",
  "instagram_scheduled_at":"ALTER TABLE news_items ADD COLUMN instagram_scheduled_at TEXT",
  "instagram_queue_order":"ALTER TABLE news_items ADD COLUMN instagram_queue_order INTEGER NOT NULL DEFAULT 0",
 }
