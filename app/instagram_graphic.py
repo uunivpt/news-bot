@@ -387,14 +387,11 @@ def generate_reel_cards(
     for i, label in enumerate(("POLITICS", "ECONOMY", "GLOBAL", "UPDATES")):
         d.text((930, 150 + i * 27), label, font=topic_font, fill="#cfd2d6")
 
-    # --- Fixed hero image panel ---
-    # A fixed panel prevents the source image aspect ratio from changing the
-    # typography position. Images are cropped/fitted into the same editorial
-    # frame every time, matching the supplied reference.
-    frame = (50, 315, 1030, 800)
-    d.rounded_rectangle(frame, radius=28, fill="#172038", outline="#ffffff", width=6)
-
+    # --- Optional hero image panel ---
+    # No image means no image section, placeholder, or reserved empty frame.
     if image:
+        frame = (50, 315, 1030, 800)
+        d.rounded_rectangle(frame, radius=28, fill="#172038", outline="#ffffff", width=6)
         inner = (62, 327, 1018, 788)
         fitted = ImageOps.fit(
             image,
@@ -410,22 +407,11 @@ def generate_reel_cards(
             fill=255,
         )
         canvas.paste(fitted, (inner[0], inner[1]), mask)
-    else:
-        # Keep the supplied dark panel even when no image is available.
-        placeholder = _font(22, True)
-        label = "ADD IMAGE / VIDEO HERE"
-        bbox = d.textbbox((0, 0), label, font=placeholder)
-        d.text(
-            ((WIDTH - (bbox[2] - bbox[0])) // 2, 560),
-            label,
-            font=placeholder,
-            fill="#e9edf2",
-        )
-
-    d.rounded_rectangle(frame, radius=28, outline="#ffffff", width=6)
+        d.rounded_rectangle(frame, radius=28, outline="#ffffff", width=6)
 
     # --- Category ---
-    badge_y = 845
+    # Without an image, move the news block upward into the visual center.
+    badge_y = 845 if image else 735
     category_label = (category or "news").upper()[:15]
     badge_font = _font(25, True)
     badge_w = max(190, d.textbbox((0, 0), category_label, font=badge_font)[2] + 56)
@@ -440,7 +426,7 @@ def generate_reel_cards(
     # Use the largest size that fits into four lines. The regular Android
     # Roboto fallback is given a small stroke so it remains visually bold.
     title_font, title_lines = _fit_title(clean_title, 930, 4)
-    headline_y = 940
+    headline_y = 940 if image else 830
     words = clean_title.split()
     highlight_word = None
     priority = (
