@@ -136,8 +136,15 @@ def _process_instagram_untracked(db,row,music):
   if not row.get("bot_article") or not row.get("bot_summary"):
    if not process_content(db,row):
     raise RuntimeError("Story could not be processed by the newsroom bot")
-  cards=generate_reel_cards(title=row["title"],summary=row.get("bot_summary") or row.get("summary") or "",category=row.get("category") or "general",image_url=row.get("image_url"),source_name=row.get("source_name") or "",output_dir=OUT/"reel_cards"/str(item_id)); video=OUT/f"{item_id}.mp4"; build_reel([str(p) for p in cards],str(video),audio_path=music,duration_per_image=18); url=upload_video(str(video)) or public_video_url(str(video))
-  if not url:raise RuntimeError("Public Reel video URL unavailable")
+  url=str(row.get("reel_cloudinary_url") or "").strip()
+  if url:
+   print(f"Reusing cached Reel URL for item {item_id}: {url}")
+  else:
+   cards=generate_reel_cards(title=row["title"],summary=row.get("bot_summary") or row.get("summary") or "",category=row.get("category") or "general",image_url=row.get("image_url"),source_name=row.get("source_name") or "",output_dir=OUT/"reel_cards"/str(item_id)); video=OUT/f"{item_id}.mp4"; build_reel([str(p) for p in cards],str(video),audio_path=music,duration_per_image=18)
+   public_id=f"politicshub/reels/item-{item_id}"
+   url=upload_video(str(video),public_id=public_id) or public_video_url(str(video))
+   if not url:raise RuntimeError("Public Reel video URL unavailable")
+   db.update(item_id,reel_cloudinary_url=url,reel_cloudinary_public_id=public_id)
   result=publish_reel(url,caption(row)); media_id=result.get("id") if isinstance(result,dict) else None; container_id=result.get("container_id") if isinstance(result,dict) else None
   db.update(item_id,instagram_status="published",instagram_media_id=media_id,instagram_container_id=container_id,instagram_selected=0,instagram_published_at=datetime.now(timezone.utc).isoformat(),instagram_error=None,instagram_next_retry_at=None); return True
  except InstagramRateLimitError as exc:
