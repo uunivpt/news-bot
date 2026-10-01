@@ -55,6 +55,8 @@ DARK = "#15191f"
 MUTED = "#555b63"
 LIGHT = "#f5f6f8"
 MAP_DOT = "#dfe2e6"
+PROFILE_FONT_SCALE = (1.00,.92,1.06,1.00,.94,1.05,1.00,.96,1.04,1.00,.93,1.05,1.00,1.05,.92,1.00,1.06,.94,.98,1.04,.94,1.00,1.06,.93)
+PROFILE_CROP = ((.5,.5),(.5,.35),(.65,.5),(.5,.5),(.35,.5),(.7,.5),(.5,.5),(.5,.35),(.5,.7),(.5,.5),(.35,.5),(.65,.5),(.5,.5),(.5,.35),(.7,.5),(.5,.5),(.5,.35),(.5,.7),(.5,.5),(.65,.5),(.35,.5),(.5,.5),(.5,.7),(.5,.35))
 
 
 def _strip_unsupported_symbols(text: str) -> str:
@@ -162,16 +164,17 @@ def _wrap(text: str, font, max_width: int) -> list[str]:
     return lines
 
 
-def _fit_title(text: str, max_width: int, max_lines: int = 3):
+def _fit_title(text: str, max_width: int, max_lines: int = 3, scale: float = 1.0):
     # Keep Reel headlines visibly large on a 1080x1920 canvas. The previous
     # 48px fallback made long headlines look tiny once Instagram displayed the
     # full Reel in the feed.
-    for size in range(132, 71, -2):
+    high=max(72,int(132*scale)); low=max(60,int(72*scale))
+    for size in range(high, low-1, -2):
         font = _font(size, True)
         lines = _wrap(text, font, max_width)
         if len(lines) <= max_lines:
             return font, lines
-    font = _font(72, True)
+    font = _font(max(60,int(72*scale)), True)
     return font, _wrap(text, font, max_width)[:max_lines]
 
 
@@ -381,10 +384,10 @@ def _draw_hero(d, canvas, image, box, radius=28):
     return True
 
 
-def _draw_headline_block(d, title, summary, source, category, top, variant):
+def _draw_headline_block(d, title, summary, source, category, top, variant, font_scale=1.0):
     title = clean_instagram_text(title, source) or "Latest news update"
     summary = clean_instagram_text(summary, source)
-    title_font, lines = _fit_title(title, 920, 4)
+    title_font, lines = _fit_title(title, 920, 4, font_scale)
     y = top
     accent_index = (variant + 1) % max(1, len(title.split()))
     words = title.split()
@@ -434,6 +437,8 @@ def generate_reel_cards(
     clean_summary = clean_instagram_text(summary, source_name)
     image = _download_image(image_url)
     profile = _template_variant(item_key, category, template_variant)
+    if image:
+        image = ImageOps.fit(image, image.size, method=Image.Resampling.LANCZOS, centering=PROFILE_CROP[profile])
     variant = profile % 8
 
     canvas = Image.new("RGBA", (REEL_WIDTH, REEL_HEIGHT), "white")
@@ -448,7 +453,7 @@ def generate_reel_cards(
             top = 965
         else:
             top = 560
-        _draw_headline_block(d, clean_title, clean_summary, source_name, category, top, variant)
+        _draw_headline_block(d, clean_title, clean_summary, source_name, category, top, variant, PROFILE_FONT_SCALE[profile])
 
     # 1: split-panel
     elif variant == 1:
@@ -531,7 +536,7 @@ def generate_reel_cards(
             text_x, top = 565, 390
         else:
             text_x, top = 60, 560
-        tf, lines = _fit_title(clean_title, 900 if not image else 450, 4)
+        tf, lines = _fit_title(clean_title, 900 if not image else 450, 4, PROFILE_FONT_SCALE[profile])
         y = top
         for line in lines[:4]:
             d.text((text_x, y), line, font=tf, fill=DARK)
