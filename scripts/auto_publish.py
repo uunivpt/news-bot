@@ -228,7 +228,13 @@ def _instagram_candidates(db,mode,limit,now):
  rows=[dict(r) for r in db.latest(max(limit*20,100),status="all",instagram_status="pending")]
  rows=[r for r in rows if r.get("status") in {"pending","published"} and _schedule_due(r,now)]
  if mode=="manual":rows=[r for r in rows if int(r.get("instagram_selected") or 0)==1]
- rows.sort(key=lambda r:(0 if r.get("instagram_scheduled_at") else 1, int(r.get("instagram_queue_order") or 0) if int(r.get("instagram_queue_order") or 0)>0 else 10**9, -int(r.get("id") or 0)))
+ for r in rows:
+  try:
+   s=db.conn.execute("SELECT score,breaking FROM ph_news_scores WHERE item_id="+("%s" if db._postgres else "?"),(int(r["id"]),)).fetchone()
+   r["_upgrade_score"]=float(s["score"] if s else 0); r["_upgrade_breaking"]=bool(s["breaking"] if s else 0)
+  except Exception:
+   r["_upgrade_score"]=0; r["_upgrade_breaking"]=False
+rows.sort(key=lambda r:(0 if r.get("_upgrade_breaking") else 1,0 if r.get("instagram_scheduled_at") else 1,-float(r.get("_upgrade_score") or 0),int(r.get("instagram_queue_order") or 0) if int(r.get("instagram_queue_order") or 0)>0 else 10**9,-int(r.get("id") or 0)))
  return rows[:limit]
 
 def main():
