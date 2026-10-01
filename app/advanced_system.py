@@ -209,15 +209,48 @@ def record_preview(db,item_id,video_path,preview_path,qa,layout_id):
 
 def historical_analytics(db,days=30):
     ensure_schema(db)
-    p=ph(db); since=(datetime.now(timezone.utc)-timedelta(days=days)).isoformat()
-    out={}
-    for table,col in (("ph_news_scores","updated_at"),("ph_source_reliability","updated_at"),("ph_alerts","created_at"),("ph_reel_previews","created_at")):
-        try: out[table]=int(q1(db,f"SELECT COUNT(*) AS c FROM {table} WHERE {col}>={p}",(since,))[0])
-        except Exception: out[table]=0
-    for unit,fmt in (("hour","%Y-%m-%dT%H"),("day","%Y-%m-%d"),("week","%Y-W%W"),("month","%Y-%m")):
-        out[unit]={}
+    days=max(1,min(int(days),365))
+    since=datetime.now(timezone.utc)-timedelta(days=days)
+    p=ph(db)
+    out={"days":days,"counts":{},"hour":{},"day":{},"week":{},"month":{}}
+    sources=(
+        ("scores","ph_news_scores","updated_at"),
+        ("alerts","ph_alerts","created_at"),
+        ("previews","ph_reel_previews","created_at"),
+        ("failures","ph_bot_failures","created_at"),
+        ("events","ph_events","updated_at"),
+    )
+    for label,table,col in sources:
+        try:
+            row=q1(db,f"SELECT COUNT(*) AS c FROM {table} WHERE {col}>={p}",(since.isoformat(),))
+            out["counts"][label]=int(val(row,"c",0) or 0)
+        except Exception:
+            out["counts"][label]=0
+    for table,col in (
+        ("ph_news_scores","updated_at"),
+        ("ph_alerts","created_at"),
+        ("ph_reel_previews","created_at"),
+        ("ph_bot_failures","created_at"),
+    ):
+        try:
+            rows=db.conn.execute(f"SELECT {col} AS ts FROM {table} WHERE {col}>={p}",(since.isoformat(),)).fetchall()
+            for row in rows:
+                raw=val(row,"ts","")
+                try:
+                    dt=datetime.fromisoformat(str(raw).replace("Z","+00:00"))
+                    dt=dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+                except Exception:
+                    continue
+                for unit,bucket in {
+                    "hour":dt.strftime("%Y-%m-%dT%H"),
+                    "day":dt.strftime("%Y-%m-%d"),
+                    "week":dt.strftime("%Y-W%W"),
+                    "month":dt.strftime("%Y-%m"),
+                }.items():
+                    out[unit][bucket]=out[unit].get(bucket,0)+1
+        except Exception:
+            continue
     return out
-
 def admin_snapshot(db):
     ensure_schema(db)
     p=ph(db)
@@ -225,8 +258,9 @@ def admin_snapshot(db):
     failures=[dict(r) for r in db.conn.execute("SELECT * FROM ph_bot_failures ORDER BY id DESC LIMIT 30").fetchall()]
     scores=[dict(r) for r in db.conn.execute("SELECT * FROM ph_news_scores ORDER BY updated_at DESC LIMIT 30").fetchall()]
     events=[dict(r) for r in db.conn.execute("SELECT * FROM ph_events ORDER BY updated_at DESC LIMIT 30").fetchall()]
-    return {"updated_at":now(),"alerts":alerts,"failures":failures,"scores":scores,"events":events,"sources":source_reliability(db),"resources":capture_resources(db)}
-
+    previews=[dict(r) for r in db.conn.execute("SELECT * FROM ph_reel_previews ORDER BY created_at DESC LIMIT 20").fetchall()]
+    regression=[dict(r) for r in db.conn.execute("SELECT * FROM ph_regression_runs ORDER BY id DESC LIMIT 10").fetchall()]
+    return {"updated_at":now(),"alerts":alerts,"failures":failures,"scores":scores,"events":events,"previews":previews,"regression":regression,"sources":source_reliability(db),"resources":capture_resources(db),"history":historical_analytics(db,30)}
 def regression_record(db,commit_ref,status,results):
     ensure_schema(db); p=ph(db)
     db.conn.execute(f"INSERT INTO ph_regression_runs(commit_ref,status,results,created_at) VALUES ({p},{p},{p},{p})",(commit_ref,status,json.dumps(results,ensure_ascii=False),now()))
