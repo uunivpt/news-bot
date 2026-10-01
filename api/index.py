@@ -16,6 +16,7 @@ from app.worker import dispatch_worker
 from app.phase_system import analytics as phase_analytics, cluster_stories, cluster_summary, train as train_agent
 from app.reporting import operations_pdf
 from app.advanced_ops import ensure_advanced_schema, live_dashboard, detailed_report, record_verification, classify_verification, audit_stage, duplicate_similarity
+from app.advanced_system import admin_snapshot, historical_analytics, event_timeline, ensure_schema as ensure_upgrade_schema
 
 app=Flask(__name__, static_folder="../public", static_url_path="")
 _secret=os.getenv("FLASK_SECRET_KEY") or os.getenv("ADMIN_TOKEN") or os.getenv("ADMIN_SETUP_KEY")
@@ -262,6 +263,34 @@ def admin_live():
  try:
   ensure_advanced_schema(database)
   return jsonify(live_dashboard(database))
+ finally: database.close()
+
+@app.get("/api/admin/upgrade")
+def admin_upgrade():
+ err=require_admin()
+ if err:return err
+ database=db()
+ try:
+  ensure_upgrade_schema(database)
+  snapshot=admin_snapshot(database)
+  event_id=str(request.args.get("event_id","")).strip()
+  if event_id:
+   snapshot["event_timeline"]=event_timeline(database,event_id)
+  else:
+   snapshot["event_timeline"]=[]
+  return jsonify(snapshot)
+ finally: database.close()
+
+@app.get("/api/admin/history")
+def admin_history():
+ err=require_admin()
+ if err:return err
+ try: days=max(1,min(int(request.args.get("days","30")),365))
+ except ValueError: days=30
+ database=db()
+ try:
+  ensure_upgrade_schema(database)
+  return jsonify(historical_analytics(database,days))
  finally: database.close()
 
 @app.get("/api/admin/report")
