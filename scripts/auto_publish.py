@@ -162,7 +162,7 @@ def _process_instagram_untracked(db,row,music):
     if not qa_card.get("passed"): raise RuntimeError(f"Visual QA failed: {qa_card.get('errors')}")
    video=OUT/f"{item_id}.mp4"; build_reel([str(p) for p in cards],str(video),audio_path=music,duration_per_image=18)
    state_transition(db,item_id,"REEL_CREATED")
-   audit_stage(db,item_id,"REEL_QA","completed",{"cards":len(cards),"layout":layout["id"]})
+   audit_stage(db,item_id,"REEL_QA","completed",{"cards":len(cards),"layout":layout["id"]}); record_preview(db,item_id,str(video),str(cards[0]) if cards else "",qa_card,layout["id"])
    public_id=f"politicshub/reels/item-{item_id}"
    url=upload_video(str(video),public_id=public_id) or public_video_url(str(video))
    if not url:raise RuntimeError("Public Reel video URL unavailable")
