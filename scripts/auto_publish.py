@@ -178,6 +178,7 @@ def _process_instagram_untracked(db,row,music):
   print(f"Instagram app rate limit reached; pausing this worker run for item {item_id}: {exc}")
   return "rate_limited"
  except Exception as exc:
+  self_heal(db,"instagram","reel_publish",exc,item_id,attempts)
   db.update(item_id,instagram_status="failed",instagram_error=str(exc)[:3000],instagram_next_retry_at=_next_retry(attempts)); print(f"Instagram failed item {item_id}: {exc}"); return False
 
 def process_instagram(db,row,music):
