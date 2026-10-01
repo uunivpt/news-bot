@@ -19,6 +19,7 @@ from app.meta_instagram import publish_reel, InstagramRateLimitError
 from app.newsroom import process_news
 from app.publish_policy import risk_flags
 from app.phase_system import ensure_schema, run as agent_run, start as agent_start, finish as agent_finish, quality_gate, manager_route
+from app.advanced_ops import reserve_layout, layout_by_id, audit_stage, state_transition, visual_qa_card
 OUT=Path(os.getenv("MEDIA_OUTPUT_DIR","data/media")); OUT.mkdir(parents=True,exist_ok=True)
 MAX_INSTAGRAM_ATTEMPTS=999999; STALE_PROCESSING_MINUTES=20
 TRAILING_FRAGMENT_RE=re.compile(r"\b(?:a|an|and|as|at|by|for|from|in|including|into|of|on|or|the|their|this|to|under|via|was|were|with|without)\.?$",re.I)
@@ -77,11 +78,14 @@ def _process_content(row):
   result=process_news(row.get("title") or "",material,row.get("category") or "general")
   if not result:return False
   fields={"title":result["headline"],"summary":result["summary"],"bot_summary":result["summary"],"bot_article":result["article"]}
+  state_transition(db,int(row["id"]),"PROCESSING")
   qa=quality_gate(fields["title"],fields["summary"],fields["bot_article"])
+  state_transition(db,int(row["id"]),"QUALITY_CHECK",";".join(qa["errors"]) if not qa["passed"] else None)
   if not qa["passed"]:
    print(f"Quality gate blocked item {row.get('id')}: {qa['errors']}")
    return False
   if source.get("image_url") and not row.get("image_url"):fields["image_url"]=source["image_url"]
+  audit_stage(db,int(row["id"]),"WRITER","completed",{"quality_score":qa["score"],"warnings":qa["warnings"]})
   row.update(fields); return fields
  except Exception as exc:print(f"Bot processing failed for item {row.get('id')}: {exc}"); return False
 
