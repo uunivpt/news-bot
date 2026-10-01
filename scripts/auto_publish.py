@@ -19,7 +19,7 @@ from app.meta_instagram import publish_reel, InstagramRateLimitError
 from app.newsroom import process_news
 from app.publish_policy import risk_flags
 from app.phase_system import ensure_schema, run as agent_run, start as agent_start, finish as agent_finish, quality_gate, manager_route
-from app.advanced_ops import reserve_layout, layout_by_id, audit_stage, state_transition, visual_qa_card, cluster_stories, record_verification, find_duplicate_story
+from app.advanced_ops import LAYOUTS, reserve_layout, layout_by_id, audit_stage, state_transition, visual_qa_card, cluster_stories, record_verification, find_duplicate_story
 OUT=Path(os.getenv("MEDIA_OUTPUT_DIR","data/media")); OUT.mkdir(parents=True,exist_ok=True)
 MAX_INSTAGRAM_ATTEMPTS=999999; STALE_PROCESSING_MINUTES=20
 TRAILING_FRAGMENT_RE=re.compile(r"\b(?:a|an|and|as|at|by|for|from|in|including|into|of|on|or|the|their|this|to|under|via|was|were|with|without)\.?$",re.I)
@@ -156,7 +156,7 @@ def _process_instagram_untracked(db,row,music):
    state_transition(db,item_id,"INSTAGRAM_QUEUE")
    audit_stage(db,item_id,"TEMPLATE_SELECTED","completed",layout)
    profile=layout_by_id(layout["id"])
-   cards=generate_reel_cards(title=row["title"],summary=row.get("bot_summary") or row.get("summary") or "",category=row.get("category") or "general",image_url=row.get("image_url"),source_name=row.get("source_name") or "",output_dir=OUT/"reel_cards"/str(item_id),item_key=item_id,template_variant=profile["base"])
+   cards=generate_reel_cards(title=row["title"],summary=row.get("bot_summary") or row.get("summary") or "",category=row.get("category") or "general",image_url=row.get("image_url"),source_name=row.get("source_name") or "",output_dir=OUT/"reel_cards"/str(item_id),item_key=item_id,template_variant=LAYOUTS.index(layout))
    for card in cards:
     qa_card=visual_qa_card(card)
     if not qa_card.get("passed"): raise RuntimeError(f"Visual QA failed: {qa_card.get('errors')}")
