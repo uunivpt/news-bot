@@ -45,3 +45,13 @@ def test_source_reliability_metrics():
     r=source_reliability(db,"Source A")
     assert r["success_rate"] == 50.0
     assert r["broken_links"] == 1
+
+
+def test_historical_analytics_has_real_buckets():
+    from app.advanced_system import historical_analytics, record_preview, alert
+    db=DB(); ensure_schema(db)
+    alert(db,"WARNING","test","step",1,"example")
+    result=historical_analytics(db,30)
+    assert result["counts"]["alerts"] == 1
+    assert isinstance(result["day"], dict)
+    assert sum(result["day"].values()) >= 1
