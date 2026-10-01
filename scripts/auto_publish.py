@@ -44,9 +44,9 @@ def _dedupe_caption_text(title,text):
 REEL_HASHTAGS="#reel #update #news #politics #global"
 
 def caption(row):
- title=clean_instagram_text(row.get("title") or "",""); text=clean_instagram_text(row.get("bot_summary") or row.get("summary") or "",""); text=_dedupe_caption_text(title,text)
- base=f"{title}\n\n{text}\n\nSource: {row.get('source_name') or 'PoliticsHub'}\npoliticshub.in" if text else f"{title}\n\nSource: {row.get('source_name') or 'PoliticsHub'}\npoliticshub.in"
- return f"{base}\n\n{REEL_HASHTAGS}"
+ title=clean_instagram_text(row.get("title") or "",""); text=clean_instagram_text(row.get("bot_summary") or row.get("summary") or "",row.get("source_name") or ""); text=_dedupe_caption_text(title,text)
+ base=f"{title}\\n\\n{text}" if text else title
+ return f"{base}\\n\\n{REEL_HASHTAGS}"
 
 def audio_path():
  path=os.getenv("FIXED_AUDIO_PATH","").strip()
@@ -144,7 +144,7 @@ def _process_instagram_untracked(db,row,music):
   if url:
    print(f"Reusing cached Reel URL for item {item_id}: {url}")
   else:
-   cards=generate_reel_cards(title=row["title"],summary=row.get("bot_summary") or row.get("summary") or "",category=row.get("category") or "general",image_url=row.get("image_url"),source_name=row.get("source_name") or "",output_dir=OUT/"reel_cards"/str(item_id)); video=OUT/f"{item_id}.mp4"; build_reel([str(p) for p in cards],str(video),audio_path=music,duration_per_image=18)
+   cards=generate_reel_cards(title=row["title"],summary=row.get("bot_summary") or row.get("summary") or "",category=row.get("category") or "general",image_url=row.get("image_url"),source_name=row.get("source_name") or "",output_dir=OUT/"reel_cards"/str(item_id),item_key=item_id); video=OUT/f"{item_id}.mp4"; build_reel([str(p) for p in cards],str(video),audio_path=music,duration_per_image=18)
    public_id=f"politicshub/reels/item-{item_id}"
    url=upload_video(str(video),public_id=public_id) or public_video_url(str(video))
    if not url:raise RuntimeError("Public Reel video URL unavailable")
