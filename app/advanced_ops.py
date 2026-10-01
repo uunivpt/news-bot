@@ -229,9 +229,10 @@ def snapshot_performance(db, days=1):
 
 def live_dashboard(db):
     ensure_advanced_schema(db)
-    from app.phase_system import analytics, phase_analytics
-    a=analytics(db,1)
-    phases=phase_analytics(db,1)["phases"]
+    from app.phase_system import phase_analytics
+    phase_data=phase_analytics(db,1)
+    a=phase_data["agents"]
+    phases=phase_data["phases"]
     p=_ph(db)
     counts={}
     for state in ("COLLECTED","RESEARCHING","VERIFICATION","PROCESSING","QUALITY_CHECK","PUBLISHED","INSTAGRAM_QUEUE","REEL_CREATED","INSTAGRAM_PUBLISHED"):
