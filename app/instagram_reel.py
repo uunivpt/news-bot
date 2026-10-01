@@ -94,7 +94,7 @@ def build_reel(image_paths: list[str], output_path: str, audio_path: str | None 
         args += (["-map", "1:a:0", *_audio_codec_args()] if audio_path else ["-an"])
         args += ["-t", str(REEL_DURATION), "-movflags", "+faststart", "-video_track_timescale", "90000", str(output)]
         _run_ffmpeg(args)
-        return str(output)
+        return _validate_reel_output(output)
 
     args = ["ffmpeg", "-y"]
     frames_per_scene = int(round(duration_per_image * DEFAULT_FPS))
@@ -117,4 +117,4 @@ def build_reel(image_paths: list[str], output_path: str, audio_path: str | None 
         args += ["-an"]
     args += ["-t", str(REEL_DURATION), "-movflags", "+faststart", "-video_track_timescale", "90000", str(output)]
     _run_ffmpeg(args)
-    return str(output)
+    return _validate_reel_output(output)
