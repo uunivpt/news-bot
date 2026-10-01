@@ -233,7 +233,10 @@ def main():
  for row in pending:
   # Always regenerate pending content from the freshest source. If the newsroom
   # processor rejects a very short alert, fall back to cleaned source wording.
-  with agent_run(db, "writer", "prepare_story", int(row["id"])):
+  route=manager_route(row.get("title") or "",row.get("category") or "general",bool(row.get("image_url")))
+  with agent_run(db, "manager", "route_story", int(row["id"]), {"route":route}):
+   pass
+  with agent_run(db, "writer", "prepare_story", int(row["id"]), {"route":route}):
    ready=prepare_content(db,row)
   if not ready:held+=1; print(f"Website publish held for item {row['id']}: no usable source text"); continue
   with agent_run(db, "publisher", "publish_website", int(row["id"])):
