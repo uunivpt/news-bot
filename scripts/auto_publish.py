@@ -152,11 +152,11 @@ def _process_instagram_untracked(db,row,music):
   if url:
    print(f"Reusing cached Reel URL for item {item_id}: {url}")
   else:
-   layout=reserve_layout(db,item_id,row.get("category") or "general")
+   layout=select_layout(row.get("category") or "general",row.get("title") or "",item_id,breaking=bool((score_story(db,row,1,"UNVERIFIED",0) or {}).get("breaking")),has_image=bool(row.get("image_url")))
    state_transition(db,item_id,"INSTAGRAM_QUEUE")
    audit_stage(db,item_id,"TEMPLATE_SELECTED","completed",layout)
-   profile=layout_by_id(layout["id"])
-   cards=generate_reel_cards(title=row["title"],summary=row.get("bot_summary") or row.get("summary") or "",category=row.get("category") or "general",image_url=row.get("image_url"),source_name=row.get("source_name") or "",output_dir=OUT/"reel_cards"/str(item_id),item_key=item_id,template_variant=LAYOUTS.index(layout))
+   profile=layout
+   cards=generate_reel_cards(title=row["title"],summary=row.get("bot_summary") or row.get("summary") or "",category=row.get("category") or "general",image_url=row.get("image_url"),source_name=row.get("source_name") or "",output_dir=OUT/"reel_cards"/str(item_id),item_key=item_id,template_variant=int(layout["variant"]))
    for card in cards:
     qa_card=visual_qa_card(card)
     if not qa_card.get("passed"): raise RuntimeError(f"Visual QA failed: {qa_card.get('errors')}")
