@@ -152,13 +152,26 @@ def _process_instagram_untracked(db,row,music):
   if url:
    print(f"Reusing cached Reel URL for item {item_id}: {url}")
   else:
-   cards=generate_reel_cards(title=row["title"],summary=row.get("bot_summary") or row.get("summary") or "",category=row.get("category") or "general",image_url=row.get("image_url"),source_name=row.get("source_name") or "",output_dir=OUT/"reel_cards"/str(item_id),item_key=item_id); video=OUT/f"{item_id}.mp4"; build_reel([str(p) for p in cards],str(video),audio_path=music,duration_per_image=18)
+   layout=reserve_layout(db,item_id,row.get("category") or "general")
+   state_transition(db,item_id,"INSTAGRAM_QUEUE")
+   audit_stage(db,item_id,"TEMPLATE_SELECTED","completed",layout)
+   profile=layout_by_id(layout["id"])
+   cards=generate_reel_cards(title=row["title"],summary=row.get("bot_summary") or row.get("summary") or "",category=row.get("category") or "general",image_url=row.get("image_url"),source_name=row.get("source_name") or "",output_dir=OUT/"reel_cards"/str(item_id),item_key=item_id,template_variant=profile["base"])
+   for card in cards:
+    qa_card=visual_qa_card(card)
+    if not qa_card.get("passed"): raise RuntimeError(f"Visual QA failed: {qa_card.get('errors')}")
+   video=OUT/f"{item_id}.mp4"; build_reel([str(p) for p in cards],str(video),audio_path=music,duration_per_image=18)
+   state_transition(db,item_id,"REEL_CREATED")
+   audit_stage(db,item_id,"REEL_QA","completed",{"cards":len(cards),"layout":layout["id"]})
    public_id=f"politicshub/reels/item-{item_id}"
    url=upload_video(str(video),public_id=public_id) or public_video_url(str(video))
    if not url:raise RuntimeError("Public Reel video URL unavailable")
    db.update(item_id,reel_cloudinary_url=url,reel_cloudinary_public_id=public_id)
   result=publish_reel(url,caption(row)); media_id=result.get("id") if isinstance(result,dict) else None; container_id=result.get("container_id") if isinstance(result,dict) else None
-  db.update(item_id,instagram_status="published",instagram_media_id=media_id,instagram_container_id=container_id,instagram_selected=0,instagram_published_at=datetime.now(timezone.utc).isoformat(),instagram_error=None,instagram_next_retry_at=None); return True
+  db.update(item_id,instagram_status="published",instagram_media_id=media_id,instagram_container_id=container_id,instagram_selected=0,instagram_published_at=datetime.now(timezone.utc).isoformat(),instagram_error=None,instagram_next_retry_at=None)
+  state_transition(db,item_id,"INSTAGRAM_PUBLISHED")
+  audit_stage(db,item_id,"INSTAGRAM","completed",{"media_id":media_id})
+  return True
  except InstagramRateLimitError as exc:
   retry_at=(datetime.now(timezone.utc)+timedelta(minutes=30)).isoformat()
   db.update(item_id,instagram_status="pending",instagram_error=str(exc)[:3000],instagram_next_retry_at=retry_at)
