@@ -494,12 +494,20 @@ def generate_reel_cards(
         # Same geometry helper, but use a temporary light card for readability.
         d.rounded_rectangle((45, top-55, 1035, 1580), radius=30, fill="#20252d")
         _draw_headline_block(d, clean_title, clean_summary, source_name, category, top, variant)
-        # Repaint helper's dark text in white by drawing a concise white headline.
+        # Repaint all editorial text in white on the dark card.
         tf, lines = _fit_title(clean_title, 900, 4)
         y = top
         for line in lines[:4]:
             d.text((62, y), line, font=tf, fill="white")
             y += tf.size + 8
+        if clean_summary:
+            sf=_font(27)
+            sy=y+16
+            for line in _wrap(clean_summary,sf,880)[:3]:
+                d.text((62,sy),line,font=sf,fill="#e5e7eb")
+                sy+=39
+        if source_name:
+            d.text((62,1625),f"Source: {clean_instagram_text(source_name)}",font=_font(19,True),fill="white")
 
     # 5: quote-card / no-photo friendly
     elif variant == 5:
