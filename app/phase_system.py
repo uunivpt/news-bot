@@ -144,7 +144,7 @@ def quality_gate(title="", summary="", article="", allow_short=False):
     if not article: errors.append("missing_article")
     elif not allow_short and len(article)<max(60,len(summary)): errors.append("article_too_short")
     for field_name,value in (("summary",summary),("article",article)):
-        if re.search(r"\\b(?:source\\s*:|reported\\s+by|via\\s+)\\s*[^.\\n]{2,}",value,re.I):
+        if re.search(r"\b(?:source\s*:|reported\s+by|via\s+)\s*[^.\n]{2,}",value,re.I):
             warnings.append(f"{field_name}_contains_source_fragment")
         if value.count("(")!=value.count(")"):
             errors.append(f"{field_name}_unbalanced_parentheses")
