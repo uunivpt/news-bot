@@ -46,6 +46,35 @@ def _motion_filter(index: int, direction: str, frames: int) -> str:
     )
 
 
+
+def _validate_reel_output(output: Path) -> str:
+    """Hard fail before upload if the rendered MP4 is malformed."""
+    if not output.exists() or output.stat().st_size < 20_000:
+        raise RuntimeError("Reel QA failed: output MP4 is missing or unexpectedly small")
+    probe = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries",
+         "stream=codec_type,width,height,pix_fmt:format=duration",
+         "-of", "json", str(output)],
+        check=True, capture_output=True, text=True,
+    )
+    import json
+    data = json.loads(probe.stdout or "{}")
+    streams = data.get("streams") or []
+    video = next((s for s in streams if s.get("codec_type") == "video"), None)
+    if not video:
+        raise RuntimeError("Reel QA failed: no video stream")
+    if int(video.get("width") or 0) != REEL_WIDTH or int(video.get("height") or 0) != REEL_HEIGHT:
+        raise RuntimeError(f"Reel QA failed: expected {REEL_WIDTH}x{REEL_HEIGHT}")
+    if video.get("pix_fmt") not in {"yuv420p", "yuvj420p"}:
+        raise RuntimeError("Reel QA failed: unsupported pixel format")
+    try:
+        duration = float((data.get("format") or {}).get("duration") or 0)
+    except (TypeError, ValueError):
+        duration = 0
+    if duration < REEL_DURATION - 0.25 or duration > REEL_DURATION + 0.75:
+        raise RuntimeError(f"Reel QA failed: unexpected duration {duration:.2f}s")
+    return _validate_reel_output(output)
+
 def build_reel(image_paths: list[str], output_path: str, audio_path: str | None = None, duration_per_image: float = SCENE_SECONDS) -> str:
     if not image_paths:
         raise ValueError("At least one image is required")
