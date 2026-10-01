@@ -55,8 +55,10 @@ DARK = "#15191f"
 MUTED = "#555b63"
 LIGHT = "#f5f6f8"
 MAP_DOT = "#dfe2e6"
-PROFILE_FONT_SCALE = (1.00,.92,1.06,1.00,.94,1.05,1.00,.96,1.04,1.00,.93,1.05,1.00,1.05,.92,1.00,1.06,.94,.98,1.04,.94,1.00,1.06,.93)
-PROFILE_CROP = ((.5,.5),(.5,.35),(.65,.5),(.5,.5),(.35,.5),(.7,.5),(.5,.5),(.5,.35),(.5,.7),(.5,.5),(.35,.5),(.65,.5),(.5,.5),(.5,.35),(.7,.5),(.5,.5),(.5,.35),(.5,.7),(.5,.5),(.65,.5),(.35,.5),(.5,.5),(.5,.7),(.5,.35))
+# 64 deterministic composition profiles = 8 base geometries x 8 visual treatments.
+PROFILE_FONT_SCALE = tuple(round(0.90 + ((i * 7) % 17) / 100, 2) for i in range(64))
+_PROFILE_CROPS = ((.5,.5),(.5,.35),(.65,.5),(.35,.5),(.7,.5),(.5,.7),(.35,.65),(.65,.35))
+PROFILE_CROP = tuple(_PROFILE_CROPS[i % len(_PROFILE_CROPS)] for i in range(64))
 
 
 def _strip_unsupported_symbols(text: str) -> str:
@@ -353,12 +355,12 @@ def generate_graphic(
 
 
 def _template_variant(item_key: str | int | None, category: str = "general", template_variant: int | None = None) -> int:
-    """Select one of 24 deterministic layouts; DB-backed reservation can override it."""
+    """Select one of 64 deterministic layouts; DB-backed reservation can override it."""
     try:
         value = int(item_key or 0)
     except (TypeError, ValueError):
         value = abs(hash(str(item_key or "")))
-    return (value + sum(ord(ch) for ch in str(category or ""))) % 24
+    return (value + sum(ord(ch) for ch in str(category or ""))) % 64
 
 
 def _draw_footer(d, variant: int) -> None:
@@ -426,7 +428,7 @@ def generate_reel_cards(
     item_key: str | int | None = None,
     template_variant: int | None = None,
 ) -> list[Path]:
-    """Generate one of 24 deterministic 9:16 editorial layout profiles.
+    """Generate one of 64 deterministic 9:16 editorial layout profiles.
 
     The variant is deterministic for an item, but rotates across the queue.
     No-image stories never receive an empty/placeholder image panel.
@@ -561,7 +563,7 @@ def generate_reel_cards(
         d.rectangle((60, 1450, 1020, 1456), fill=DARK)
         d.text((60, 1490), "FACTS FIRST", font=_font(22, True), fill=DARK)
 
-    palette = ("#c91524", "#20242a", "#7b2cbf", "#006d77", "#b05a00", "#355070")[profile % 6]
+    palette = ("#c91524", "#20242a", "#7b2cbf", "#006d77", "#b05a00", "#355070", "#00897b", "#6a4c93")[profile % 8]
     d.rectangle((58, 1708, 58 + 150 + (profile % 4) * 70, 1714), fill=palette)
     _draw_footer(d, profile)
 
