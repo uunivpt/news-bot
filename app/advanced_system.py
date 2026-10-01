@@ -183,8 +183,9 @@ def publish_lock(db,item_id,story_key):
 def mark_published(db,item_id,channel,reel_url=None):
     p=ph(db); col="website_published" if channel=="website" else "instagram_published"
     extra=", reel_url="+p if reel_url else ""
-    args=[int(item_id)]
+    args=[]
     if reel_url:args.append(reel_url)
+    args.append(int(item_id))
     db.conn.execute(f"UPDATE ph_publish_locks SET {col}=1{extra} WHERE item_id={p}",args)
     if not getattr(db,"_postgres",False):db.conn.commit()
 
