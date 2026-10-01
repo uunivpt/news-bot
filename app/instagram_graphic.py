@@ -349,14 +349,13 @@ def generate_graphic(
 
 
 
-def _template_variant(item_key: str | int | None, category: str = "general") -> int:
-    """Rotate layouts deterministically so consecutive stories do not reuse one design."""
+def _template_variant(item_key: str | int | None, category: str = "general", template_variant: int | None = None) -> int:
+    """Select one of 24 deterministic layouts; DB-backed reservation can override it."""
     try:
         value = int(item_key or 0)
     except (TypeError, ValueError):
         value = abs(hash(str(item_key or "")))
-    # 8 layouts; item IDs naturally rotate them while remaining reproducible.
-    return (value + sum(ord(ch) for ch in str(category or ""))) % 8
+    return (value + sum(ord(ch) for ch in str(category or ""))) % 24
 
 
 def _draw_footer(d, variant: int) -> None:
@@ -422,8 +421,9 @@ def generate_reel_cards(
     output_dir: str | Path,
     source_name: str = "",
     item_key: str | int | None = None,
+    template_variant: int | None = None,
 ) -> list[Path]:
-    """Generate one of eight validated 9:16 editorial layouts.
+    """Generate one of 24 deterministic 9:16 editorial layout profiles.
 
     The variant is deterministic for an item, but rotates across the queue.
     No-image stories never receive an empty/placeholder image panel.
@@ -433,7 +433,8 @@ def generate_reel_cards(
     clean_title = clean_instagram_text(title, source_name) or "Latest news update"
     clean_summary = clean_instagram_text(summary, source_name)
     image = _download_image(image_url)
-    variant = _template_variant(item_key, category)
+    profile = _template_variant(item_key, category, template_variant)
+    variant = profile % 8
 
     canvas = Image.new("RGBA", (REEL_WIDTH, REEL_HEIGHT), "white")
     d = ImageDraw.Draw(canvas)
@@ -555,11 +556,13 @@ def generate_reel_cards(
         d.rectangle((60, 1450, 1020, 1456), fill=DARK)
         d.text((60, 1490), "FACTS FIRST", font=_font(22, True), fill=DARK)
 
-    _draw_footer(d, variant)
+    palette = ("#c91524", "#20242a", "#7b2cbf", "#006d77", "#b05a00", "#355070")[profile % 6]
+    d.rectangle((58, 1708, 58 + 150 + (profile % 4) * 70, 1714), fill=palette)
+    _draw_footer(d, profile)
 
     # Render QA: reject invalid dimensions/mode and obvious clipping before the
     # video builder ever sees the card.
-    path = out / f"reel_variant_{variant}.png"
+    path = out / f"reel_variant_{profile:02d}.png"
     canvas.convert("RGB").save(path, format="PNG", optimize=True)
     with Image.open(path) as check:
         if check.size != (REEL_WIDTH, REEL_HEIGHT):
