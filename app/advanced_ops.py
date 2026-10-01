@@ -252,3 +252,17 @@ def detailed_report(db, days=7):
     q=db.conn.execute("SELECT state,COUNT(*) AS count FROM ph_story_state GROUP BY state").fetchall()
     payload["pipeline_state"]={str(x["state"]):int(x["count"]) for x in q}
     return payload
+
+
+def find_duplicate_story(db, item_id, title, threshold=0.82):
+    """Deterministic high-confidence duplicate detector; returns existing item or None."""
+    rows=db.latest(250,status="all")
+    best=None
+    for row in rows:
+        rid=int(row["id"])
+        if rid==int(item_id):
+            continue
+        score=duplicate_similarity(title,row["title"])
+        if score>=threshold and (best is None or score>best[0]):
+            best=(score,dict(row))
+    return best
