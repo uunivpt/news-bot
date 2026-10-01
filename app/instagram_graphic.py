@@ -428,148 +428,98 @@ def generate_reel_cards(
     item_key: str | int | None = None,
     template_variant: int | None = None,
 ) -> list[Path]:
-    """Generate one of 64 deterministic 9:16 editorial layout profiles.
+    """Create a single clean, Instagram-safe 1080x1920 editorial card.
 
-    The variant is deterministic for an item, but rotates across the queue.
-    No-image stories never receive an empty/placeholder image panel.
+    Critical content stays inside the central safe zone (roughly y=250..1630).
+    The photo, headline, summary and source have independent areas, so text
+    never sits on top of the photo. Stories without a usable image do not get
+    an empty/black image panel.
     """
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
+
     clean_title = clean_instagram_text(title, source_name) or "Latest news update"
     clean_summary = clean_instagram_text(summary, source_name)
+    clean_source = clean_instagram_text(source_name)
     image = _download_image(image_url)
-    profile = _template_variant(item_key, category, template_variant)
-    if image:
-        image = ImageOps.fit(image, image.size, method=Image.Resampling.LANCZOS, centering=PROFILE_CROP[profile])
-    variant = profile % 8
 
+    profile = _template_variant(item_key, category, template_variant)
     canvas = Image.new("RGBA", (REEL_WIDTH, REEL_HEIGHT), "white")
     d = ImageDraw.Draw(canvas)
-    _draw_logo(d)
 
-    # 0: clean editorial
-    if variant == 0:
-        d.rectangle((0, 0, 1080, 14), fill=RED)
-        if image:
-            _draw_hero(d, canvas, image, (50, 310, 1030, 830))
-            top = 965
-        else:
-            top = 560
-        _draw_headline_block(d, clean_title, clean_summary, source_name, category, top, variant, PROFILE_FONT_SCALE[profile])
+    # Instagram safe-zone: keep critical information away from the top profile
+    # overlay and bottom action/caption controls.
+    SAFE_TOP = 250
+    SAFE_BOTTOM = 1635
 
-    # 1: split-panel
-    elif variant == 1:
-        d.rectangle((0, 0, 24, 1920), fill=RED)
-        if image:
-            _draw_hero(d, canvas, image, (610, 250, 1030, 980), 24)
-            top = 520
-        else:
-            top = 500
-        _draw_headline_block(d, clean_title, clean_summary, source_name, category, top, variant)
+    # Header: compact, flat newsroom branding.
+    d.rectangle((0, 0, REEL_WIDTH, 14), fill=RED)
+    d.text((58, 92), "POLITICSHUB", font=_font(30, True), fill=DARK)
+    d.text((58, 137), "NEWS  /  ANALYSIS  /  FACTS", font=_font(15, True), fill=MUTED)
+    d.rectangle((58, 178, 250, 183), fill=RED)
 
-    # 2: top photo / lower newsroom card
-    elif variant == 2:
-        d.text((60, 125), "NEWSROOM", font=_font(24, True), fill=RED)
-        if image:
-            _draw_hero(d, canvas, image, (50, 205, 1030, 850), 32)
-            top = 990
-        else:
-            top = 470
-        d.rounded_rectangle((42, top-38, 1038, 1590), radius=34, outline="#dfe2e6", width=4)
-        _draw_headline_block(d, clean_title, clean_summary, source_name, category, top, variant)
+    # Category marker.
+    badge = (category or "NEWS").upper()[:18]
+    badge_font = _font(20, True)
+    badge_w = d.textbbox((0, 0), badge, font=badge_font)[2] + 34
+    d.rectangle((58, SAFE_TOP, 58 + badge_w, SAFE_TOP + 44), fill=RED)
+    d.text((75, SAFE_TOP + 11), badge, font=badge_font, fill="white")
 
-    # 3: magazine stripe
-    elif variant == 3:
-        d.polygon([(0, 0), (1080, 0), (920, 1920), (0, 1920)], fill="#f3f4f6")
-        d.rectangle((0, 0, 1080, 18), fill=RED)
-        if image:
-            _draw_hero(d, canvas, image, (90, 260, 990, 930), 40)
-            top = 1030
-        else:
-            top = 600
-        _draw_headline_block(d, clean_title, clean_summary, source_name, category, top, variant)
-
-    # 4: dark newsroom
-    elif variant == 4:
-        canvas = Image.new("RGBA", (REEL_WIDTH, REEL_HEIGHT), "#15191f")
-        d = ImageDraw.Draw(canvas)
-        d.text((58, 60), "POLITICSHUB", font=_font(34, True), fill="white")
-        if image:
-            _draw_hero(d, canvas, image, (50, 230, 1030, 860), 26)
-            top = 1020
-        else:
-            top = 520
-        # Same geometry helper, but use a temporary light card for readability.
-        d.rounded_rectangle((45, top-55, 1035, 1580), radius=30, fill="#20252d")
-        _draw_headline_block(d, clean_title, clean_summary, source_name, category, top, variant)
-        # Repaint all editorial text in white on the dark card.
-        tf, lines = _fit_title(clean_title, 900, 4)
-        y = top
-        for line in lines[:4]:
-            d.text((62, y), line, font=tf, fill="white")
-            y += tf.size + 8
-        if clean_summary:
-            sf=_font(27)
-            sy=y+16
-            for line in _wrap(clean_summary,sf,880)[:3]:
-                d.text((62,sy),line,font=sf,fill="#e5e7eb")
-                sy+=39
-        if source_name:
-            d.text((62,1625),f"Source: {clean_instagram_text(source_name)}",font=_font(19,True),fill="white")
-
-    # 5: quote-card / no-photo friendly
-    elif variant == 5:
-        d.rectangle((50, 230, 1030, 236), fill=RED)
-        d.text((60, 285), "THE LATEST", font=_font(24, True), fill=DARK)
-        if image:
-            _draw_hero(d, canvas, image, (170, 380, 910, 860), 28)
-            top = 980
-        else:
-            top = 600
-        d.text((60, top-30), "“", font=_font(110, True), fill=RED)
-        _draw_headline_block(d, clean_title, clean_summary, source_name, category, top+30, variant)
-
-    # 6: data-grid editorial
-    elif variant == 6:
-        d.rectangle((55, 220, 1025, 225), fill=RED)
-        d.text((60, 270), "FACT FILE", font=_font(25, True), fill=RED)
-        if image:
-            _draw_hero(d, canvas, image, (60, 350, 520, 860), 24)
-            text_x, top = 565, 390
-        else:
-            text_x, top = 60, 560
-        tf, lines = _fit_title(clean_title, 900 if not image else 450, 4, PROFILE_FONT_SCALE[profile])
-        y = top
-        for line in lines[:4]:
-            d.text((text_x, y), line, font=tf, fill=DARK)
-            y += tf.size + 8
-        if clean_summary:
-            sf = _font(25)
-            for line in _wrap(clean_summary, sf, 900 if not image else 450)[:4]:
-                d.text((text_x, y+12), line, font=sf, fill=MUTED)
-                y += 36
-        d.rectangle((60, 940, 1020, 946), fill="#e1e4e8")
-        d.text((60, 985), (category or "NEWS").upper(), font=_font(24, True), fill=RED)
-
-    # 7: minimal breaking-style card
+    # Independent media area. Never allow text to occupy this region.
+    media_top = 325
+    media_bottom = 820
+    if image:
+        _draw_hero(d, canvas, image, (58, media_top, 1022, media_bottom), 8)
+        headline_top = 885
     else:
-        d.text((60, 155), "POLITICSHUB / UPDATE", font=_font(21, True), fill=RED)
-        if image:
-            _draw_hero(d, canvas, image, (50, 250, 1030, 900), 18)
-            top = 1010
-        else:
-            top = 520
-        _draw_headline_block(d, clean_title, clean_summary, source_name, category, top, variant)
-        d.rectangle((60, 1450, 1020, 1456), fill=DARK)
-        d.text((60, 1490), "FACTS FIRST", font=_font(22, True), fill=DARK)
+        # No placeholder, no black box, no artificial empty panel.
+        headline_top = 355
 
-    palette = ("#c91524", "#20242a", "#7b2cbf", "#006d77", "#b05a00", "#355070", "#00897b", "#6a4c93")[profile % 8]
-    d.rectangle((58, 1708, 58 + 150 + (profile % 4) * 70, 1714), fill=palette)
-    _draw_footer(d, profile)
+    # Headline: fit to the remaining safe width and keep it completely
+    # separate from the image.
+    title_font, title_lines = _fit_title(
+        clean_title,
+        960,
+        4,
+        min(1.0, PROFILE_FONT_SCALE[profile] + 0.03),
+    )
+    y = headline_top
+    words = clean_title.split()
+    accent = words[(profile + 1) % len(words)].strip(".,:;!?()") if words else ""
+    for line in title_lines[:4]:
+        x = 58
+        for word in line.split():
+            bbox = d.textbbox((0, 0), word, font=title_font)
+            clean = word.strip(".,:;!?()")
+            fill = RED if clean == accent else DARK
+            d.text((x, y), word, font=title_font, fill=fill)
+            x += bbox[2] + max(8, title_font.size // 8)
+        y += title_font.size + 8
 
-    # Render QA: reject invalid dimensions/mode and obvious clipping before the
-    # video builder ever sees the card.
-    path = out / f"reel_variant_{profile:02d}.png"
+    # Summary occupies a bounded block so long source text cannot push the
+    # footer into Instagram's bottom controls.
+    if clean_summary:
+        summary_font = _font(25)
+        summary_y = y + 16
+        summary_lines = _wrap(clean_summary, summary_font, 950)[:4]
+        for line in summary_lines:
+            if summary_y + summary_font.size > 1450:
+                break
+            d.text((58, summary_y), line, font=summary_font, fill=MUTED)
+            summary_y += 36
+
+    # Editorial divider and source. Both remain above the lower unsafe zone.
+    d.rectangle((58, 1510, 1022, 1516), fill="#e1e4e8")
+    if clean_source:
+        d.text((58, 1550), "SOURCE", font=_font(15, True), fill=RED)
+        d.text((58, 1580), clean_source[:90], font=_font(20, True), fill=DARK)
+
+    # Tiny footer is branding only; no news information is placed here.
+    d.rectangle((58, 1625, 245, 1631), fill=RED)
+    d.text((58, 1650), "REAL NEWS. REAL PERSPECTIVE.", font=_font(15, True), fill=DARK)
+
+    # QA before handing the PNG to the video builder.
+    path = out / f"reel_editorial_{profile:02d}.png"
     canvas.convert("RGB").save(path, format="PNG", optimize=True)
     with Image.open(path) as check:
         if check.size != (REEL_WIDTH, REEL_HEIGHT):
