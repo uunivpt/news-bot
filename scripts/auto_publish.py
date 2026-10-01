@@ -149,6 +149,7 @@ def _process_instagram_untracked(db,row,music):
    if not process_content(db,row):
     raise RuntimeError("Story could not be processed by the newsroom bot")
   url=str(row.get("reel_cloudinary_url") or "").strip()
+  cards=[]; qa_card={"passed":True,"cached":True}; layout={"id":"cached"}
   if url:
    print(f"Reusing cached Reel URL for item {item_id}: {url}")
   else:
@@ -266,7 +267,7 @@ def main():
   vr=db.conn.execute("SELECT source_name FROM ph_cluster_items WHERE news_item_id="+p,(int(row["id"]),)).fetchall()
   names=[str(x["source_name"]) for x in vr]
   classification=record_verification(db,int(row["id"]),len(names),names,[])
-  attach_event(db,int(row["id"]),row.get("title") or "",row.get("category") or "general",row.get("source_name") or (names[0] if names else ""))\n  event_id=attach_event(db,int(row["id"]),row.get("title") or "",row.get("category") or "general",row.get("source_name") or (names[0] if names else ""))
+  event_id=attach_event(db,int(row["id"]),row.get("title") or "",row.get("category") or "general",row.get("source_name") or (names[0] if names else ""))
   score_story(db,row,len(names),classification,round(duplicate[0]*100,2) if duplicate else 0)
   for source in names or ([row.get("source_name")] if row.get("source_name") else []):
    record_source(db,source,success=True,coverage=len(names)>=2)
@@ -279,7 +280,7 @@ def main():
    ready=prepare_content(db,row)
   if not ready:held+=1; print(f"Website publish held for item {row['id']}: no usable source text"); continue
   if not publish_lock(db,int(row["id"]),event_id):
-   held+=1; audit_stage(db,int(row["id"]),"PUBLISH_LOCK","blocked",{"story_key":event_id}); print(f"Website duplicate lock blocked item {row["id"]}"); continue
+   held+=1; audit_stage(db,int(row["id"]),"PUBLISH_LOCK","blocked",{"story_key":event_id}); print(f"Website duplicate lock blocked item {row['id']}"); continue
   with agent_run(db, "publisher", "publish_website", int(row["id"])):
    publish_website_first(db,row,now.isoformat())
    mark_published(db,int(row["id"]),"website")
