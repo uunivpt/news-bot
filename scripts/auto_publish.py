@@ -253,7 +253,7 @@ def main():
   duplicate=find_duplicate_story(db,int(row["id"]),row.get("title") or "")
   if duplicate:
    audit_stage(db,int(row["id"]),"DUPLICATE_CHECK","flagged",{"similarity":round(duplicate[0],3),"existing_id":duplicate[1].get("id")})
-  p="%" if db._postgres else "?"
+  p="%s" if db._postgres else "?"
   vr=db.conn.execute("SELECT source_name FROM ph_cluster_items WHERE news_item_id="+p,(int(row["id"]),)).fetchall()
   names=[str(x["source_name"]) for x in vr]
   classification=record_verification(db,int(row["id"]),len(names),names,[])
