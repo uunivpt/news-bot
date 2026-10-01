@@ -142,6 +142,9 @@ def _process_instagram_untracked(db,row,music):
  item_id=int(row["id"]); attempts=int(row.get("instagram_attempts") or 0)
  if attempts>=MAX_INSTAGRAM_ATTEMPTS:return False
  attempts+=1; started=datetime.now(timezone.utc).isoformat(); db.update(item_id,instagram_status="processing",instagram_error=None,instagram_attempts=attempts,instagram_last_attempt_at=started,instagram_next_retry_at=None)
+ if is_published(db,item_id,"instagram"):
+  db.update(item_id,instagram_status="published",instagram_selected=0,instagram_error=None,instagram_next_retry_at=None)
+  return True
  if not music:db.update(item_id,instagram_status="failed",instagram_error="News Pulse audio unavailable",instagram_next_retry_at=_next_retry(attempts)); return False
  try:
   # Ensure manually published stories are processed before any Instagram Reel is built.
