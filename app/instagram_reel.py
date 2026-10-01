@@ -73,7 +73,7 @@ def _validate_reel_output(output: Path) -> str:
         duration = 0
     if duration < REEL_DURATION - 0.25 or duration > REEL_DURATION + 0.75:
         raise RuntimeError(f"Reel QA failed: unexpected duration {duration:.2f}s")
-    return _validate_reel_output(output)
+    return str(output)
 
 def build_reel(image_paths: list[str], output_path: str, audio_path: str | None = None, duration_per_image: float = SCENE_SECONDS) -> str:
     if not image_paths:
