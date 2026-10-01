@@ -17,6 +17,18 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt pytest
       - name: Python compile check
-        run: python -m compileall -q app scripts
+        run: python -m compileall -q api app scripts
+      - name: Admin UI JavaScript syntax check
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path("public/admin/index.html").read_text(encoding="utf-8")
+          scripts=re.findall(r"<script>(.*?)</script>",html,re.S)
+          if not scripts:
+              raise SystemExit("No inline admin script found")
+          Path("/tmp/admin.js").write_text("\n".join(scripts),encoding="utf-8")
+          PY
+          node --check /tmp/admin.js
       - name: Deterministic upgrade tests
         run: pytest -q tests/test_advanced_system.py
