@@ -1,0 +1,34 @@
+name: Upgrade Regression
+
+on:
+  push:
+    branches: ["upgrade/dynamic-reels-bot-system"]
+  pull_request:
+    branches: ["main","master"]
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+      - name: Python compile check
+        run: python -m compileall -q api app scripts
+      - name: Admin UI JavaScript syntax check
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path("public/admin/index.html").read_text(encoding="utf-8")
+          scripts=re.findall(r"<script>(.*?)</script>",html,re.S)
+          if not scripts:
+              raise SystemExit("No inline admin script found")
+          Path("/tmp/admin.js").write_text("\n".join(scripts),encoding="utf-8")
+          PY
+          node --check /tmp/admin.js
+      - name: Deterministic upgrade tests
+        run: PYTHONPATH=. pytest -q tests/test_advanced_system.py

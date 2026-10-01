@@ -15,6 +15,8 @@ from app.newsroom import process_news
 from app.worker import dispatch_worker
 from app.phase_system import analytics as phase_analytics, cluster_stories, cluster_summary, train as train_agent
 from app.reporting import operations_pdf
+from app.advanced_ops import ensure_advanced_schema, live_dashboard, detailed_report, record_verification, classify_verification, audit_stage, duplicate_similarity
+from app.advanced_system import admin_snapshot, historical_analytics, event_timeline, ensure_schema as ensure_upgrade_schema
 
 app=Flask(__name__, static_folder="../public", static_url_path="")
 _secret=os.getenv("FLASK_SECRET_KEY") or os.getenv("ADMIN_TOKEN") or os.getenv("ADMIN_SETUP_KEY")
@@ -252,6 +254,71 @@ def instagram_analytics():
   recent=[{"id":r["id"],"title":r["title"],"published_at":r.get("instagram_published_at"),"media_id":r.get("instagram_media_id")} for r in published[:20]]
   return jsonify({"last_7_days":{k:v for k,v in daily.items() if k>=start.astimezone(ZoneInfo("Asia/Kolkata")).date().isoformat()},"total_published":len(published),"failed":len([r for r in rows if r.get("instagram_status")=="failed"]),"processing":len([r for r in rows if r.get("instagram_status")=="processing"]),"queued":len([r for r in rows if r.get("instagram_status")=="pending" and int(r.get("instagram_selected") or 0)==1]),"recent":recent})
  finally:database.close()
+
+@app.get("/api/admin/live")
+def admin_live():
+ err=require_admin()
+ if err:return err
+ database=db()
+ try:
+  ensure_advanced_schema(database)
+  return jsonify(live_dashboard(database))
+ finally: database.close()
+
+@app.get("/api/admin/upgrade")
+def admin_upgrade():
+ err=require_admin()
+ if err:return err
+ database=db()
+ try:
+  ensure_upgrade_schema(database)
+  snapshot=admin_snapshot(database)
+  event_id=str(request.args.get("event_id","")).strip()
+  if event_id:
+   snapshot["event_timeline"]=event_timeline(database,event_id)
+  else:
+   snapshot["event_timeline"]=[]
+  return jsonify(snapshot)
+ finally: database.close()
+
+@app.get("/api/admin/history")
+def admin_history():
+ err=require_admin()
+ if err:return err
+ try: days=max(1,min(int(request.args.get("days","30")),365))
+ except ValueError: days=30
+ database=db()
+ try:
+  ensure_upgrade_schema(database)
+  return jsonify(historical_analytics(database,days))
+ finally: database.close()
+
+@app.get("/api/admin/report")
+def admin_detailed_report():
+ err=require_admin()
+ if err:return err
+ try: days=max(1,min(int(request.args.get("days","7")),90))
+ except ValueError: days=7
+ database=db()
+ try:
+  payload=detailed_report(database,days)
+  payload["generated_at"]=datetime.now(timezone.utc).isoformat()
+  return jsonify(payload)
+ finally: database.close()
+
+@app.post("/api/admin/verification/<int:item_id>")
+def admin_verify(item_id):
+ err=require_admin()
+ if err:return err
+ err=require_csrf()
+ if err:return err
+ body=request.get_json(silent=True) or {}
+ database=db()
+ try:
+  classification=record_verification(database,item_id,int(body.get("source_count",0)),body.get("source_names") or [],body.get("conflicts") or [])
+  audit_stage(database,item_id,"VERIFICATION","completed",{"classification":classification})
+  return jsonify({"ok":True,"classification":classification})
+ finally: database.close()
 
 @app.get("/api/admin/operations")
 def admin_operations():

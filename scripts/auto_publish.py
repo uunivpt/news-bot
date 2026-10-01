@@ -18,7 +18,9 @@ from app.media_storage import download_to, public_video_url
 from app.meta_instagram import publish_reel, InstagramRateLimitError
 from app.newsroom import process_news
 from app.publish_policy import risk_flags
-from app.phase_system import ensure_schema, run as agent_run, start as agent_start, finish as agent_finish
+from app.phase_system import ensure_schema, run as agent_run, start as agent_start, finish as agent_finish, quality_gate, manager_route
+from app.advanced_ops import LAYOUTS, reserve_layout, layout_by_id, audit_stage, state_transition, visual_qa_card, record_verification, find_duplicate_story
+from app.advanced_system import ensure_schema as ensure_upgrade_schema, score_story, select_layout, attach_event, self_heal, publish_lock, mark_published, is_published, record_preview, record_source
 OUT=Path(os.getenv("MEDIA_OUTPUT_DIR","data/media")); OUT.mkdir(parents=True,exist_ok=True)
 MAX_INSTAGRAM_ATTEMPTS=999999; STALE_PROCESSING_MINUTES=20
 TRAILING_FRAGMENT_RE=re.compile(r"\b(?:a|an|and|as|at|by|for|from|in|including|into|of|on|or|the|their|this|to|under|via|was|were|with|without)\.?$",re.I)
@@ -44,9 +46,9 @@ def _dedupe_caption_text(title,text):
 REEL_HASHTAGS="#reel #update #news #politics #global"
 
 def caption(row):
- title=clean_instagram_text(row.get("title") or "",""); text=clean_instagram_text(row.get("bot_summary") or row.get("summary") or "",""); text=_dedupe_caption_text(title,text)
- base=f"{title}\n\n{text}\n\nSource: {row.get('source_name') or 'PoliticsHub'}\npoliticshub.in" if text else f"{title}\n\nSource: {row.get('source_name') or 'PoliticsHub'}\npoliticshub.in"
- return f"{base}\n\n{REEL_HASHTAGS}"
+ title=clean_instagram_text(row.get("title") or "",""); text=clean_instagram_text(row.get("bot_summary") or row.get("summary") or "",row.get("source_name") or ""); text=_dedupe_caption_text(title,text)
+ base=f"{title}\\n\\n{text}" if text else title
+ return f"{base}\\n\\n{REEL_HASHTAGS}"
 
 def audio_path():
  path=os.getenv("FIXED_AUDIO_PATH","").strip()
@@ -77,7 +79,14 @@ def _process_content(row):
   result=process_news(row.get("title") or "",material,row.get("category") or "general")
   if not result:return False
   fields={"title":result["headline"],"summary":result["summary"],"bot_summary":result["summary"],"bot_article":result["article"]}
+  state_transition(db,int(row["id"]),"PROCESSING")
+  qa=quality_gate(fields["title"],fields["summary"],fields["bot_article"])
+  state_transition(db,int(row["id"]),"QUALITY_CHECK",";".join(qa["errors"]) if not qa["passed"] else None)
+  if not qa["passed"]:
+   print(f"Quality gate blocked item {row.get('id')}: {qa['errors']}")
+   return False
   if source.get("image_url") and not row.get("image_url"):fields["image_url"]=source["image_url"]
+  audit_stage(db,int(row["id"]),"WRITER","completed",{"quality_score":qa["score"],"warnings":qa["warnings"]})
   row.update(fields); return fields
  except Exception as exc:print(f"Bot processing failed for item {row.get('id')}: {exc}"); return False
 
@@ -134,6 +143,9 @@ def _process_instagram_untracked(db,row,music):
  item_id=int(row["id"]); attempts=int(row.get("instagram_attempts") or 0)
  if attempts>=MAX_INSTAGRAM_ATTEMPTS:return False
  attempts+=1; started=datetime.now(timezone.utc).isoformat(); db.update(item_id,instagram_status="processing",instagram_error=None,instagram_attempts=attempts,instagram_last_attempt_at=started,instagram_next_retry_at=None)
+ if is_published(db,item_id,"instagram"):
+  db.update(item_id,instagram_status="published",instagram_selected=0,instagram_error=None,instagram_next_retry_at=None)
+  return True
  if not music:db.update(item_id,instagram_status="failed",instagram_error="News Pulse audio unavailable",instagram_next_retry_at=_next_retry(attempts)); return False
  try:
   # Ensure manually published stories are processed before any Instagram Reel is built.
@@ -141,22 +153,39 @@ def _process_instagram_untracked(db,row,music):
    if not process_content(db,row):
     raise RuntimeError("Story could not be processed by the newsroom bot")
   url=str(row.get("reel_cloudinary_url") or "").strip()
+  cards=[]; qa_card={"passed":True,"cached":True}; layout={"id":"cached"}
   if url:
    print(f"Reusing cached Reel URL for item {item_id}: {url}")
   else:
-   cards=generate_reel_cards(title=row["title"],summary=row.get("bot_summary") or row.get("summary") or "",category=row.get("category") or "general",image_url=row.get("image_url"),source_name=row.get("source_name") or "",output_dir=OUT/"reel_cards"/str(item_id)); video=OUT/f"{item_id}.mp4"; build_reel([str(p) for p in cards],str(video),audio_path=music,duration_per_image=18)
+   layout=select_layout(row.get("category") or "general",row.get("title") or "",item_id,breaking=bool((score_story(db,row,1,"UNVERIFIED",0) or {}).get("breaking")),has_image=bool(row.get("image_url")))
+   state_transition(db,item_id,"INSTAGRAM_QUEUE")
+   audit_stage(db,item_id,"TEMPLATE_SELECTED","completed",layout)
+   profile=layout
+   cards=generate_reel_cards(title=row["title"],summary=row.get("bot_summary") or row.get("summary") or "",category=row.get("category") or "general",image_url=row.get("image_url"),source_name=row.get("source_name") or "",output_dir=OUT/"reel_cards"/str(item_id),item_key=item_id,template_variant=int(layout["variant"]))
+   for card in cards:
+    qa_card=visual_qa_card(card)
+    if not qa_card.get("passed"): raise RuntimeError(f"Visual QA failed: {qa_card.get('errors')}")
+   video=OUT/f"{item_id}.mp4"; build_reel([str(p) for p in cards],str(video),audio_path=music,duration_per_image=18)
+   state_transition(db,item_id,"REEL_CREATED")
+   audit_stage(db,item_id,"REEL_QA","completed",{"cards":len(cards),"layout":layout["id"]}); record_preview(db,item_id,str(video),str(cards[0]) if cards else "",qa_card,layout["id"])
    public_id=f"politicshub/reels/item-{item_id}"
    url=upload_video(str(video),public_id=public_id) or public_video_url(str(video))
    if not url:raise RuntimeError("Public Reel video URL unavailable")
    db.update(item_id,reel_cloudinary_url=url,reel_cloudinary_public_id=public_id)
+  record_preview(db,item_id,url,str(cards[0]) if cards else "",qa_card,layout["id"] if "layout" in locals() else "cached")
   result=publish_reel(url,caption(row)); media_id=result.get("id") if isinstance(result,dict) else None; container_id=result.get("container_id") if isinstance(result,dict) else None
-  db.update(item_id,instagram_status="published",instagram_media_id=media_id,instagram_container_id=container_id,instagram_selected=0,instagram_published_at=datetime.now(timezone.utc).isoformat(),instagram_error=None,instagram_next_retry_at=None); return True
+  mark_published(db,item_id,"instagram",url)
+  db.update(item_id,instagram_status="published",instagram_media_id=media_id,instagram_container_id=container_id,instagram_selected=0,instagram_published_at=datetime.now(timezone.utc).isoformat(),instagram_error=None,instagram_next_retry_at=None)
+  state_transition(db,item_id,"INSTAGRAM_PUBLISHED")
+  audit_stage(db,item_id,"INSTAGRAM","completed",{"media_id":media_id})
+  return True
  except InstagramRateLimitError as exc:
   retry_at=(datetime.now(timezone.utc)+timedelta(minutes=30)).isoformat()
   db.update(item_id,instagram_status="pending",instagram_error=str(exc)[:3000],instagram_next_retry_at=retry_at)
   print(f"Instagram app rate limit reached; pausing this worker run for item {item_id}: {exc}")
   return "rate_limited"
  except Exception as exc:
+  self_heal(db,"instagram","reel_publish",exc,item_id,attempts)
   db.update(item_id,instagram_status="failed",instagram_error=str(exc)[:3000],instagram_next_retry_at=_next_retry(attempts)); print(f"Instagram failed item {item_id}: {exc}"); return False
 
 def process_instagram(db,row,music):
@@ -207,33 +236,58 @@ def _instagram_candidates(db,mode,limit,now):
  rows=[dict(r) for r in db.latest(max(limit*20,100),status="all",instagram_status="pending")]
  rows=[r for r in rows if r.get("status") in {"pending","published"} and _schedule_due(r,now)]
  if mode=="manual":rows=[r for r in rows if int(r.get("instagram_selected") or 0)==1]
- rows.sort(key=lambda r:(0 if r.get("instagram_scheduled_at") else 1, int(r.get("instagram_queue_order") or 0) if int(r.get("instagram_queue_order") or 0)>0 else 10**9, -int(r.get("id") or 0)))
+ for r in rows:
+  try:
+   s=db.conn.execute("SELECT score,breaking FROM ph_news_scores WHERE item_id="+("%s" if db._postgres else "?"),(int(r["id"]),)).fetchone()
+   r["_upgrade_score"]=float(s["score"] if s else 0); r["_upgrade_breaking"]=bool(s["breaking"] if s else 0)
+  except Exception:
+   r["_upgrade_score"]=0; r["_upgrade_breaking"]=False
+ rows.sort(key=lambda r:(0 if r.get("_upgrade_breaking") else 1,0 if r.get("instagram_scheduled_at") else 1,-float(r.get("_upgrade_score") or 0),int(r.get("instagram_queue_order") or 0) if int(r.get("instagram_queue_order") or 0)>0 else 10**9,-int(r.get("id") or 0)))
  return rows[:limit]
 
 def main():
- db=NewsDatabase(); ensure_schema(db); settings=db.get_settings(); env_ig=os.getenv("PUBLISH_TO_INSTAGRAM","false").lower() in {"1","true","yes"}; env_web=os.getenv("PUBLISH_WEBSITE","true").lower() in {"1","true","yes"}; priority_id=str(settings.get("instagram_priority_id","") or "").strip(); paused=settings.get("instagram_paused","false")=="true"; publish_instagram=env_ig and (settings.get("instagram_enabled","true")=="true" or bool(priority_id)); publish_website=env_web and settings.get("website_enabled","true")=="true"
+ db=NewsDatabase(); ensure_schema(db); ensure_upgrade_schema(db); settings=db.get_settings(); env_ig=os.getenv("PUBLISH_TO_INSTAGRAM","false").lower() in {"1","true","yes"}; env_web=os.getenv("PUBLISH_WEBSITE","true").lower() in {"1","true","yes"}; priority_id=str(settings.get("instagram_priority_id","") or "").strip(); paused=settings.get("instagram_paused","false")=="true"; publish_instagram=env_ig and (settings.get("instagram_enabled","true")=="true" or bool(priority_id)); publish_website=env_web and settings.get("website_enabled","true")=="true"
  try:max_items=max(1,int(os.getenv("MAX_ITEMS","15")))
  except ValueError:max_items=15
  try:repair_items=max(0,int(os.getenv("BOT_REPAIR_ITEMS","5")))
  except ValueError:repair_items=5
  try:retry_limit=max(0,int(os.getenv("INSTAGRAM_RETRY_ITEMS","10")))
  except ValueError:retry_limit=10
- try:admin_daily=max(1000,int(settings.get("instagram_daily_limit","1000")))
+ try:admin_daily=max(0,int(settings.get("instagram_daily_limit","1000")))
  except ValueError:admin_daily=1000
  try:env_daily=max(0,int(os.getenv("INSTAGRAM_NEW_ITEMS","1000")))
  except ValueError:env_daily=1000
  try:interval=max(0,int(os.getenv("INSTAGRAM_INTERVAL_MINUTES",settings.get("instagram_interval_minutes","0"))))
  except ValueError:interval=0
- daily_limit=min(admin_daily,env_daily) if env_daily else 0; now=datetime.now(timezone.utc); music=audio_path() if publish_instagram else None; pending=[dict(r) for r in db.latest(max_items,status="pending")] if publish_website else []
+ daily_limit=min(admin_daily,env_daily) if env_daily else admin_daily; now=datetime.now(timezone.utc); music=audio_path() if publish_instagram else None; pending=[dict(r) for r in db.latest(max_items,status="pending")] if publish_website else []
  published=held=0
  for row in pending:
   # Always regenerate pending content from the freshest source. If the newsroom
   # processor rejects a very short alert, fall back to cleaned source wording.
-  with agent_run(db, "writer", "prepare_story", int(row["id"])):
+  duplicate=find_duplicate_story(db,int(row["id"]),row.get("title") or "")
+  if duplicate:
+   audit_stage(db,int(row["id"]),"DUPLICATE_CHECK","flagged",{"similarity":round(duplicate[0],3),"existing_id":duplicate[1].get("id")})
+  p="%s" if db._postgres else "?"
+  vr=db.conn.execute("SELECT source_name FROM ph_cluster_items WHERE news_item_id="+p,(int(row["id"]),)).fetchall()
+  names=[str(x["source_name"]) for x in vr]
+  classification=record_verification(db,int(row["id"]),len(names),names,[])
+  event_id=attach_event(db,int(row["id"]),row.get("title") or "",row.get("category") or "general",row.get("source_name") or (names[0] if names else ""))
+  score_story(db,row,len(names),classification,round(duplicate[0]*100,2) if duplicate else 0)
+  for source in names or ([row.get("source_name")] if row.get("source_name") else []):
+   record_source(db,source,success=True,coverage=len(names)>=2)
+  audit_stage(db,int(row["id"]),"VERIFICATION","completed",{"classification":classification,"source_count":len(names)})
+  state_transition(db,int(row["id"]),"COLLECTED")
+  route=manager_route(row.get("title") or "",row.get("category") or "general",bool(row.get("image_url")))
+  with agent_run(db, "manager", "route_story", int(row["id"]), {"route":route}):
+   pass
+  with agent_run(db, "writer", "prepare_story", int(row["id"]), {"route":route}):
    ready=prepare_content(db,row)
   if not ready:held+=1; print(f"Website publish held for item {row['id']}: no usable source text"); continue
+  if not publish_lock(db,int(row["id"]),event_id):
+   held+=1; audit_stage(db,int(row["id"]),"PUBLISH_LOCK","blocked",{"story_key":event_id}); print(f"Website duplicate lock blocked item {row['id']}"); continue
   with agent_run(db, "publisher", "publish_website", int(row["id"])):
    publish_website_first(db,row,now.isoformat())
+   mark_published(db,int(row["id"]),"website")
   published+=1
  repaired=repair_published_content(db,repair_items); attempted=set(); priority_handled=False
  if publish_instagram:
