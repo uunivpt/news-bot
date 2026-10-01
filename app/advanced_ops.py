@@ -229,15 +229,24 @@ def snapshot_performance(db, days=1):
 
 def live_dashboard(db):
     ensure_advanced_schema(db)
-    from app.phase_system import analytics
+    from app.phase_system import analytics, phase_analytics
     a=analytics(db,1)
+    phases=phase_analytics(db,1)["phases"]
     p=_ph(db)
     counts={}
     for state in ("COLLECTED","RESEARCHING","VERIFICATION","PROCESSING","QUALITY_CHECK","PUBLISHED","INSTAGRAM_QUEUE","REEL_CREATED","INSTAGRAM_PUBLISHED"):
         row=db.conn.execute(f"SELECT COUNT(*) AS count FROM ph_story_state WHERE state={p}",(state,)).fetchone()
         counts[state]=int(row["count"] if db._postgres else row[0])
+    settings=db.get_settings()
+    try:
+        total=db.count()
+        published=len(db.latest(1000,"all","published"))
+        review_needed=len(db.latest(1000,"all","published",None,"needs_review"))
+        stats={"total":total,"published":published,"review_needed":review_needed,"instagram_today":db.instagram_daily_count(*_india_day_bounds()) if "_india_day_bounds" in globals() else 0,"instagram_limit":int(settings.get("instagram_daily_limit","5"))}
+    except Exception:
+        stats={"total":0,"published":0,"review_needed":0,"instagram_today":0,"instagram_limit":int(settings.get("instagram_daily_limit","5"))}
     recent=db.conn.execute("SELECT stage,status,item_id,details,created_at FROM ph_audit ORDER BY id DESC LIMIT 40").fetchall()
-    return {"updated_at":_now(),"pipeline":counts,"agents":a,"audit":[dict(x) for x in recent]}
+    return {"updated_at":_now(),"pipeline":counts,"agents":a,"phases":phases,"stats":stats,"settings":settings,"audit":[dict(x) for x in recent]}
 
 
 def detailed_report(db, days=7):
