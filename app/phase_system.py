@@ -93,7 +93,12 @@ def finish(db, run_id, started, success=True, error=None):
     now = datetime.now(timezone.utc).isoformat()
     ph = "%s" if db._postgres else "?"
     _exec(db, "UPDATE ph_agent_runs SET status="+ph+",finished_at="+ph+",duration_seconds="+ph+",error="+ph+" WHERE id="+ph, ("success" if success else "failed",now,round(time.perf_counter()-started,4),str(error)[:4000] if error else None,run_id))
+    # Resolve the agent for this run and update operational reliability.
+    row=_exec(db,"SELECT agent_id FROM ph_agent_runs WHERE id="+ph,(run_id,)).fetchone()
+    if row:
+        reliability_update(db,row["agent_id"],success)
     if not db._postgres: db.conn.commit()
+
 
 @contextmanager
 def run(db, agent_id, operation, item_id=None, metadata=""):
@@ -115,6 +120,52 @@ def train(db, agent_id, event_type, notes=""):
         _exec(db,"UPDATE ph_agents SET last_trained_at=%s,updated_at=%s WHERE agent_id=%s",(now,now,agent_id))
     else:
         _exec(db,"UPDATE ph_agents SET last_trained_at=?,updated_at=? WHERE agent_id=?",(now,now,agent_id)); db.conn.commit()
+
+
+def manager_route(title="", category="general", has_image=False):
+    """Deterministic manager decision: route each story through the desks it needs."""
+    text=f"{title} {category}".lower()
+    route=["trend","manager","research","factcheck","writer","reviewer","publisher"]
+    if any(k in text for k in ("market","stock","shares","gdp","inflation")):
+        route.insert(3,"research")
+    if has_image:
+        route.append("instagram")
+    return list(dict.fromkeys(route))
+
+
+def quality_gate(title="", summary="", article="", allow_short=False):
+    """Deterministic publication QA; never claims factual truth."""
+    errors=[]; warnings=[]
+    title=str(title or "").strip(); summary=str(summary or "").strip(); article=str(article or "").strip()
+    if not title: errors.append("missing_title")
+    elif len(title)>180: errors.append("title_too_long")
+    if not summary: errors.append("missing_summary")
+    elif not allow_short and len(summary)<35: errors.append("summary_too_short")
+    if not article: errors.append("missing_article")
+    elif not allow_short and len(article)<max(60,len(summary)): errors.append("article_too_short")
+    for field_name,value in (("summary",summary),("article",article)):
+        if re.search(r"\\b(?:source\\s*:|reported\\s+by|via\\s+)\\s*[^.\\n]{2,}",value,re.I):
+            warnings.append(f"{field_name}_contains_source_fragment")
+        if value.count("(")!=value.count(")"):
+            errors.append(f"{field_name}_unbalanced_parentheses")
+    if summary and title.casefold()==summary.casefold():
+        warnings.append("summary_repeats_title")
+    score=max(0,100-len(errors)*25-len(warnings)*5)
+    return {"passed":not errors,"score":score,"errors":errors,"warnings":warnings}
+
+
+def reliability_update(db, agent_id, success):
+    """Operational reliability telemetry, not a factual-truth score."""
+    ensure_schema(db)
+    delta=1.0 if success else -3.0
+    ph="%s" if db._postgres else "?"
+    row=_exec(db,"SELECT score FROM ph_agents WHERE agent_id="+ph,(agent_id,)).fetchone()
+    current=float(row["score"] if row else 100)
+    score=max(0.0,min(100.0,current+delta))
+    _exec(db,"UPDATE ph_agents SET score="+ph+",updated_at="+ph+" WHERE agent_id="+ph,(score,datetime.now(timezone.utc).isoformat(),agent_id))
+    if not db._postgres: db.conn.commit()
+    return round(score,1)
+
 
 def _words(text):
     return set(re.findall(r"[a-z0-9]{3,}",str(text or "").lower()))
