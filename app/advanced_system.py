@@ -168,13 +168,18 @@ def alert(db,severity,bot,step,item_id,message):
 
 def publish_lock(db,item_id,story_key):
     ensure_schema(db); p=ph(db); n=now()
-    try:
-        db.conn.execute(f"INSERT INTO ph_publish_locks(item_id,story_key,locked_at) VALUES ({p},{p},{p})",(int(item_id),story_key,n))
-        if not getattr(db,"_postgres",False):db.conn.commit()
-        return True
-    except Exception:
-        return False
-
+    if getattr(db,"_postgres",False):
+        row=db.conn.execute(
+            f"INSERT INTO ph_publish_locks(item_id,story_key,locked_at) VALUES ({p},{p},{p}) ON CONFLICT DO NOTHING RETURNING item_id",
+            (int(item_id),story_key,n),
+        ).fetchone()
+        return bool(row)
+    cur=db.conn.execute(
+        "INSERT OR IGNORE INTO ph_publish_locks(item_id,story_key,locked_at) VALUES (?,?,?)",
+        (int(item_id),story_key,n),
+    )
+    db.conn.commit()
+    return cur.rowcount==1
 def mark_published(db,item_id,channel,reel_url=None):
     p=ph(db); col="website_published" if channel=="website" else "instagram_published"
     extra=", reel_url="+p if reel_url else ""
