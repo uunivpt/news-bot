@@ -19,7 +19,7 @@ from app.meta_instagram import publish_reel, InstagramRateLimitError
 from app.newsroom import process_news
 from app.publish_policy import risk_flags
 from app.phase_system import ensure_schema, run as agent_run, start as agent_start, finish as agent_finish, quality_gate, manager_route
-from app.advanced_ops import reserve_layout, layout_by_id, audit_stage, state_transition, visual_qa_card
+from app.advanced_ops import reserve_layout, layout_by_id, audit_stage, state_transition, visual_qa_card, cluster_stories, record_verification, find_duplicate_story
 OUT=Path(os.getenv("MEDIA_OUTPUT_DIR","data/media")); OUT.mkdir(parents=True,exist_ok=True)
 MAX_INSTAGRAM_ATTEMPTS=999999; STALE_PROCESSING_MINUTES=20
 TRAILING_FRAGMENT_RE=re.compile(r"\b(?:a|an|and|as|at|by|for|from|in|including|into|of|on|or|the|their|this|to|under|via|was|were|with|without)\.?$",re.I)
@@ -250,6 +250,10 @@ def main():
  for row in pending:
   # Always regenerate pending content from the freshest source. If the newsroom
   # processor rejects a very short alert, fall back to cleaned source wording.
+  duplicate=find_duplicate_story(db,int(row["id"]),row.get("title") or "")
+  if duplicate:
+   audit_stage(db,int(row["id"]),"DUPLICATE_CHECK","flagged",{"similarity":round(duplicate[0],3),"existing_id":duplicate[1].get("id")})
+  state_transition(db,int(row["id"]),"COLLECTED")
   route=manager_route(row.get("title") or "",row.get("category") or "general",bool(row.get("image_url")))
   with agent_run(db, "manager", "route_story", int(row["id"]), {"route":route}):
    pass
