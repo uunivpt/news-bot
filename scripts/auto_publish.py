@@ -19,7 +19,7 @@ from app.meta_instagram import publish_reel, InstagramRateLimitError
 from app.newsroom import process_news
 from app.publish_policy import risk_flags
 from app.phase_system import ensure_schema, run as agent_run, start as agent_start, finish as agent_finish, quality_gate, manager_route
-from app.advanced_ops import LAYOUTS, reserve_layout, layout_by_id, audit_stage, state_transition, visual_qa_card, record_verification, find_duplicate_story\nfrom app.advanced_system import ensure_schema as ensure_upgrade_schema, score_story, select_layout, attach_event, self_heal, publish_lock, mark_published, is_published, record_preview
+from app.advanced_ops import LAYOUTS, reserve_layout, layout_by_id, audit_stage, state_transition, visual_qa_card, record_verification, find_duplicate_story\nfrom app.advanced_system import ensure_schema as ensure_upgrade_schema, score_story, select_layout, attach_event, self_heal, publish_lock, mark_published, is_published, record_preview, record_source
 OUT=Path(os.getenv("MEDIA_OUTPUT_DIR","data/media")); OUT.mkdir(parents=True,exist_ok=True)
 MAX_INSTAGRAM_ATTEMPTS=999999; STALE_PROCESSING_MINUTES=20
 TRAILING_FRAGMENT_RE=re.compile(r"\b(?:a|an|and|as|at|by|for|from|in|including|into|of|on|or|the|their|this|to|under|via|was|were|with|without)\.?$",re.I)
@@ -167,7 +167,9 @@ def _process_instagram_untracked(db,row,music):
    url=upload_video(str(video),public_id=public_id) or public_video_url(str(video))
    if not url:raise RuntimeError("Public Reel video URL unavailable")
    db.update(item_id,reel_cloudinary_url=url,reel_cloudinary_public_id=public_id)
+  record_preview(db,item_id,url,str(cards[0]) if cards else "",qa_card,layout["id"] if "layout" in locals() else "cached")
   result=publish_reel(url,caption(row)); media_id=result.get("id") if isinstance(result,dict) else None; container_id=result.get("container_id") if isinstance(result,dict) else None
+  mark_published(db,item_id,"instagram",url)
   db.update(item_id,instagram_status="published",instagram_media_id=media_id,instagram_container_id=container_id,instagram_selected=0,instagram_published_at=datetime.now(timezone.utc).isoformat(),instagram_error=None,instagram_next_retry_at=None)
   state_transition(db,item_id,"INSTAGRAM_PUBLISHED")
   audit_stage(db,item_id,"INSTAGRAM","completed",{"media_id":media_id})
@@ -246,13 +248,13 @@ def main():
  except ValueError:repair_items=5
  try:retry_limit=max(0,int(os.getenv("INSTAGRAM_RETRY_ITEMS","10")))
  except ValueError:retry_limit=10
- try:admin_daily=max(1000,int(settings.get("instagram_daily_limit","1000")))
+ try:admin_daily=max(0,int(settings.get("instagram_daily_limit","1000")))
  except ValueError:admin_daily=1000
  try:env_daily=max(0,int(os.getenv("INSTAGRAM_NEW_ITEMS","1000")))
  except ValueError:env_daily=1000
  try:interval=max(0,int(os.getenv("INSTAGRAM_INTERVAL_MINUTES",settings.get("instagram_interval_minutes","0"))))
  except ValueError:interval=0
- daily_limit=min(admin_daily,env_daily) if env_daily else 0; now=datetime.now(timezone.utc); music=audio_path() if publish_instagram else None; pending=[dict(r) for r in db.latest(max_items,status="pending")] if publish_website else []
+ daily_limit=min(admin_daily,env_daily) if env_daily else admin_daily; now=datetime.now(timezone.utc); music=audio_path() if publish_instagram else None; pending=[dict(r) for r in db.latest(max_items,status="pending")] if publish_website else []
  published=held=0
  for row in pending:
   # Always regenerate pending content from the freshest source. If the newsroom
@@ -263,7 +265,11 @@ def main():
   p="%s" if db._postgres else "?"
   vr=db.conn.execute("SELECT source_name FROM ph_cluster_items WHERE news_item_id="+p,(int(row["id"]),)).fetchall()
   names=[str(x["source_name"]) for x in vr]
-  classification=record_verification(db,int(row["id"]),len(names),names,[])\n  attach_event(db,int(row["id"]),row.get("title") or "",row.get("category") or "general",row.get("source_name") or (names[0] if names else ""))\n  score_story(db,row,len(names),classification,round(duplicate[0]*100,2) if duplicate else 0)
+  classification=record_verification(db,int(row["id"]),len(names),names,[])
+  attach_event(db,int(row["id"]),row.get("title") or "",row.get("category") or "general",row.get("source_name") or (names[0] if names else ""))\n  event_id=attach_event(db,int(row["id"]),row.get("title") or "",row.get("category") or "general",row.get("source_name") or (names[0] if names else ""))
+  score_story(db,row,len(names),classification,round(duplicate[0]*100,2) if duplicate else 0)
+  for source in names or ([row.get("source_name")] if row.get("source_name") else []):
+   record_source(db,source,success=True,coverage=len(names)>=2)
   audit_stage(db,int(row["id"]),"VERIFICATION","completed",{"classification":classification,"source_count":len(names)})
   state_transition(db,int(row["id"]),"COLLECTED")
   route=manager_route(row.get("title") or "",row.get("category") or "general",bool(row.get("image_url")))
@@ -272,8 +278,11 @@ def main():
   with agent_run(db, "writer", "prepare_story", int(row["id"]), {"route":route}):
    ready=prepare_content(db,row)
   if not ready:held+=1; print(f"Website publish held for item {row['id']}: no usable source text"); continue
+  if not publish_lock(db,int(row["id"]),event_id):
+   held+=1; audit_stage(db,int(row["id"]),"PUBLISH_LOCK","blocked",{"story_key":event_id}); print(f"Website duplicate lock blocked item {row["id"]}"); continue
   with agent_run(db, "publisher", "publish_website", int(row["id"])):
    publish_website_first(db,row,now.isoformat())
+   mark_published(db,int(row["id"]),"website")
   published+=1
  repaired=repair_published_content(db,repair_items); attempted=set(); priority_handled=False
  if publish_instagram:
