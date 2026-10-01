@@ -262,7 +262,7 @@ def main():
   p="%s" if db._postgres else "?"
   vr=db.conn.execute("SELECT source_name FROM ph_cluster_items WHERE news_item_id="+p,(int(row["id"]),)).fetchall()
   names=[str(x["source_name"]) for x in vr]
-  classification=record_verification(db,int(row["id"]),len(names),names,[])
+  classification=record_verification(db,int(row["id"]),len(names),names,[])\n  attach_event(db,int(row["id"]),row.get("title") or "",row.get("category") or "general",row.get("source_name") or (names[0] if names else ""))\n  score_story(db,row,len(names),classification,round(duplicate[0]*100,2) if duplicate else 0)
   audit_stage(db,int(row["id"]),"VERIFICATION","completed",{"classification":classification,"source_count":len(names)})
   state_transition(db,int(row["id"]),"COLLECTED")
   route=manager_route(row.get("title") or "",row.get("category") or "general",bool(row.get("image_url")))
