@@ -208,12 +208,31 @@ def analytics(db, days=7):
     cutoff=(datetime.now(timezone.utc)-timedelta(days=max(1,min(int(days),90)))).isoformat()
     ph="%s" if db._postgres else "?"
     agents=_exec(db,"SELECT * FROM ph_agents ORDER BY phase,agent_id").fetchall()
+    # One aggregate query replaces the previous per-agent query fan-out.
+    q=_exec(db,
+        "SELECT agent_id,"
+        "COUNT(*) FILTER (WHERE started_at >= "+ph+") runs,"
+        "SUM(CASE WHEN status='success' AND started_at >= "+ph+" THEN 1 ELSE 0 END) successes,"
+        "SUM(CASE WHEN status='failed' AND started_at >= "+ph+" THEN 1 ELSE 0 END) failed,"
+        "AVG(CASE WHEN started_at >= "+ph+" THEN duration_seconds END) avg_duration,"
+        "SUM(CASE WHEN status='running' THEN 1 ELSE 0 END) active"
+        " FROM ph_agent_runs GROUP BY agent_id",
+        (cutoff,cutoff,cutoff,cutoff)
+    ).fetchall()
+    stats={str(x["agent_id"]):x for x in q}
     out=[]
     for a in agents:
-        s=_exec(db,"SELECT COUNT(*) runs,SUM(CASE WHEN status='success' THEN 1 ELSE 0 END) successes,SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) failed,AVG(duration_seconds) avg_duration FROM ph_agent_runs WHERE agent_id="+ph+" AND started_at >= "+ph,(a["agent_id"],cutoff)).fetchone()
-        current=_exec(db,"SELECT COUNT(*) count FROM ph_agent_runs WHERE agent_id="+ph+" AND status='running'",(a["agent_id"],)).fetchone()
-        runs=int(s["runs"] or 0); successes=int(s["successes"] or 0); failed=int(s["failed"] or 0); active=int(current["count"] or 0)
-        row=dict(a); row.update(runs=runs,successes=successes,failed=failed,success_rate=round(successes/runs*100,1) if runs else None,avg_duration_seconds=round(float(s["avg_duration"] or 0),3),current_load=active,load_percent=min(100,active*25)); out.append(row)
+        s=stats.get(str(a["agent_id"]))
+        runs=int((s["runs"] if s else 0) or 0)
+        successes=int((s["successes"] if s else 0) or 0)
+        failed=int((s["failed"] if s else 0) or 0)
+        active=int((s["active"] if s else 0) or 0)
+        row=dict(a)
+        row.update(runs=runs,successes=successes,failed=failed,
+                   success_rate=round(successes/runs*100,1) if runs else None,
+                   avg_duration_seconds=round(float((s["avg_duration"] if s else 0) or 0),3),
+                   current_load=active,load_percent=min(100,active*25))
+        out.append(row)
     totals={"runs":sum(x["runs"] for x in out),"successes":sum(x["successes"] for x in out),"failed":sum(x["failed"] for x in out)}
     totals["success_rate"]=round(totals["successes"]/totals["runs"]*100,1) if totals["runs"] else None
     return {"agents":out,"totals":totals,"days":days}
