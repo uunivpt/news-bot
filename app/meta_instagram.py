@@ -82,7 +82,7 @@ def publish_reel(video_url,caption):
     if not token: raise RuntimeError("Instagram is not configured. Add META_ACCESS_TOKEN.")
     if not video_url.startswith(("https://","http://")): raise ValueError("Instagram requires a publicly reachable video URL.")
     _video_preflight(video_url); base=f"{host}/{version}"; account=_resolve_instagram_user(base,token,configured_account)
-    media_data={"media_type":"REELS","video_url":video_url,"caption":caption,"thumb_offset":"7500","access_token":token}
+    media_data={"media_type":"REELS","video_url":video_url,"caption":caption,"thumb_offset":"8200","access_token":token}
     r=requests.post(f"{base}/{account}/media",data=media_data,timeout=60)
     # Recover once when a stale/wrong configured account ID is rejected by Meta.
     if configured_account and _is_missing_object_error(r):
