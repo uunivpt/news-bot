@@ -51,7 +51,7 @@ def _data_uri(url):
             try:
                 import mimetypes
                 mime = mimetypes.guess_type(str(local))[0] or "image/jpeg"
-                return "data:" + mime + ";base64;" + base64.b64encode(local.read_bytes()).decode()
+                return "data:" + mime + ";base64," + base64.b64encode(local.read_bytes()).decode()
             except Exception:
                 return None
         return value
