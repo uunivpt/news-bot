@@ -116,7 +116,24 @@ jobs:
             echo "Public snapshot unchanged."
           else
             git commit -m "chore: refresh public news snapshot [skip ci]"
-            git push
+            # Another workflow/manual commit can land on main while this job is
+            # building the snapshot. Rebase our generated commit onto the latest
+            # main before pushing, and retry a few times instead of failing the
+            # entire news-processing run on a harmless fast-forward race.
+            pushed=false
+            for attempt in 1 2 3; do
+              if git push origin HEAD:main; then
+                pushed=true
+                break
+              fi
+              echo "Snapshot push raced with another main commit; rebasing (attempt $attempt/3)."
+              git fetch origin main
+              git rebase origin/main
+            done
+            if [ "$pushed" != "true" ]; then
+              echo "ERROR: Could not push public snapshot after 3 retries."
+              exit 1
+            fi
           fi
       - name: Publish website, process news and Instagram queue
         env:
