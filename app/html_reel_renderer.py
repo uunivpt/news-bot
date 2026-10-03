@@ -4,7 +4,8 @@ from pathlib import Path
 import requests, websocket
 
 CAPTURE_WIDTH, CAPTURE_HEIGHT, FPS, DURATION = 540, 960, 30, 18.0
-CDP_TIMEOUT = float(os.getenv("PH_CDP_TIMEOUT", "180"))
+CDP_TIMEOUT = float(os.getenv("PH_CDP_TIMEOUT", "90"))
+JPEG_QUALITY = int(os.getenv("PH_REEL_JPEG_QUALITY", "88"))
 
 def _find_browser():
     import shutil
@@ -79,9 +80,9 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
         _cdp(ws,counter,"Runtime.evaluate",{"expression":"document.fonts&&document.fonts.ready?document.fonts.ready.then(()=>true):true","awaitPromise":True})
         for i in range(int(DURATION*FPS)):
             _cdp(ws,counter,"Runtime.evaluate",{"expression":f"window.PH.render({i/FPS:.6f});"})
-            shot=_cdp(ws,counter,"Page.captureScreenshot",{"format":"png","captureBeyondViewport":False})
-            (frames/f"f{i:04d}.png").write_bytes(base64.b64decode(shot["data"]))
-        subprocess.run(["ffmpeg","-y","-framerate",str(FPS),"-i",str(frames/"f%04d.png"),
+            shot=_cdp(ws,counter,"Page.captureScreenshot",{"format":"jpeg","quality":JPEG_QUALITY,"optimizeForSpeed":True,"captureBeyondViewport":False})
+            (frames/f"f{i:04d}.jpg").write_bytes(base64.b64decode(shot["data"]))
+        subprocess.run(["ffmpeg","-y","-framerate",str(FPS),"-i",str(frames/"f%04d.jpg"),
                         "-vf","scale=1080:1920:flags=lanczos","-c:v","libx264","-preset","veryfast",
                         "-crf","18","-pix_fmt","yuv420p","-movflags","+faststart",str(silent)],
                        check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
