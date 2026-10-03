@@ -42,8 +42,19 @@ def _free_port():
 
 
 def _data_uri(url):
-    if not url or not str(url).startswith(("http://", "https://")):
-        return url
+    if not url:
+        return None
+    value = str(url)
+    if not value.startswith(("http://", "https://")):
+        local = Path(value)
+        if local.exists() and local.is_file():
+            try:
+                import mimetypes
+                mime = mimetypes.guess_type(str(local))[0] or "image/jpeg"
+                return "data:" + mime + ";base64;" + base64.b64encode(local.read_bytes()).decode()
+            except Exception:
+                return None
+        return value
     try:
         response = requests.get(
             str(url),
