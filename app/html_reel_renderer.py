@@ -287,7 +287,7 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
             ws,
             counter,
             "Runtime.evaluate",
-            {"expression": "window.PH.load(JSON.parse(window.__PH_NEWS)); window.PH.render(0);"},
+            {"expression": "window.PH.load(JSON.parse(window.__PH_NEWS)); window.PH.stop(); window.PH.render(0);"},
         )
 
         total_frames = int(round(DURATION * FPS))
