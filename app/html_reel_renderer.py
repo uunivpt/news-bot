@@ -136,9 +136,7 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
             "document.getElementById('w').style.height='960px';"
             "document.getElementById('w').style.boxShadow='none';"
             "document.getElementById('st').style.transform='scale(0.5');"
-            "window.PH.load(window.__PH_NEWS);"
-            "window.T=0;window.pl=true;window.last=performance.now();"
-            "window.PH.render(0);true"
+            "window.PH.load(window.__PH_NEWS);window.PH.render(0);true"
         })
         _cdp(ws,counter,"Runtime.evaluate",{
             "expression":"document.fonts&&document.fonts.ready?document.fonts.ready.then(()=>true):true",
@@ -146,7 +144,7 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
         })
         # Fonts can resolve after the first build; rebuild once before recording.
         _cdp(ws,counter,"Runtime.evaluate",{"expression":
-            "window.PH.load(window.__PH_NEWS);window.T=0;window.last=performance.now();window.PH.render(0);true"
+            "window.PH.load(window.__PH_NEWS);window.PH.playFromStart();true"
         })
 
         try:
