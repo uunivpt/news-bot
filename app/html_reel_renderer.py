@@ -325,7 +325,7 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
                 "Page.captureScreenshot",
                 {
                     "format": "jpeg",
-                    "quality": 95,
+                    "quality": 100,
                     "captureBeyondViewport": False,
                     "fromSurface": True,
                 },
