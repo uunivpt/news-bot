@@ -1,4 +1,4 @@
-name: Test 18s Reel
+name: Test 16s Reel
 
 on:
   workflow_dispatch:
@@ -90,7 +90,7 @@ jobs:
           PGSSLMODE: ""
         run: python tests/test_advanced_system.py -v
 
-      - name: Build current 18-second HTML Reel
+      - name: Build current 16-second HTML Reel
         env:
           PYTHONPATH: .
         run: |
@@ -105,7 +105,7 @@ jobs:
                   "date": "03 Oct 2026",
                   "location": "Donetsk, Ukraine",
                   "source": "PoliticsHub",
-                  "summary": "This verifies the current production HTML template, dynamic text fields, no-image path and exact duration.",
+                  "summary": "This verifies the current production HTML template, dynamic text fields, no-image path and exact 16-second duration.",
                   "image_url": None,
               },
               "data/media/test_html_no_image.mp4",
@@ -131,9 +131,9 @@ jobs:
           duration = float(info["format"]["duration"])
           video = next(s for s in info["streams"] if s.get("width"))
 
-          assert abs(duration - 18.0) <= 0.15, duration
+          assert abs(duration - 16.0) <= 0.15, duration
           assert (video["width"], video["height"]) == (1080, 1920)
-          assert video["pix_fmt"] in {"yuv420p", "yuvj420p"}
+          assert video["pix_fmt"] == "yuv444p"
           assert "60/1" in subprocess.check_output([
               "ffprobe", "-v", "error", "-select_streams", "v:0",
               "-show_entries", "stream=r_frame_rate", "-of", "default=nw=1:nk=1", path
@@ -144,6 +144,6 @@ jobs:
       - name: Upload Reel test artifact
         uses: actions/upload-artifact@v4
         with:
-          name: politicshub-18s-reel-test
+          name: politicshub-16s-reel-test
           path: data/media/test_html_no_image.mp4
           retention-days: 3
