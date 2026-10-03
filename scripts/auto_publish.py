@@ -183,7 +183,7 @@ def _process_instagram_untracked(db,row,music):
      if not qa_card.get("passed"): raise RuntimeError(f"Visual QA failed: {qa_card.get('errors')}")
     build_reel([str(p) for p in cards],str(video),audio_path=music,duration_per_image=18)
    preview=OUT/"reel_previews"/f"{item_id}.jpg"; preview.parent.mkdir(parents=True,exist_ok=True)
-   subprocess.run(["ffmpeg","-y","-ss","9","-i",str(video),"-frames:v","1","-vf","scale=540:-1",str(preview)],check=True,capture_output=True,text=True)
+   subprocess.run(["ffmpeg","-y","-ss","9","-i",str(video),"-frames:v","1","-vf","scale=1080:1920",str(preview)],check=True,capture_output=True,text=True)
    preview_path=str(preview)
    qa_card=visual_qa_card(preview)
    if not qa_card.get("passed"): raise RuntimeError(f"Visual QA failed: {qa_card.get('errors')}")
