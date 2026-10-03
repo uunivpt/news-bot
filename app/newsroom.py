@@ -190,10 +190,10 @@ def select_sentences(text,limit,title=""):
     # "a review will continue". Only a strong operational outcome may occupy
     # the final slot when it carries a material status/change.
     STRONG_OUTCOME_RE=re.compile(
-        r"\\b(?:remain|remains|remained|suspend|suspended|"
+        r"\b(?:remain|remains|remained|suspend|suspended|"
         r"resume|resumed|reopen|reopened|continue|continues|"
         r"continued|cancel|cancelled|closed|shutdown|"
-        r"take effect|will operate|is not affected)\\b",re.I
+        r"take effect|will operate|is not affected)\b",re.I
     )
     strong_outcomes=[
         i for i in outcomes
