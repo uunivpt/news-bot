@@ -2,6 +2,8 @@ from __future__ import annotations
 import re
 from collections import Counter
 
+from app.extractive_summarizer import hybrid_scores
+
 URL_RE=re.compile(r"https?://\S+",re.I)
 SPACE_RE=re.compile(r"\s+")
 BAD_LINE_RE=re.compile(r"^(?:source|via|follow|subscribe|read more|click here|advertisement|ad)\b",re.I)
@@ -119,14 +121,20 @@ def select_sentences(text,limit,title=""):
 
     title_words=set(_content_words(title))
     frequency=Counter(w for item in items for w in _content_words(item))
-    ranked=[]
+    editorial_scores=[]
     for i,item in enumerate(items):
         score=_score(item,i,len(items),title_words)
         # Repeated generic words are less informative than distinctive facts.
         words=_content_words(item)
         if words:
             score += sum(1.0/max(1,frequency[w]) for w in set(words))*0.18
-        ranked.append((score,i,item))
+        editorial_scores.append(score)
+
+    # Hybrid extractive ranking:
+    # 58% newsroom factual/editorial score + 24% TextRank + 18% LexRank.
+    # The algorithms only choose source sentences; they never generate text.
+    algorithm_scores=hybrid_scores(items,editorial_scores)
+    ranked=[(algorithm_scores[i],i,items[i]) for i in range(len(items))]
 
     chosen=[]
     remaining=ranked[:]
