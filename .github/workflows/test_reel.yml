@@ -12,6 +12,7 @@ on:
       - "app/database.py"
       - "app/news_pulse_audio.py"
       - "requirements.txt"
+      - "tests/test_image_acquisition.py"
       - ".github/workflows/test_reel.yml"
 
 jobs:
