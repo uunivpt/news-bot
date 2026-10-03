@@ -72,7 +72,6 @@ jobs:
         run: python tests/test_advanced_system.py -v
 
       - name: Render current HTML Reel without image
-        continue-on-error: true
         env:
           PYTHONPATH: .
         run: |
@@ -98,41 +97,6 @@ jobs:
             curl -fsS -X PUT -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPOSITORY}/contents/ci-render-error-${GITHUB_RUN_ID}.txt" -d "{\"message\":\"Record HTML renderer CI failure\",\"content\":\"$encoded\",\"branch\":\"main\"}" || true
             cat data/media/html_render.log
             exit "$rc"
-          fi
-
-      - name: Diagnose renderer - CDP
-        if: always()
-        run: |
-          if grep -Eiq 'CDP|websocket|timed out|Timeout' data/media/html_render.log 2>/dev/null; then
-            exit 1
-          fi
-
-      - name: Diagnose renderer - Chromium/Xvfb
-        if: always()
-        run: |
-          if grep -Eiq 'Chromium|Chrome|xvfb|DevTools|browser' data/media/html_render.log 2>/dev/null; then
-            exit 1
-          fi
-
-      - name: Diagnose renderer - frame capture
-        if: always()
-        run: |
-          if grep -Eiq 'screencast|frame|screenshot' data/media/html_render.log 2>/dev/null; then
-            exit 1
-          fi
-
-      - name: Diagnose renderer - FFmpeg
-        if: always()
-        run: |
-          if grep -Eiq 'ffmpeg|encoder|libx264' data/media/html_render.log 2>/dev/null; then
-            exit 1
-          fi
-
-      - name: Renderer failed with unclassified error
-        if: always()
-        run: |
-          if [ ! -s data/media/test_html_no_image.mp4 ]; then
-            exit 1
           fi
 
       - name: Verify HTML Reel duration
