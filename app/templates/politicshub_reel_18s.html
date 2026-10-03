@@ -148,5 +148,5 @@ addEventListener('resize',fitStage);fitStage();build(window.NEWS||S[0]);
 document.fonts&&document.fonts.ready.then(()=>build(window.NEWS||S[+sel.value]));
 requestAnimationFrame(t=>{last=t;loop(t)});
 /* Pipeline hooks: PH.load({headline,category,date,location,source,summary,img,focus:[x,y],cta}); PH.render(seconds) draws any frame deterministically (headless capture @ PH.fps) */
-window.PH={render,DUR,fps:30,load:o=>build({...S[0],...o}),ready:document.fonts?document.fonts.ready:Promise.resolve()};
+window.PH={render,DUR,fps:30,load:o=>build({...S[0],...o}),playFromStart:()=>{T=0;pl=true;last=performance.now();render(0)},ready:document.fonts?document.fonts.ready:Promise.resolve()};
 </script></body></html>
