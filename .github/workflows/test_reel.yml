@@ -13,7 +13,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -120,7 +120,11 @@ jobs:
           assert abs(duration - 18.0) <= 0.15, duration
           assert (video["width"], video["height"]) == (1080, 1920)
           assert video["pix_fmt"] in {"yuv420p", "yuvj420p"}
-          print(f"PASS: {duration:.3f}s / 1080x1920 / {video['pix_fmt']}")
+          assert "60/1" in subprocess.check_output([
+              "ffprobe", "-v", "error", "-select_streams", "v:0",
+              "-show_entries", "stream=r_frame_rate", "-of", "default=nw=1:nk=1", path
+          ], text=True)
+          print(f"PASS: {duration:.3f}s / 1080x1920 / 60fps / {video['pix_fmt']}")
           PY
 
       - name: Upload Reel test artifact
