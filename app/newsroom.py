@@ -31,7 +31,11 @@ FACT_VERBS=re.compile(
     r"introduced|agreed|rejected|accepted|opened|closed|began|ended|"
     r"started|stopped|won|lost|filed|charged|arrested|issued|released|"
     r"raised|cut|increased|decreased|fell|rose|set|will|plans?|expected|"
-    r"effective|scheduled|resigned|appointed|elected|found|identified)\b",re.I
+    r"effective|scheduled|resigned|appointed|elected|found|identified|"
+    r"returned|operated|operate|publish|published|generating|generated|"
+    r"treated|remain|remains|reviewed|review|continues|continuing|"
+    r"installed|added|deployed|receive|received|applies|affects|"
+    r"available|begin|begins|run|runs|resume|resumed)\b",re.I
 )
 CONSEQUENCE_WORDS=re.compile(
     r"\b(?:effective|from|starting|next|result|following|after|because|"
@@ -93,7 +97,7 @@ def _score(sentence,index,total,title_words):
     overlap=len(unique & title_words)/max(1,len(title_words))
     score += min(3.0,overlap*4.0)
 
-    if DATE_OR_NUMBER_RE.search(sentence): score += 1.8
+    if DATE_OR_NUMBER_RE.search(sentence): score += 3.0
     if FACT_VERBS.search(sentence): score += 1.4
     if CONSEQUENCE_WORDS.search(sentence): score += 1.1
 
