@@ -122,10 +122,17 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
 
         payload=json.dumps(item,ensure_ascii=False)
         _cdp(ws,counter,"Page.addScriptToEvaluateOnNewDocument",{"source":f"window.__PH_NEWS={payload};"})
-        nav=_cdp(ws,counter,"Page.navigate",{"url":template.resolve().as_uri()})
-        if nav.get("errorText"):
-            raise RuntimeError(f"Template navigation failed: {nav['errorText']}")
+        _cdp(ws,counter,"Page.navigate",{"url":template.resolve().as_uri()})
+        # Chromium can report ERR_ABORTED for a local file navigation even when
+        # the document is already committed. Verify the DOM instead of failing
+        # on that transient navigation status.
         time.sleep(1)
+        ready=_cdp(ws,counter,"Runtime.evaluate",{
+            "expression":"Boolean(document.getElementById('st') && window.PH)",
+            "returnByValue":True,
+        })
+        if not ready.get("result",False):
+            raise RuntimeError("PoliticsHub Reel template did not initialize in Chromium")
 
         _cdp(ws,counter,"Runtime.evaluate",{"expression":
             "document.body.style.background='#050506';"
