@@ -15,7 +15,7 @@ import requests
 import websocket
 
 FPS = 60
-DURATION = 18.0
+DURATION = 16.0
 WIDTH = 1080
 HEIGHT = 1920
 CDP_TIMEOUT = float(os.getenv("PH_CDP_TIMEOUT", "30"))
@@ -298,7 +298,7 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
             ws,
             counter,
             "Runtime.evaluate",
-            {"expression": "window.PH.load(JSON.parse(window.__PH_NEWS)); window.PH.stop(); window.PH.render(0);"},
+            {"expression": "window.PH.load(JSON.parse(window.__PH_NEWS)); window.PH.stop(); window.PH.render(2.700000);"},
         )
 
         total_frames = int(round(DURATION * FPS))
@@ -308,7 +308,7 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
             timestamp = index / FPS
             expression = (
                 "(function(){"
-                "window.PH.render(" + f"{timestamp:.6f}" + ");"
+                "window.PH.render(" + f"{timestamp + 2.7:.6f}" + ");"
                 "return true;"
                 "})()"
             )
@@ -432,7 +432,7 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
             stream for stream in info["streams"] if stream.get("width")
         )
         if abs(duration - DURATION) > 0.15:
-            raise RuntimeError(f"HTML Reel duration is {duration:.3f}s, expected 18.000s")
+            raise RuntimeError(f"HTML Reel duration is {duration:.3f}s, expected 16.000s")
         if video.get("width") != 1080 or video.get("height") != 1920:
             raise RuntimeError(
                 f"HTML Reel resolution is {video.get('width')}x{video.get('height')}, expected 1080x1920"
