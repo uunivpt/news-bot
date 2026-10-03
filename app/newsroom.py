@@ -195,9 +195,12 @@ def select_sentences(text,limit,title=""):
         r"continued|cancel|cancelled|closed|shutdown|"
         r"take effect|will operate|is not affected)\b",re.I
     )
+    # Strong outcomes must be detected from every source sentence, not only
+    # the softer consequence-word bucket; otherwise material status changes can
+    # be missed by the final coverage pass.
     strong_outcomes=[
-        i for i in outcomes
-        if STRONG_OUTCOME_RE.search(items[i])
+        i for i in ranked
+        if valid(i) and STRONG_OUTCOME_RE.search(items[i])
     ]
 
     # If fewer than limit factual sentences exist, add one strong operational
