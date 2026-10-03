@@ -11,6 +11,8 @@ on:
       - "app/image_acquisition.py"
       - "app/database.py"
       - "app/news_pulse_audio.py"
+      - "app/newsroom.py"
+      - "tests/test_newsroom.py"
       - "requirements.txt"
       - "tests/test_image_acquisition.py"
       - ".github/workflows/test_reel.yml"
@@ -61,6 +63,11 @@ jobs:
           DATABASE_URL: ""
           PGSSLMODE: ""
         run: python -m unittest tests/test_database.py -v
+
+      - name: Test newsroom summarization
+        env:
+          PYTHONPATH: .
+        run: python -m unittest tests/test_newsroom.py -v
 
       - name: Test newsroom
         env:
