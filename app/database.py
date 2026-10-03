@@ -151,7 +151,7 @@ class NewsDatabase:
   if search:clauses.append(f"(LOWER(title) LIKE LOWER({ph}) OR LOWER(summary) LIKE LOWER({ph}))");params.extend([f"%{search}%",f"%{search}%"])
   where=(" WHERE "+" AND ".join(clauses)) if clauses else ""; return self.conn.execute(f"SELECT * FROM news_items{where} ORDER BY id DESC LIMIT {ph}",(*params,limit)).fetchall()
  def update(self,item_id:int,**fields:Any):
-  allowed={"title","summary","category","status","bot_summary","bot_article","ai_summary","ai_article","fact_check_status","fact_check_notes","image_url","approved_at","published_at_site","instagram_status","instagram_media_id","instagram_error","instagram_published_at","instagram_attempts","instagram_last_attempt_at","instagram_next_retry_at","instagram_scheduled_at","instagram_container_id","reel_cloudinary_public_id","instagram_selected","instagram_queue_order","public_source"}; fields={k:v for k,v in fields.items() if k in allowed}
+  allowed={"title","summary","category","status","bot_summary","bot_article","ai_summary","ai_article","fact_check_status","fact_check_notes","image_url","approved_at","published_at_site","instagram_status","instagram_media_id","instagram_error","instagram_published_at","instagram_attempts","instagram_last_attempt_at","instagram_next_retry_at","instagram_scheduled_at","instagram_container_id","reel_cloudinary_public_id","reel_cloudinary_url","instagram_selected","instagram_queue_order","public_source"}; fields={k:v for k,v in fields.items() if k in allowed}
   if not fields:return
   ph="%s" if self._postgres else "?";sets=[];params=[]
   for k,v in fields.items():sets.append(f"{k} = {ph}");params.append(v)
