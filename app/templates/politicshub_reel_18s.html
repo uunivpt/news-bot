@@ -55,7 +55,7 @@ const esc=s=>String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt
 const ck=N.category.toUpperCase();st.innerHTML='';I=[];D=[];
 const ac=AC[ck]||'#e63946',v=parseInt(ac.slice(1),16),lum=((v>>16)*299+(v>>8&255)*587+(v&255)*114)/1000;
 st.style.setProperty('--ac',ac);st.style.setProperty('--on',lum>150?'#000':'#fff');
-const hasImage=Boolean(N0.img),img=N0.img||'',imgH=`<img src="${img}" style="width:100%;height:100%;object-fit:cover;object-position:${(N0.focus||[50,40]).map(q=>q+'%').join(' ')};display:block">`,
+const hasImage=Boolean(N0.img||N0.image_url),img=N0.img||N0.image_url||'',imgH=`<img src="${img}" style="width:100%;height:100%;object-fit:cover;object-position:${(N0.focus||[50,40]).map(q=>q+'%').join(' ')};display:block">`,
 lg=(w,s)=>`<img src="${s}" style="width:${w}px;display:block">`,cam=mk('',st,'','inset:0');root=cam;
 const brk=(x,y,w,h,s,a,out,col)=>[[0,0,'Top Left'],[w-s,0,'Top Right'],[0,h-s,'Bottom Left'],[w-s,h-s,'Bottom Right']].forEach(([dx,dy,k],i)=>{const e=mk('',cam,'',`left:${x+dx}px;top:${y+dy}px;width:${s}px;height:${s}px;border:0 solid ${col||'#fff'}`);k.split(' ').forEach(z=>e.style['border'+z+'Width']='4px');A(e,a+i*.06,a+i*.06+.5,{fs:1.6,out})});
 const grid=(P,o,out)=>{for(let i=1;i<8;i++)A(mk('l',P,'',`left:${i*135}px;top:0;width:1px;height:1920px`),o+.1+i*.07,o+.9+i*.07,{c:[100,0,0,0],out});for(let i=1;i<14;i++)A(mk('l',P,'',`top:${i*137}px;left:0;height:1px;width:1080px`),o+.2+i*.04,o+.9+i*.04,{c:[0,100,0,0],out})};
