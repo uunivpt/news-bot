@@ -147,34 +147,38 @@ def setup_owner():
  if session.get("admin_user"):return jsonify({"error":"owner setup is disabled after sign-in"}),403
  key=os.getenv("ADMIN_SETUP_KEY","").strip() or os.getenv("ADMIN_TOKEN","").strip(); body=request.get_json(silent=True) or request.form.to_dict() or {}
  if not key:return jsonify({"error":"owner setup is disabled; configure ADMIN_SETUP_KEY or ADMIN_TOKEN first"}),503
- if not secrets.compare_digest(str(body.get("setup_key","")),key):return jsonify({"error":"invalid setup key"}),403
- username=str(body.get("username","")).strip(); password=str(body.get("password",""))
- if len(username)<3 or len(username)>40 or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-" for c in username):return jsonify({"error":"invalid username"}),400
- if len(password)<12:return jsonify({"error":"password must be at least 12 characters"}),400
  database=db()
  try:
+  if not _auth_allowed(database,_setup_key(),_SETUP_MAX_FAILURES):return jsonify({"error":"too many setup attempts; try again later"}),429
+  if not secrets.compare_digest(str(body.get("setup_key","")),key):
+   _auth_failed(database,_setup_key()); return jsonify({"error":"invalid setup key"}),403
+  username=str(body.get("username","")).strip(); password=str(body.get("password",""))
+  if len(username)<3 or len(username)>40 or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-" for c in username):return jsonify({"error":"invalid username"}),400
+  if len(password)<12:return jsonify({"error":"password must be at least 12 characters"}),400
   count=int(database.conn.execute("SELECT COUNT(*) AS count FROM admin_users").fetchone()["count"] if database._postgres else database.conn.execute("SELECT COUNT(*) AS count FROM admin_users").fetchone()[0])
   if count:return jsonify({"error":"owner already exists; setup is permanently closed"}),409
-  now=datetime.now(timezone.utc).isoformat(); ph="%s" if database._postgres else "?"; database.conn.execute(f"INSERT INTO admin_users (username,password_hash,role,created_at) VALUES ({ph},{ph},{ph},{ph})",(username,generate_password_hash(password),"owner",now));
+  now=datetime.now(timezone.utc).isoformat(); ph="%s" if database._postgres else "?"; database.conn.execute(f"INSERT INTO admin_users (username,password_hash,role,created_at) VALUES ({ph},{ph},{ph},{ph})",(username,generate_password_hash(password),"owner",now))
   if not database._postgres:database.conn.commit()
-  session.clear(); session["admin_user"]=username; session["admin_role"]="owner"; session["csrf_token"]=secrets.token_urlsafe(32); return jsonify({"ok":True,"username":username,"role":"owner","csrf_token":session["csrf_token"]})
+  _auth_clear(database,_setup_key()); session.clear(); session["admin_user"]=username; session["admin_role"]="owner"; session["csrf_token"]=secrets.token_urlsafe(32); return jsonify({"ok":True,"username":username,"role":"owner","csrf_token":session["csrf_token"]})
  finally:database.close()
 
 @app.post("/api/admin/login")
 def login():
- if not _login_allowed():return jsonify({"error":"too many login attempts; try again later"}),429
- body=request.get_json(silent=True) or request.form.to_dict() or {}; username=str(body.get("username","")).strip(); password=str(body.get("password","")); database=db(); valid=False; role=None
+ body=request.get_json(silent=True) or request.form.to_dict() or {}; username=str(body.get("username","")).strip(); password=str(body.get("password","")); database=db(); attempt_key=_auth_key(username)
  try:
-  ph="%s" if database._postgres else "?"; row=database.conn.execute("SELECT username,password_hash,role FROM admin_users WHERE username = "+ph,(username,)).fetchone(); valid=bool(row and check_password_hash(row["password_hash"] if database._postgres else row[1],password)); role=(row["role"] if database._postgres else row[2]) if row else None
+  if not _auth_allowed(database,attempt_key,_LOGIN_MAX_FAILURES):return jsonify({"error":"too many login attempts; try again later"}),429
+  valid=False; role=None; ph="%s" if database._postgres else "?"
+  row=database.conn.execute("SELECT username,password_hash,role FROM admin_users WHERE username = "+ph,(username,)).fetchone(); valid=bool(row and check_password_hash(row["password_hash"] if database._postgres else row[1],password)); role=(row["role"] if database._postgres else row[2]) if row else None
   if not valid and username=="admin":
    count=int(database.conn.execute("SELECT COUNT(*) AS count FROM admin_users").fetchone()["count"] if database._postgres else database.conn.execute("SELECT COUNT(*) AS count FROM admin_users").fetchone()[0]); bootstrap=os.getenv("ADMIN_SETUP_KEY","") or os.getenv("ADMIN_TOKEN","")
    if count==0 and bootstrap and secrets.compare_digest(password,bootstrap):
     now=datetime.now(timezone.utc).isoformat(); database.conn.execute(f"INSERT INTO admin_users (username,password_hash,role,created_at) VALUES ({ph},{ph},{ph},{ph})",("admin",generate_password_hash(password),"owner",now)); valid=True; role="owner"
+  if not valid:
+   record=users().get(username); valid=bool(record and check_password_hash(record,password)); role="owner" if valid else None
+  if not valid:
+   _auth_failed(database,attempt_key); return jsonify({"error":"invalid credentials"}),401
+  _auth_clear(database,attempt_key); session.clear(); session["admin_user"]=username; session["admin_role"]=role or "owner"; session["csrf_token"]=secrets.token_urlsafe(32); return jsonify({"ok":True,"username":username,"role":session["admin_role"],"csrf_token":session["csrf_token"]})
  finally:database.close()
- if not valid:
-  record=users().get(username); valid=bool(record and check_password_hash(record,password)); role="owner" if valid else None
- if not valid:_login_failed(); return jsonify({"error":"invalid credentials"}),401
- _login_failures.pop(_client_key(),None); session.clear(); session["admin_user"]=username; session["admin_role"]=role or "owner"; session["csrf_token"]=secrets.token_urlsafe(32); return jsonify({"ok":True,"username":username,"role":session["admin_role"],"csrf_token":session["csrf_token"]})
 
 @app.post("/api/admin/logout")
 def logout():
