@@ -16,6 +16,15 @@ on:
       - "tests/test_newsroom.py"
       - "requirements.txt"
       - "tests/test_image_acquisition.py"
+      - "api/index.py"
+      - "public/home.html"
+      - "public/article.html"
+      - "public/admin/index.html"
+      - "public/admin.js"
+      - "public/assets/home-init.js"
+      - "public/assets/article-init.js"
+      - "public/assets/site.js"
+      - "public/assets/site.css"
       - ".github/workflows/test_reel.yml"
 
 jobs:
@@ -50,6 +59,7 @@ jobs:
 
       - name: Validate changed Python syntax
         run: |
+          python -m py_compile api/index.py
           python -m py_compile app/database.py
           python -m py_compile app/image_acquisition.py
           python -m py_compile app/news_pulse_audio.py
@@ -57,6 +67,13 @@ jobs:
           python -m py_compile app/html_reel_renderer.py
           python -m py_compile app/instagram_reel.py
           python -m py_compile scripts/auto_publish.py
+
+      - name: Validate browser JavaScript
+        run: |
+          node --check public/admin.js
+          node --check public/assets/home-init.js
+          node --check public/assets/article-init.js
+          node --check public/assets/site.js
 
       - name: Test database
         env:
