@@ -68,7 +68,7 @@ jobs:
           PGSSLMODE: ''
         run: python tests/test_advanced_system.py -v
 
-      - name: Build current HTML Reel without image
+      - name: Render current HTML Reel without image
         env:
           PYTHONPATH: .
         run: |
@@ -85,6 +85,10 @@ jobs:
               "image_url": None,
           }, "data/media/test_html_no_image.mp4")
           PY
+
+      - name: Verify HTML Reel duration
+        run: |
+          test -s data/media/test_html_no_image.mp4
           DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 data/media/test_html_no_image.mp4)
           python - "$DURATION" <<'PY'
           import sys
