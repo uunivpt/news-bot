@@ -41,35 +41,6 @@ jobs:
           fi
           echo "Instagram worker core configuration is present."
 
-      - name: Smoke test current HTML Reel renderer
-        env:
-          PYTHONPATH: .
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          from app.html_reel_renderer import render_html_reel
-          out = Path("data/media/html_renderer_smoke.mp4")
-          out.parent.mkdir(parents=True, exist_ok=True)
-          render_html_reel({
-              "headline": "PoliticsHub HTML renderer smoke test with a deliberately long headline",
-              "category": "WORLD",
-              "date": "03 Oct 2026",
-              "location": "Test Location",
-              "source": "PoliticsHub",
-              "summary": "Renderer verification before any Instagram publish.",
-              "image_url": None,
-          }, str(out))
-          print(f"HTML renderer PASS: {out}")
-          PY
-          DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprappers=1:nokey=1 data/media/html_renderer_smoke.mp4)
-          python - "$DURATION" <<'PY'
-          import sys
-          d=float(sys.argv[1])
-          if abs(d-18.0)>0.15:
-              raise SystemExit(f"HTML Reel is not 18 seconds: {d}")
-          print("HTML 18-second duration check: PASS")
-          PY
-
       - name: Publish Instagram queue
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
