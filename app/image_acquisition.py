@@ -23,8 +23,11 @@ from PIL import Image
 
 OPENVERSE_URL = "https://api.openverse.org/v1/images/"
 ALLOWED_LICENSES = {"cc0", "pdm", "by", "by-sa"}
-MIN_WIDTH = 640
-MIN_HEIGHT = 360
+MIN_WIDTH = 720
+MIN_HEIGHT = 720
+MIN_LANDSCAPE = (1280, 720)
+MIN_PORTRAIT = (720, 1280)
+MIN_SQUARE = (1080, 1080)
 MAX_RESULTS = 20
 STOPWORDS = {
     "a","an","and","are","as","at","be","been","by","for","from","has","have",
@@ -177,9 +180,14 @@ def _download_and_validate(url: str, destination: Path) -> tuple[int, int]:
     except Exception as exc:
         destination.unlink(missing_ok=True)
         raise ValueError(f"downloaded file is not a valid image: {exc}") from exc
-    if width < MIN_WIDTH or height < MIN_HEIGHT:
+    high_enough = (
+        (width >= MIN_LANDSCAPE[0] and height >= MIN_LANDSCAPE[1])
+        or (width >= MIN_PORTRAIT[0] and height >= MIN_PORTRAIT[1])
+        or (width >= MIN_SQUARE[0] and height >= MIN_SQUARE[1])
+    )
+    if not high_enough:
         destination.unlink(missing_ok=True)
-        raise ValueError(f"image is too small: {width}x{height}")
+        raise ValueError(f"image is too small for HD Reel use: {width}x{height}")
     return width, height
 
 
