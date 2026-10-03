@@ -225,6 +225,50 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
                 "window.PH.load(JSON.parse(window.__PH_NEWS));"
             },
         )
+
+        # The HTML template also contains a browser-only preview toolbar (#ui).
+        # Never capture that editor UI in a production Reel. The stage itself is
+        # 1080x1920, so at our 540x960 capture size it must be displayed at exactly
+        # 50% and fill the complete viewport with no surrounding page layout.
+        _cdp(
+            ws,
+            counter,
+            "Runtime.evaluate",
+            {
+                "expression": """
+                    (() => {
+                        const body = document.body;
+                        const html = document.documentElement;
+                        const wrap = document.getElementById('w');
+                        const stage = document.getElementById('st');
+                        const ui = document.getElementById('ui');
+                        if (!body || !html || !wrap || !stage) throw new Error('Reel stage not found');
+                        if (ui) ui.style.display = 'none';
+                        html.style.width = '540px';
+                        html.style.height = '960px';
+                        html.style.overflow = 'hidden';
+                        body.style.width = '540px';
+                        body.style.height = '960px';
+                        body.style.margin = '0';
+                        body.style.padding = '0';
+                        body.style.display = 'block';
+                        body.style.overflow = 'hidden';
+                        body.style.background = '#050506';
+                        wrap.style.width = '540px';
+                        wrap.style.height = '960px';
+                        wrap.style.margin = '0';
+                        wrap.style.boxShadow = 'none';
+                        wrap.style.overflow = 'hidden';
+                        stage.style.transformOrigin = '0 0';
+                        stage.style.transform = 'scale(0.5)';
+                        stage.style.left = '0';
+                        stage.style.top = '0';
+                        return true;
+                    })()
+                """,
+                "returnByValue": True,
+            },
+        )
         _cdp(
             ws,
             counter,
