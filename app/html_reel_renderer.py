@@ -90,15 +90,24 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
     proc=ws=None
 
     try:
-        proc=subprocess.Popen([
-            browser,"--headless=new","--disable-gpu","--no-sandbox","--disable-dev-shm-usage",
+        import shutil
+        chrome_args=[
+            "--disable-gpu","--no-sandbox","--disable-dev-shm-usage",
             "--hide-scrollbars","--mute-audio","--remote-allow-origins=*",
             "--window-size=540,960",
             "--disable-background-timer-throttling","--disable-renderer-backgrounding",
             "--disable-backgrounding-occluded-windows",
             "--run-all-compositor-stages-before-draw",
             f"--remote-debugging-port={port}",f"--user-data-dir={profile}","about:blank"
-        ],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        ]
+        xvfb=shutil.which("xvfb-run")
+        if xvfb:
+            chrome_cmd=[xvfb,"-a","-s","-screen 0 540x960x24",browser,*chrome_args]
+            print("Launching Chromium under Xvfb for visible compositor capture.")
+        else:
+            chrome_cmd=[browser,"--headless=new",*chrome_args]
+            print("Launching Chromium in headless mode.")
+        proc=subprocess.Popen(chrome_cmd,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 
         deadline=time.time()+15
         ws_url=None
