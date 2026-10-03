@@ -179,23 +179,39 @@ def select_sentences(text,limit,title=""):
                 break
             chosen.append(best[3])
 
-    # If a material outcome is available but was omitted from a concrete-only
-    # selection, replace the least informative chosen sentence. An outcome
-    # wins only when it contributes a distinct fact, not merely boilerplate.
-    for i in outcomes:
+    # Do NOT replace a concrete-fact sentence with a generic outcome such as
+    # "a review will continue". Only a strong operational outcome may occupy
+    # the final slot when it carries a material status/change.
+    STRONG_OUTCOME_RE=re.compile(
+        r"\\b(?:remain|remains|remained|suspend|suspended|"
+        r"resume|resumed|reopen|reopened|continue|continues|"
+        r"continued|cancel|cancelled|closed|shutdown|"
+        r"take effect|will operate|is not affected)\\b",re.I
+    )
+    strong_outcomes=[
+        i for i in outcomes
+        if STRONG_OUTCOME_RE.search(items[i])
+    ]
+
+    # If fewer than limit factual sentences exist, add one strong operational
+    # outcome. If the summary already has limit concrete facts, never evict one
+    # merely because another sentence contains a generic "review" phrase.
+    for i in strong_outcomes:
         if i in chosen:
             break
         if len(chosen)<limit:
             chosen.append(i)
             break
-        replace=min(
-            chosen,
-            key=lambda j: (
-                _score(items[j],j,len(items),title_words),
-                algorithm_scores[j],
-            ),
-        )
-        if _score(items[i],i,len(items),title_words) >= _score(items[replace],replace,len(items),title_words):
+        # Only replace a non-concrete sentence. Concrete facts are protected.
+        non_concrete=[j for j in chosen if not DATE_OR_NUMBER_RE.search(items[j])]
+        if non_concrete:
+            replace=min(
+                non_concrete,
+                key=lambda j: (
+                    _score(items[j],j,len(items),title_words),
+                    algorithm_scores[j],
+                ),
+            )
             chosen[chosen.index(replace)]=i
         break
 
