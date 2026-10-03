@@ -120,7 +120,7 @@ def _jaccard(a,b):
     return len(a&b)/max(1,len(a|b))
 
 def select_sentences(text,limit,title=""):
-    """Select complementary factual sentences without rewriting their facts."""
+    """Select complementary factual source sentences without rewriting them."""
     items=sentences(text)
     limit=max(1,int(limit))
     if len(items)<=limit:return items
@@ -130,77 +130,77 @@ def select_sentences(text,limit,title=""):
     editorial_scores=[]
     for i,item in enumerate(items):
         score=_score(item,i,len(items),title_words)
-        # Repeated generic words are less informative than distinctive facts.
         words=_content_words(item)
         if words:
             score += sum(1.0/max(1,frequency[w]) for w in set(words))*0.18
         editorial_scores.append(score)
 
-    # Hybrid extractive ranking:
-    # 58% newsroom factual/editorial score + 24% TextRank + 18% LexRank.
-    # The algorithms only choose source sentences; they never generate text.
+    # TextRank/LexRank remain part of the ranking, but they are tie-breakers
+    # around the newsroom's factual coverage rules. Centrality alone must never
+    # be allowed to discard a distinct date, number or material outcome.
     algorithm_scores=hybrid_scores(items,editorial_scores)
-    ranked=[(algorithm_scores[i],i,items[i]) for i in range(len(items))]
+    ranked=sorted(range(len(items)),key=lambda i:algorithm_scores[i],reverse=True)
+
+    def valid(i):
+        return not _is_duplicate_of_title(items[i],title)
+
+    concrete=[i for i in ranked if valid(i) and DATE_OR_NUMBER_RE.search(items[i])]
+    outcomes=[i for i in ranked if valid(i) and CONSEQUENCE_WORDS.search(items[i])]
 
     chosen=[]
-    remaining=ranked[:]
-    while remaining and len(chosen)<limit:
-        best=None
-        for score,i,item in remaining:
-            # MMR-style diversity: do not spend all 3 slots on near-duplicate
-            # sentences that repeat the same fact.
-            redundancy=max((_jaccard(item,x[2]) for x in chosen),default=0.0)
-            adjusted=score-(2.2*redundancy)
-            # Headline-duplicate leads are deliberately deprioritized.
-            if title and _is_duplicate_of_title(item,title):
-                adjusted-=4.0
-            candidate=(adjusted,score,i,item)
-            if best is None or candidate>best:best=candidate
-        _,_,idx,item=best
-        chosen.append((idx,item))
-        remaining=[x for x in remaining if x[1]!=idx]
 
-    selected=[item for _,item in sorted(chosen,key=lambda x:x[0])]
+    # If the source has three or more concrete-fact sentences, use those as
+    # the core of a 3-sentence summary. This prevents centrality from dropping
+    # distinct dates/numbers such as capacity, deadlines and worker counts.
+    if len(concrete)>=limit:
+        chosen.extend(concrete[:limit])
+    else:
+        # Keep every distinct concrete fact first; then reserve a slot for a
+        # material outcome/next step when one exists.
+        chosen.extend(concrete[:limit])
 
-    # Concrete-fact coverage pass. Extractive summaries should not spend all
-    # three slots on broadly central sentences while dropping a distinct date,
-    # number, deadline or operational outcome.
-    concrete=[
-        items[i] for _,i,_ in sorted(ranked,key=lambda x:x[0],reverse=True)
-        if DATE_OR_NUMBER_RE.search(items[i]) and not _is_duplicate_of_title(items[i],title)
-    ]
-    for item in concrete[:limit]:
-        if item not in selected and len(selected)>=limit:
-            replace_at=min(
-                range(len(selected)),
-                key=lambda pos: _score(selected[pos], pos, len(items), title_words)
-            )
-            selected[replace_at]=item
-        elif item not in selected:
-            selected.append(item)
-        if len([x for x in selected if DATE_OR_NUMBER_RE.search(x)])>=min(limit,3):
+        for i in outcomes:
+            if i not in chosen:
+                chosen.append(i)
+                break
+
+        # Fill the remaining slot(s) using hybrid rank with MMR diversity.
+        while len(chosen)<limit:
+            best=None
+            for i in ranked:
+                if i in chosen or not valid(i):
+                    continue
+                redundancy=max((_jaccard(items[i],items[j]) for j in chosen),default=0.0)
+                adjusted=algorithm_scores[i]-(2.2*redundancy)
+                candidate=(adjusted,algorithm_scores[i],-i,i)
+                if best is None or candidate>best:
+                    best=candidate
+            if best is None:
+                break
+            chosen.append(best[3])
+
+    # If a material outcome is available but was omitted from a concrete-only
+    # selection, replace the least informative chosen sentence. An outcome
+    # wins only when it contributes a distinct fact, not merely boilerplate.
+    for i in outcomes:
+        if i in chosen:
             break
-
-    # Keep an explicit outcome/next-step sentence when it carries a material
-    # fact that the first pass omitted.
-    outcome_candidates=[
-        items[i] for _,i,_ in sorted(ranked,key=lambda x:x[0],reverse=True)
-        if CONSEQUENCE_WORDS.search(items[i]) and not _is_duplicate_of_title(items[i],title)
-    ]
-    for item in outcome_candidates:
-        if item in selected:
-            continue
-        if len(selected)<limit:
-            selected.append(item)
-        else:
-            replace_at=min(
-                range(len(selected)),
-                key=lambda pos: _score(selected[pos], pos, len(items), title_words)
-            )
-            selected[replace_at]=item
+        if len(chosen)<limit:
+            chosen.append(i)
+            break
+        replace=min(
+            chosen,
+            key=lambda j: (
+                _score(items[j],j,len(items),title_words),
+                algorithm_scores[j],
+            ),
+        )
+        if _score(items[i],i,len(items),title_words) >= _score(items[replace],replace,len(items),title_words):
+            chosen[chosen.index(replace)]=i
         break
 
-    return [item for item in items if item in selected][:limit]
+    chosen=set(chosen)
+    return [item for i,item in enumerate(items) if i in chosen][:limit]
 
 def _first_complete_sentence(value):
     items=sentences(value)
