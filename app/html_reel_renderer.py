@@ -93,6 +93,9 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
         proc=subprocess.Popen([
             browser,"--headless=new","--disable-gpu","--no-sandbox","--disable-dev-shm-usage",
             "--hide-scrollbars","--mute-audio","--remote-allow-origins=*",
+            "--window-size=540,960",
+            "--disable-background-timer-throttling","--disable-renderer-backgrounding",
+            "--disable-backgrounding-occluded-windows",
             "--run-all-compositor-stages-before-draw",
             f"--remote-debugging-port={port}",f"--user-data-dir={profile}","about:blank"
         ],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
@@ -134,6 +137,8 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
         if not ready.get("result",False):
             raise RuntimeError("PoliticsHub Reel template did not initialize in Chromium")
 
+        _cdp(ws,counter,"Page.bringToFront")
+        _cdp(ws,counter,"Page.setWebLifecycleState",{"state":"active"})
         _cdp(ws,counter,"Runtime.evaluate",{"expression":
             "document.body.style.background='#050506';"
             "document.body.style.margin='0';"
@@ -146,9 +151,10 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
             "window.PH.load(window.__PH_NEWS);window.PH.render(0);true"
         })
         _cdp(ws,counter,"Runtime.evaluate",{
-            "expression":"document.fonts&&document.fonts.ready?document.fonts.ready.then(()=>true):true",
-            "awaitPromise":True
-        })
+            "expression":"(document.fonts&&document.fonts.ready?document.fonts.ready:Promise.resolve()).then(()=>true)",
+            "awaitPromise":True,
+            "timeout":10,
+        },timeout=12)
         # Fonts can resolve after the first build; rebuild once before recording.
         _cdp(ws,counter,"Runtime.evaluate",{"expression":
             "window.PH.load(window.__PH_NEWS);window.PH.playFromStart();true"
@@ -159,13 +165,15 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
         # Chromium pushes compressed frames and we acknowledge each frame.
         frames=work/"frames"
         frames.mkdir()
+        frame_data=[]
         _cdp(ws,counter,"Page.startScreencast",{
             "everyNthFrame":1,
             "format":"jpeg",
             "quality":88,
             "maxWidth":CAPTURE_WIDTH,
             "maxHeight":CAPTURE_HEIGHT,
-            "maxFramesInFlight":1,
+            "maxFramesInFlight":3,
+            "sendLastFrame":True,
         },timeout=15)
 
         _cdp(ws,counter,"Runtime.evaluate",{
@@ -187,7 +195,7 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
                 data=params.get("data")
                 session_id=params.get("sessionId")
                 if data:
-                    (frames/f"f{frame_index:05d}.jpg").write_bytes(base64.b64decode(data))
+                    frame_data.append(base64.b64decode(data))
                     frame_index+=1
                 if session_id is not None:
                     counter[0]+=1
@@ -205,6 +213,8 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
 
         if frame_index < int(DURATION*FPS*0.75):
             raise RuntimeError(f"Chromium screencast captured too few frames: {frame_index}")
+        for idx, data in enumerate(frame_data):
+            (frames/f"f{idx:05d}.jpg").write_bytes(data)
         print(f"Chromium screencast captured {frame_index} frames")
 
         subprocess.run([
