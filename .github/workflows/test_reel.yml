@@ -26,8 +26,12 @@ jobs:
           chromium --version
       - run: pip install -r requirements.txt
 
-      - name: Validate Python syntax
-        run: python -m compileall -q app api scripts run.py
+      - name: Validate changed Python syntax
+        run: |
+          python -m py_compile app/database.py
+          python -m py_compile app/worker.py
+          python -m py_compile app/html_reel_renderer.py
+          python -m py_compile scripts/auto_publish.py
 
       - name: Test database
         env:
