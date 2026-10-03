@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS news_items (
  instagram_status TEXT NOT NULL DEFAULT 'pending', instagram_media_id TEXT, instagram_error TEXT,
  instagram_published_at TEXT, instagram_attempts INTEGER NOT NULL DEFAULT 0, instagram_last_attempt_at TEXT,
  instagram_next_retry_at TEXT, instagram_container_id TEXT, reel_cloudinary_public_id TEXT, reel_cloudinary_url TEXT,
- instagram_selected INTEGER NOT NULL DEFAULT 0, UNIQUE(source_name, external_id)
+ instagram_selected INTEGER NOT NULL DEFAULT 0, image_source TEXT, image_license TEXT, image_credit TEXT, image_source_url TEXT, image_search_query TEXT, image_selection_score INTEGER, image_local_path TEXT, image_width INTEGER, image_height INTEGER, image_selected_at TEXT, UNIQUE(source_name, external_id)
 )
 """
 ADMIN_SCHEMA = """
@@ -59,7 +59,7 @@ MIGRATIONS = {
  "instagram_next_retry_at":"ALTER TABLE news_items ADD COLUMN instagram_next_retry_at TEXT", "instagram_container_id":"ALTER TABLE news_items ADD COLUMN instagram_container_id TEXT",
  "reel_cloudinary_public_id":"ALTER TABLE news_items ADD COLUMN reel_cloudinary_public_id TEXT", "reel_cloudinary_url":"ALTER TABLE news_items ADD COLUMN reel_cloudinary_url TEXT", "instagram_selected":"ALTER TABLE news_items ADD COLUMN instagram_selected INTEGER NOT NULL DEFAULT 0",
  "instagram_scheduled_at":"ALTER TABLE news_items ADD COLUMN instagram_scheduled_at TEXT",
- "instagram_queue_order":"ALTER TABLE news_items ADD COLUMN instagram_queue_order INTEGER NOT NULL DEFAULT 0",
+ "instagram_queue_order":"ALTER TABLE news_items ADD COLUMN instagram_queue_order INTEGER NOT NULL DEFAULT 0", "image_source":"ALTER TABLE news_items ADD COLUMN image_source TEXT", "image_license":"ALTER TABLE news_items ADD COLUMN image_license TEXT", "image_credit":"ALTER TABLE news_items ADD COLUMN image_credit TEXT", "image_source_url":"ALTER TABLE news_items ADD COLUMN image_source_url TEXT", "image_search_query":"ALTER TABLE news_items ADD COLUMN image_search_query TEXT", "image_selection_score":"ALTER TABLE news_items ADD COLUMN image_selection_score INTEGER", "image_local_path":"ALTER TABLE news_items ADD COLUMN image_local_path TEXT", "image_width":"ALTER TABLE news_items ADD COLUMN image_width INTEGER", "image_height":"ALTER TABLE news_items ADD COLUMN image_height INTEGER", "image_selected_at":"ALTER TABLE news_items ADD COLUMN image_selected_at TEXT",
 }
 DEFAULT_SETTINGS={"instagram_enabled":"true","instagram_daily_limit":"5","instagram_selection_mode":"auto","instagram_interval_minutes":"0","website_enabled":"true","instagram_paused":"false","instagram_priority_id":""}
 
@@ -151,7 +151,7 @@ class NewsDatabase:
   if search:clauses.append(f"(LOWER(title) LIKE LOWER({ph}) OR LOWER(summary) LIKE LOWER({ph}))");params.extend([f"%{search}%",f"%{search}%"])
   where=(" WHERE "+" AND ".join(clauses)) if clauses else ""; return self.conn.execute(f"SELECT * FROM news_items{where} ORDER BY id DESC LIMIT {ph}",(*params,limit)).fetchall()
  def update(self,item_id:int,**fields:Any):
-  allowed={"title","summary","category","status","bot_summary","bot_article","ai_summary","ai_article","fact_check_status","fact_check_notes","image_url","approved_at","published_at_site","instagram_status","instagram_media_id","instagram_error","instagram_published_at","instagram_attempts","instagram_last_attempt_at","instagram_next_retry_at","instagram_scheduled_at","instagram_container_id","reel_cloudinary_public_id","reel_cloudinary_url","instagram_selected","instagram_queue_order","public_source"}; fields={k:v for k,v in fields.items() if k in allowed}
+  allowed={"title","summary","category","status","bot_summary","bot_article","ai_summary","ai_article","fact_check_status","fact_check_notes","image_url","approved_at","published_at_site","instagram_status","instagram_media_id","instagram_error","instagram_published_at","instagram_attempts","instagram_last_attempt_at","instagram_next_retry_at","instagram_scheduled_at","instagram_container_id","reel_cloudinary_public_id","reel_cloudinary_url","instagram_selected","instagram_queue_order","public_source","image_source","image_license","image_credit","image_source_url","image_search_query","image_selection_score","image_local_path","image_width","image_height","image_selected_at"}; fields={k:v for k,v in fields.items() if k in allowed}
   if not fields:return
   ph="%s" if self._postgres else "?";sets=[];params=[]
   for k,v in fields.items():sets.append(f"{k} = {ph}");params.append(v)
