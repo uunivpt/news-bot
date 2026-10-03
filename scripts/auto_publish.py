@@ -105,7 +105,9 @@ def _direct_fallback_content(row):
 def prepare_content(db,row):
  fields=_process_content(db,row)
  if fields:
-  db.update(int(row["id"]),**fields); return True
+  db.update(int(row["id"]),**fields)
+  row.update(fields)
+  return True
  fallback=_direct_fallback_content(row)
  if not fallback:return False
  db.update(int(row["id"]),**fallback); row.update(fallback)
