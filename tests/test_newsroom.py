@@ -1,6 +1,7 @@
 import unittest
 
 from app.newsroom import clean_text, make_summary, process_news, select_sentences, sentences
+from app.extractive_summarizer import hybrid_scores, lexrank_scores, textrank_scores
 
 
 class NewsroomBotTests(unittest.TestCase):
@@ -180,6 +181,29 @@ class NewsroomBotTests(unittest.TestCase):
                 for phrase in required:
                     self.assertIn(phrase.lower(), summary.lower(), title)
                 self.assertNotEqual(summary.strip().lower(), title.strip().lower())
+
+    def test_hybrid_textrank_lexrank_is_deterministic_and_extractive(self):
+        source = (
+            "The transport department approved a new timetable on Monday. "
+            "The timetable adds six buses to the northern route from Saturday. "
+            "Officials said the change follows a review of passenger demand. "
+            "The department expects waiting times to fall by 12 percent. "
+            "A further review will take place in December."
+        )
+        items = sentences(source)
+        editorial = [float(index + 1) for index in range(len(items))]
+        tr1 = textrank_scores(items)
+        tr2 = textrank_scores(items)
+        lr = lexrank_scores(items)
+        hybrid = hybrid_scores(items, editorial)
+
+        self.assertEqual(tr1, tr2)
+        self.assertEqual(len(tr1), len(items))
+        self.assertEqual(len(lr), len(items))
+        self.assertEqual(len(hybrid), len(items))
+        summary = make_summary("Transport timetable changes", source)
+        for sentence in sentences(summary):
+            self.assertIn(sentence, items)
 
     def test_no_sentence_is_synthesized(self):
         title = "Council changes parking rules"
