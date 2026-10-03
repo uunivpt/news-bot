@@ -13,7 +13,7 @@ from app.article_fetcher import enrich_source_text
 from app.cloudinary_storage import upload_video
 from app.database import NewsDatabase
 from app.instagram_graphic import clean_instagram_text, generate_reel_cards
-from app.instagram_reel import build_reel
+from app.instagram_reel import build_html_reel, build_reel
 from app.media_storage import download_to, public_video_url
 from app.meta_instagram import publish_reel, InstagramRateLimitError
 from app.newsroom import process_news
@@ -153,26 +153,48 @@ def _process_instagram_untracked(db,row,music):
    if not process_content(db,row):
     raise RuntimeError("Story could not be processed by the newsroom bot")
   url=str(row.get("reel_cloudinary_url") or "").strip()
-  cards=[]; qa_card={"passed":True,"cached":True}; layout={"id":"cached"}
+  preview_path=""
+  qa_card={"passed":True,"cached":True}; layout={"id":"cached"}
   if url:
    print(f"Reusing cached Reel URL for item {item_id}: {url}")
   else:
    layout=select_layout(row.get("category") or "general",row.get("title") or "",item_id,breaking=bool((score_story(db,row,1,"UNVERIFIED",0) or {}).get("breaking")),has_image=bool(row.get("image_url")))
    state_transition(db,item_id,"INSTAGRAM_QUEUE")
    audit_stage(db,item_id,"TEMPLATE_SELECTED","completed",layout)
-   profile=layout
-   cards=generate_reel_cards(title=row["title"],summary=row.get("bot_summary") or row.get("summary") or "",category=row.get("category") or "general",image_url=row.get("image_url"),source_name=row.get("source_name") or "",output_dir=OUT/"reel_cards"/str(item_id),item_key=item_id,template_variant=int(layout["variant"]))
-   for card in cards:
-    qa_card=visual_qa_card(card)
-    if not qa_card.get("passed"): raise RuntimeError(f"Visual QA failed: {qa_card.get('errors')}")
-   video=OUT/f"{item_id}.mp4"; build_reel([str(p) for p in cards],str(video),audio_path=music,duration_per_image=18)
+   video=OUT/f"{item_id}.mp4"
+   reel_data={
+    "headline":row.get("title") or "Latest news update",
+    "category":row.get("category") or "News",
+    "date":row.get("published_at") or row.get("date") or datetime.now(timezone.utc).strftime("%d %b %Y"),
+    "location":row.get("location") or "",
+    "source":row.get("source_name") or "",
+    "summary":row.get("bot_summary") or row.get("summary") or "",
+    "image_url":row.get("image_url"),
+    "cta":"Follow for daily politics & world updates",
+   }
+   try:
+    build_html_reel(reel_data,str(video),audio_path=music)
+    print(f"HTML 18s motion Reel rendered for item {item_id}")
+   except Exception as render_exc:
+    print(f"HTML renderer unavailable for item {item_id}; using compatibility fallback: {render_exc}")
+    cards=generate_reel_cards(title=row["title"],summary=row.get("bot_summary") or row.get("summary") or "",category=row.get("category") or "general",image_url=row.get("image_url"),source_name=row.get("source_name") or "",output_dir=OUT/"reel_cards"/str(item_id),item_key=item_id,template_variant=int(layout["variant"]))
+    for card in cards:
+     qa_card=visual_qa_card(card)
+     if not qa_card.get("passed"): raise RuntimeError(f"Visual QA failed: {qa_card.get('errors')}")
+    build_reel([str(p) for p in cards],str(video),audio_path=music,duration_per_image=18)
+   preview=OUT/"reel_previews"/f"{item_id}.jpg"; preview.parent.mkdir(parents=True,exist_ok=True)
+   subprocess.run(["ffmpeg","-y","-ss","9","-i",str(video),"-frames:v","1","-vf","scale=540:-1",str(preview)],check=True,capture_output=True,text=True)
+   preview_path=str(preview)
+   qa_card=visual_qa_card(preview)
+   if not qa_card.get("passed"): raise RuntimeError(f"Visual QA failed: {qa_card.get('errors')}")
    state_transition(db,item_id,"REEL_CREATED")
-   audit_stage(db,item_id,"REEL_QA","completed",{"cards":len(cards),"layout":layout["id"]}); record_preview(db,item_id,str(video),str(cards[0]) if cards else "",qa_card,layout["id"])
+   audit_stage(db,item_id,"REEL_QA","completed",{"renderer":"politicshub_html_18s","layout":layout["id"],"preview":preview_path})
+   record_preview(db,item_id,str(video),preview_path,qa_card,layout["id"])
    public_id=f"politicshub/reels/item-{item_id}"
    url=upload_video(str(video),public_id=public_id) or public_video_url(str(video))
    if not url:raise RuntimeError("Public Reel video URL unavailable")
    db.update(item_id,reel_cloudinary_url=url,reel_cloudinary_public_id=public_id)
-  record_preview(db,item_id,url,str(cards[0]) if cards else "",qa_card,layout["id"] if "layout" in locals() else "cached")
+  record_preview(db,item_id,url,preview_path,qa_card,layout["id"] if "layout" in locals() else "cached")
   result=publish_reel(url,caption(row)); media_id=result.get("id") if isinstance(result,dict) else None; container_id=result.get("container_id") if isinstance(result,dict) else None
   mark_published(db,item_id,"instagram",url)
   db.update(item_id,instagram_status="published",instagram_media_id=media_id,instagram_container_id=container_id,instagram_selected=0,instagram_published_at=datetime.now(timezone.utc).isoformat(),instagram_error=None,instagram_next_retry_at=None)
