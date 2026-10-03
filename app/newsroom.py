@@ -145,11 +145,11 @@ def select_sentences(text,limit,title=""):
         return not _is_duplicate_of_title(items[i],title)
 
     MATERIAL_FACT_RE=re.compile(
-        r"(?i)(?:\\b(?:\\d+(?:\\.\\d+)?%?|\\$\\d[\\d,.]*|₹\\s?\\d[\\d,.]*|\\d{4})\\b|"
-        r"\\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\\b|"
-        r"\\b(?:\\d+|one|two|three|four|five|six|seven|eight|nine|ten|"
-        r"eleven|twelve)\\s+(?:days?|weeks?|months?|years?|hours?|minutes?|"
-        r"workers?|buildings?|routes?|companies?|regions?)\\b)",re.I
+        r"(?i)(?:\b(?:\d+(?:\.\d+)?%?|\$\d[\d,.]*|₹\s?\d[\d,.]*|\d{4})\b|"
+        r"\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b|"
+        r"\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|"
+        r"eleven|twelve)\s+(?:days?|weeks?|months?|years?|hours?|minutes?|"
+        r"workers?|buildings?|routes?|companies?|regions?)\b)",re.I
     )
     concrete=[i for i in ranked if valid(i) and MATERIAL_FACT_RE.search(items[i])]
     outcomes=[i for i in ranked if valid(i) and CONSEQUENCE_WORDS.search(items[i])]
