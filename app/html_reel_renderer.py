@@ -96,7 +96,7 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
             "--window-size=540,960",
             "--disable-background-timer-throttling","--disable-renderer-backgrounding",
             "--disable-backgrounding-occluded-windows",
-            "--run-all-compositor-stages-before-draw",
+            "--run-all-compositor-stages-before-draw","--enable-begin-frame-control",
             f"--remote-debugging-port={port}",f"--user-data-dir={profile}","about:blank"
         ],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 
@@ -160,62 +160,30 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
             "window.PH.load(window.__PH_NEWS);window.PH.playFromStart();true"
         })
 
-        # CDP screen recording is unreliable in headless CI (it can emit a
-        # near-empty stream). Use the documented screencast event stream instead:
-        # Chromium pushes compressed frames and we acknowledge each frame.
+        # Deterministic headless capture: BeginFrame advances Chromium's
+        # compositor/animation clock and returns the screenshot for that exact frame.
+        # This avoids visibility/throttling issues that can make Page.startScreencast
+        # emit no frames in CI.
+        _cdp(ws,counter,"HeadlessExperimental.enable",{},timeout=10)
         frames=work/"frames"
         frames.mkdir()
-        frame_data=[]
-        _cdp(ws,counter,"Page.startScreencast",{
-            "everyNthFrame":1,
-            "format":"jpeg",
-            "quality":88,
-            "maxWidth":CAPTURE_WIDTH,
-            "maxHeight":CAPTURE_HEIGHT,
-            "maxFramesInFlight":3,
-            "sendLastFrame":True,
-        },timeout=15)
-
-        _cdp(ws,counter,"Runtime.evaluate",{
-            "expression":"window.PH.load(window.__PH_NEWS);window.PH.playFromStart();true"
-        })
-        capture_until=time.monotonic()+DURATION+0.35
-        frame_index=0
-        ws.settimeout(2)
-        try:
-            while time.monotonic()<capture_until:
-                try:
-                    raw=ws.recv()
-                except Exception:
-                    continue
-                msg=json.loads(raw)
-                if msg.get("method")!="Page.screencastFrame":
-                    continue
-                params=msg.get("params") or {}
-                data=params.get("data")
-                session_id=params.get("sessionId")
-                if data:
-                    frame_data.append(base64.b64decode(data))
-                    frame_index+=1
-                if session_id is not None:
-                    counter[0]+=1
-                    ws.send(json.dumps({
-                        "id":counter[0],
-                        "method":"Page.screencastFrameAck",
-                        "params":{"sessionId":session_id},
-                    }))
-        finally:
-            ws.settimeout(CDP_TIMEOUT)
-            try:
-                _cdp(ws,counter,"Page.stopScreencast",{},timeout=15)
-            except Exception:
-                pass
-
-        if frame_index < int(DURATION*FPS*0.75):
-            raise RuntimeError(f"Chromium screencast captured too few frames: {frame_index}")
-        for idx, data in enumerate(frame_data):
-            (frames/f"f{idx:05d}.jpg").write_bytes(data)
-        print(f"Chromium screencast captured {frame_index} frames")
+        frame_count=int(DURATION*FPS)
+        base_ticks=time.monotonic()*1000.0
+        for frame_index in range(frame_count):
+            result=_cdp(ws,counter,"HeadlessExperimental.beginFrame",{
+                "frameTimeTicks":base_ticks+(frame_index*1000.0/FPS),
+                "interval":1000.0/FPS,
+                "screenshot":{
+                    "format":"jpeg",
+                    "quality":88,
+                    "optimizeForSpeed":True,
+                },
+            },timeout=10)
+            data=result.get("screenshotData")
+            if not data:
+                raise RuntimeError(f"Chromium BeginFrame returned no screenshot at frame {frame_index}")
+            (frames/f"f{frame_index:05d}.jpg").write_bytes(base64.b64decode(data))
+        print(f"Chromium deterministic BeginFrame captured {frame_count} frames")
 
         subprocess.run([
             "ffmpeg","-y","-framerate",str(FPS),"-i",str(frames/"f%05d.jpg"),
