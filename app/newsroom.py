@@ -160,7 +160,40 @@ def select_sentences(text,limit,title=""):
         chosen.append((idx,item))
         remaining=[x for x in remaining if x[1]!=idx]
 
-    return [item for _,item in sorted(chosen,key=lambda x:x[0])]
+    selected=[item for _,item in sorted(chosen,key=lambda x:x[0])]
+
+    # Concrete-fact coverage pass. Extractive summaries should not spend all
+    # three slots on broadly central sentences while dropping a distinct date,
+    # number, deadline or operational outcome.
+    concrete=[
+        items[i] for _,i,_ in sorted(ranked,key=lambda x:x[0],reverse=True)
+        if DATE_OR_NUMBER_RE.search(items[i]) and not _is_duplicate_of_title(items[i],title)
+    ]
+    for item in concrete[:limit]:
+        if item not in selected and len(selected)>=limit:
+            replace_at=min(
+                range(len(selected)),
+                key=lambda pos: _score(selected[pos], pos, len(items), title_words)
+            )
+            selected[replace_at]=item
+        elif item not in selected:
+            selected.append(item)
+        if len([x for x in selected if DATE_OR_NUMBER_RE.search(x)])>=min(limit,3):
+            break
+
+    # Keep an explicit outcome/next-step sentence when it carries a material
+    # fact that the first pass omitted.
+    outcome_candidates=[
+        items[i] for _,i,_ in sorted(ranked,key=lambda x:x[0],reverse=True)
+        if CONSEQUENCE_WORDS.search(items[i]) and not _is_duplicate_of_title(items[i],title)
+    ]
+    for item in outcome_candidates:
+        if len(selected)>=limit or item in selected:
+            continue
+        selected.append(item)
+        break
+
+    return [item for item in items if item in selected][:limit]
 
 def _first_complete_sentence(value):
     items=sentences(value)
