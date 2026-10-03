@@ -72,7 +72,7 @@ def audio_path():
   print("Embedded News Pulse preparation failed:",exc)
   return None
 
-def _process_content(row):
+def _process_content(db,row):
  try:
   source=enrich_source_text(row.get("title") or "",row.get("summary") or "",row.get("url") or "")
   material=source.get("text") or row.get("summary") or row.get("title") or ""
@@ -103,7 +103,7 @@ def _direct_fallback_content(row):
  return {"title":title or "Latest news update","summary":summary,"bot_summary":summary,"bot_article":article}
 
 def prepare_content(db,row):
- fields=_process_content(row)
+ fields=_process_content(db,row)
  if fields:
   db.update(int(row["id"]),**fields); return True
  fallback=_direct_fallback_content(row)
@@ -158,37 +158,37 @@ def _process_instagram_untracked(db,row,music):
   url=""
   preview_path=""
   qa_card={"passed":True}; layout=select_layout(row.get("category") or "general",row.get("title") or "",item_id,breaking=bool((score_story(db,row,1,"UNVERIFIED",0) or {}).get("breaking")),has_image=bool(row.get("image_url")))
-   state_transition(db,item_id,"INSTAGRAM_QUEUE")
-   audit_stage(db,item_id,"TEMPLATE_SELECTED","completed",layout)
-   video=OUT/f"{item_id}.mp4"
-   reel_data={
-    "headline":row.get("title") or "Latest news update",
-    "category":row.get("category") or "News",
-    "date":row.get("published_at") or row.get("date") or datetime.now(timezone.utc).strftime("%d %b %Y"),
-    "location":row.get("location") or "",
-    "source":row.get("source_name") or "",
-    "summary":row.get("bot_summary") or row.get("summary") or "",
-    "image_url":row.get("image_url"),
-    "cta":"Follow for daily politics & world updates",
-   }
-   # Production path: the 18s PoliticsHub HTML motion template is mandatory.
-   # Do not fall back to the legacy card/slideshow renderer, otherwise an
-   # HTML-rendering failure could silently publish the old template.
-   build_html_reel(reel_data,str(video),audio_path=music)
-   print(f"HTML 18s motion Reel rendered for item {item_id}")
-   preview=OUT/"reel_previews"/f"{item_id}.jpg"; preview.parent.mkdir(parents=True,exist_ok=True)
-   subprocess.run(["ffmpeg","-y","-ss","9","-i",str(video),"-frames:v","1","-vf","scale=1080:1920",str(preview)],check=True,capture_output=True,text=True)
-   preview_path=str(preview)
-   qa_card=visual_qa_card(preview)
-   if not qa_card.get("passed"): raise RuntimeError(f"Visual QA failed: {qa_card.get('errors')}")
-   state_transition(db,item_id,"REEL_CREATED")
-   audit_stage(db,item_id,"REEL_QA","completed",{"renderer":"politicshub_html_18s","layout":layout["id"],"preview":preview_path})
-   record_preview(db,item_id,str(video),preview_path,qa_card,layout["id"])
-   public_id=f"politicshub/reels/item-{item_id}"
-   url=upload_video(str(video),public_id=public_id) or public_video_url(str(video))
-   if not url:raise RuntimeError("Public Reel video URL unavailable")
-   db.update(item_id,reel_cloudinary_url=url,reel_cloudinary_public_id=public_id)
-  record_preview(db,item_id,url,preview_path,qa_card,layout["id"] if "layout" in locals() else "cached")
+  state_transition(db,item_id,"INSTAGRAM_QUEUE")
+  audit_stage(db,item_id,"TEMPLATE_SELECTED","completed",layout)
+  video=OUT/f"{item_id}.mp4"
+  reel_data={
+   "headline":row.get("title") or "Latest news update",
+   "category":row.get("category") or "News",
+   "date":row.get("published_at") or row.get("date") or datetime.now(timezone.utc).strftime("%d %b %Y"),
+   "location":row.get("location") or "",
+   "source":row.get("source_name") or "",
+   "summary":row.get("bot_summary") or row.get("summary") or "",
+   "image_url":row.get("image_url"),
+   "cta":"Follow for daily politics & world updates",
+  }
+  # Production path: the 18s PoliticsHub HTML motion template is mandatory.
+  # Do not fall back to the legacy card/slideshow renderer, otherwise an
+  # HTML-rendering failure could silently publish the old template.
+  build_html_reel(reel_data,str(video),audio_path=music)
+  print(f"HTML 18s motion Reel rendered for item {item_id}")
+  preview=OUT/"reel_previews"/f"{item_id}.jpg"; preview.parent.mkdir(parents=True,exist_ok=True)
+  subprocess.run(["ffmpeg","-y","-ss","9","-i",str(video),"-frames:v","1","-vf","scale=1080:1920",str(preview)],check=True,capture_output=True,text=True)
+  preview_path=str(preview)
+  qa_card=visual_qa_card(preview)
+  if not qa_card.get("passed"): raise RuntimeError(f"Visual QA failed: {qa_card.get('errors')}")
+  state_transition(db,item_id,"REEL_CREATED")
+  audit_stage(db,item_id,"REEL_QA","completed",{"renderer":"politicshub_html_18s","layout":layout["id"],"preview":preview_path})
+  record_preview(db,item_id,str(video),preview_path,qa_card,layout["id"])
+  public_id=f"politicshub/reels/item-{item_id}"
+  url=upload_video(str(video),public_id=public_id) or public_video_url(str(video))
+  if not url:raise RuntimeError("Public Reel video URL unavailable")
+  db.update(item_id,reel_cloudinary_url=url,reel_cloudinary_public_id=public_id)
+  record_preview(db,item_id,url,preview_path,qa_card,layout["id"])
   result=publish_reel(url,caption(row)); media_id=result.get("id") if isinstance(result,dict) else None; container_id=result.get("container_id") if isinstance(result,dict) else None
   mark_published(db,item_id,"instagram",url)
   db.update(item_id,instagram_status="published",instagram_media_id=media_id,instagram_container_id=container_id,instagram_selected=0,instagram_published_at=datetime.now(timezone.utc).isoformat(),instagram_error=None,instagram_next_retry_at=None)
