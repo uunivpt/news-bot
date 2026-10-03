@@ -1,4 +1,4 @@
-"""Generate the built-in 15-second PoliticsHub News Pulse audio without external files."""
+"""Generate the built-in 18-second PoliticsHub News Pulse audio without external files."""
 from __future__ import annotations
 import math
 import struct
@@ -12,11 +12,11 @@ def ensure_audio(path: str | Path) -> str:
     if out.exists() and out.stat().st_size > 1000:
         return str(out)
     sr = 44100
-    duration = 15.0
+    duration = 18.0
     total = int(sr * duration)
     samples = []
     pulses = [0.0, 2.5, 5.0, 7.5, 10.0, 12.5]
-    accents = [4.7, 9.7, 14.0]
+    accents = [4.7, 9.7, 14.0, 17.0]
     for i in range(total):
         t = i / sr
         v = 0.035 * math.sin(2 * math.pi * 110 * t) + 0.018 * math.sin(2 * math.pi * 220 * t)
