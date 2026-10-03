@@ -260,7 +260,7 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
                         wrap.style.boxShadow = 'none';
                         wrap.style.overflow = 'hidden';
                         stage.style.transformOrigin = '0 0';
-                        stage.style.transform = 'scale(0.5)';
+                        stage.style.transform = 'scale(1)';
                         stage.style.left = '0';
                         stage.style.top = '0';
                         return true;
