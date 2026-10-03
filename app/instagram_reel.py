@@ -121,3 +121,19 @@ def build_reel(image_paths: list[str], output_path: str, audio_path: str | None 
     args += ["-t", str(REEL_DURATION), "-movflags", "+faststart", "-video_track_timescale", "90000", str(output)]
     _run_ffmpeg(args)
     return _validate_reel_output(output)
+
+
+def build_html_reel(
+    news: dict,
+    output_path: str,
+    audio_path: str | None = None,
+    template_path: str | None = None,
+) -> str:
+    """Render the PoliticsHub HTML motion template as the production Reel."""
+    from .html_reel_renderer import render_html_reel
+    return render_html_reel(
+        news,
+        output_path,
+        audio_path=audio_path,
+        template_path=template_path,
+    )
