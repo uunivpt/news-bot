@@ -12,6 +12,7 @@ on:
       - "app/database.py"
       - "app/news_pulse_audio.py"
       - "app/newsroom.py"
+      - "app/extractive_summarizer.py"
       - "tests/test_newsroom.py"
       - "requirements.txt"
       - "tests/test_image_acquisition.py"
