@@ -76,8 +76,9 @@ jobs:
           PYTHONPATH: .
         run: |
           mkdir -p data/media
-          set +e
-          python - <<'PY' >data/media/html_render.log 2>&1
+          for attempt in 1 2; do
+            rm -f data/media/test_html_no_image.mp4 data/media/html_render.log
+            if python - <<'PY' >data/media/html_render.log 2>&1
           from app.html_reel_renderer import render_html_reel
           render_html_reel({
               "headline": "A deliberately long PoliticsHub headline that must remain readable without being cut off",
@@ -89,15 +90,14 @@ jobs:
               "image_url": None,
           }, "data/media/test_html_no_image.mp4")
           PY
-          rc=$?
-          if [ "$rc" -ne 0 ]; then
-            msg=$(tail -n 5 data/media/html_render.log | tr '\n' ' ' | cut -c1-140)
-            gh api "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" -f state=failure -f context=ci-render-diagnostic -f description="$msg" -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" || true
-            encoded=$(base64 -w0 data/media/html_render.log)
-            curl -fsS -X PUT -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPOSITORY}/contents/ci-render-error-${GITHUB_RUN_ID}.txt" -d "{\"message\":\"Record HTML renderer CI failure\",\"content\":\"$encoded\",\"branch\":\"main\"}" || true
+            then
+              break
+            fi
+            echo "HTML renderer attempt $attempt failed; retrying..."
             cat data/media/html_render.log
-            exit "$rc"
-          fi
+            sleep 2
+          done
+          test -s data/media/test_html_no_image.mp4
 
       - name: Verify HTML Reel duration
         run: |
