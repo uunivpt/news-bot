@@ -196,16 +196,24 @@ def acquire_story_image(
     # license that the source page did not provide.
     existing = str(row.get("image_url") or "").strip()
     if existing.startswith(("http://", "https://")):
-        return {
-            "image_url": existing,
-            "image_source": "article-source",
-            "image_license": "unknown-source-license",
-            "image_credit": str(row.get("source_name") or "").strip(),
-            "image_source_url": str(row.get("url") or "").strip(),
-            "image_search_query": "",
-            "image_selection_score": 0,
-            "image_local_path": "",
-        }
+        output = Path(output_dir) / f"{row.get('id') or 'story'}_source.jpg"
+        try:
+            width, height = _download_and_validate(existing, output)
+            return {
+                "image_url": existing,
+                "image_source": "article-source",
+                "image_license": "unknown-source-license",
+                "image_credit": str(row.get("source_name") or "").strip(),
+                "image_source_url": str(row.get("url") or "").strip(),
+                "image_search_query": "",
+                "image_selection_score": 100,
+                "image_local_path": str(output),
+                "image_width": width,
+                "image_height": height,
+                "image_selected_at": datetime.now(timezone.utc).isoformat(),
+            }
+        except Exception as exc:
+            print(f"Source image unusable; trying licensed image search: {exc}")
 
     queries = build_image_queries(headline, summary, category)
     best = None
@@ -235,9 +243,18 @@ def acquire_story_image(
 
     # Do not use a weak, generic open-licensed image merely to fill the panel.
     if not best or best_score < 25:
-        raise RuntimeError(
-            f"No sufficiently relevant openly licensed image found for story; queries={queries}"
-        )
+        # A weak image is worse than a clean Reel without one. Return metadata
+        # instead of inventing a match or silently using an unlicensed result.
+        return {
+            "image_url": "",
+            "image_source": "",
+            "image_license": "",
+            "image_credit": "",
+            "image_source_url": "",
+            "image_search_query": queries[0] if queries else "",
+            "image_selection_score": 0,
+            "image_local_path": "",
+        }
 
     item_id = str(row.get("id") or "story")
     output = Path(output_dir) / f"{item_id}_news.jpg"
