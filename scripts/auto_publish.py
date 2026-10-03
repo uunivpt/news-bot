@@ -63,7 +63,7 @@ def audio_path():
   except Exception as exc:print("Fixed audio preparation failed:",exc)
  # Built-in PoliticsHub News Pulse: keeps the selected beat available
  # on the phone without requiring another URL or environment variable.
- embedded=OUT/"politicshub_news_pulse_15s.wav"
+ embedded=OUT/"politicshub_news_pulse_18s.wav"
  try:
   if not embedded.exists():
    from app.news_pulse_audio import ensure_audio
