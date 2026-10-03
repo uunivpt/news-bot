@@ -43,7 +43,7 @@ jobs:
               "image_url": None,
           }, "data/media/test_html_no_image.mp4")
           PY
-          DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprappers=1:nokey=1 data/media/test_html_no_image.mp4)
+          DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 data/media/test_html_no_image.mp4)
           python - "$DURATION" <<'PY'
           import sys
           d=float(sys.argv[1])
