@@ -138,6 +138,6 @@ def hybrid_scores(items: list[str], editorial_scores: list[float]) -> list[float
     lr = _normalize(lexrank_scores(items))
     editorial = _normalize(editorial_scores)
     return [
-        0.58 * editorial[i] + 0.24 * tr[i] + 0.18 * lr[i]
+        0.78 * editorial[i] + 0.14 * tr[i] + 0.08 * lr[i]
         for i in range(len(items))
     ]
