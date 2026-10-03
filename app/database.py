@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS admin_activity (
  details TEXT, created_at TEXT NOT NULL
 )
 """
+# Persistent authentication throttling must be defined before connection-time schema creation.
 AUTH_SCHEMA = """
 CREATE TABLE IF NOT EXISTS admin_login_attempts (
  id BIGSERIAL PRIMARY KEY, attempt_key TEXT NOT NULL, attempted_at TEXT NOT NULL
