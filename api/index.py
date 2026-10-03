@@ -23,7 +23,7 @@ _secret=os.getenv("FLASK_SECRET_KEY") or os.getenv("ADMIN_TOKEN") or os.getenv("
 if not _secret:_secret=secrets.token_urlsafe(32)
 app.secret_key=_secret
 app.config.update(SESSION_COOKIE_NAME="politicshub_admin_session",SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SECURE=True,SESSION_COOKIE_SAMESITE="Lax",SESSION_COOKIE_PATH="/",SESSION_COOKIE_REFRESH_EACH_REQUEST=False)
-_LOGIN_WINDOW_SECONDS=300; _LOGIN_MAX_FAILURES=8; _login_failures={}
+_LOGIN_WINDOW_SECONDS=300; _LOGIN_MAX_FAILURES=8; _SETUP_MAX_FAILURES=5; _login_failures={}
 
 
 def _ensure_admin_users(database):
@@ -114,10 +114,13 @@ def rows_json(rows,compact=False):
 def users():
  try:return json.loads(os.getenv("ADMIN_USERS_JSON","{}"))
  except Exception:return {}
-def _client_key():return request.headers.get("X-Forwarded-For",request.remote_addr or "unknown").split(",")[0].strip()
-def _login_allowed():
- now=time.time(); values=[t for t in _login_failures.get(_client_key(),[]) if now-t<_LOGIN_WINDOW_SECONDS]; _login_failures[_client_key()]=values; return len(values)<_LOGIN_MAX_FAILURES
-def _login_failed():_login_failures.setdefault(_client_key(),[]).append(time.time())
+def _client_key():return (request.remote_addr or "unknown").strip()
+def _auth_key(username):return "login:user:"+str(username).strip().lower()[:128]
+def _setup_key():return "setup:global"
+def _auth_allowed(database,attempt_key,maximum):
+ now=datetime.now(timezone.utc); since=(now-timedelta(seconds=_LOGIN_WINDOW_SECONDS)).isoformat(); return database.login_failures(attempt_key,since)<maximum
+def _auth_failed(database,attempt_key):database.record_login_failure(attempt_key,datetime.now(timezone.utc).isoformat())
+def _auth_clear(database,attempt_key):database.clear_login_failures(attempt_key)
 def _india_day_bounds():
  tz=ZoneInfo("Asia/Kolkata"); today=datetime.now(tz).date(); start=datetime.combine(today,datetime.min.time(),tzinfo=tz).astimezone(timezone.utc); return start.isoformat(),(start+timedelta(days=1)).isoformat()
 
@@ -127,8 +130,16 @@ def log_admin(database,action,item_id=None,details=None):
 
 @app.after_request
 def security_headers(response):
- response.headers["X-Content-Type-Options"]="nosniff"; response.headers["X-Frame-Options"]="DENY"; response.headers["Referrer-Policy"]="no-referrer"; response.headers["Permissions-Policy"]="camera=(), microphone=(), geolocation=()"; response.headers["Strict-Transport-Security"]="max-age=31536000; includeSubDomains"
- if request.path.startswith("/api/admin"):response.headers["Cache-Control"]="no-store"
+ response.headers["X-Content-Type-Options"]="nosniff"
+ response.headers["X-Frame-Options"]="DENY"
+ response.headers["Referrer-Policy"]="strict-origin-when-cross-origin"
+ response.headers["Permissions-Policy"]="camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+ response.headers["Strict-Transport-Security"]="max-age=31536000; includeSubDomains"
+ response.headers["Content-Security-Policy"]="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' https:; font-src 'self' data:; connect-src 'self'; frame-src 'none'; worker-src 'self'; upgrade-insecure-requests"
+ response.headers["Cross-Origin-Opener-Policy"]="same-origin"
+ response.headers["Cross-Origin-Resource-Policy"]="same-origin"
+ response.headers["X-Permitted-Cross-Domain-Policies"]="none"
+ if request.path.startswith("/api/admin"):response.headers["Cache-Control"]="no-store, no-cache, must-revalidate, max-age=0"
  return response
 
 @app.post("/api/admin/setup")
@@ -177,7 +188,7 @@ def me():return jsonify({"authenticated":bool(session.get("admin_user")),"userna
 @app.get("/api/health")
 def health():
  database=db()
- try:return jsonify({"ok":True,"news_count":database.count()})
+ try:return jsonify({"ok":True})
  finally:database.close()
 
 @app.get("/api/news")
