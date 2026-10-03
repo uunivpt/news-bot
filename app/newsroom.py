@@ -232,6 +232,19 @@ def select_sentences(text,limit,title=""):
             chosen[chosen.index(replace)]=i
         break
 
+    # Preserve a useful late-article fact when the source carries an
+    # important implementation detail, follow-up, operational change, or outcome
+    # near the end. Extractive news stories often place such details after the lead.
+    tail=len(items)-1
+    if tail>=0 and valid(tail) and tail not in chosen:
+        if len(chosen)<limit:
+            chosen.append(tail)
+        else:
+            replaceable=[j for j in chosen if j != 0 and not STRONG_OUTCOME_RE.search(items[j])]
+            if replaceable:
+                replace=min(replaceable,key=lambda j:(algorithm_scores[j],_score(items[j],j,len(items),title_words)))
+                chosen[chosen.index(replace)]=tail
+
     chosen=set(chosen)
     return [item for i,item in enumerate(items) if i in chosen][:limit]
 
