@@ -8,6 +8,10 @@ on:
       - "app/templates/politicshub_reel_18s.html"
       - "app/instagram_reel.py"
       - "scripts/auto_publish.py"
+      - "app/image_acquisition.py"
+      - "app/database.py"
+      - "app/news_pulse_audio.py"
+      - "requirements.txt"
       - ".github/workflows/test_reel.yml"
 
 jobs:
@@ -37,6 +41,7 @@ jobs:
         run: |
           python -m py_compile app/database.py
           python -m py_compile app/image_acquisition.py
+          python -m py_compile app/news_pulse_audio.py
           python -m py_compile app/worker.py
           python -m py_compile app/html_reel_renderer.py
           python -m py_compile app/instagram_reel.py
