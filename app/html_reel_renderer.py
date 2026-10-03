@@ -154,28 +154,64 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
             "window.PH.load(window.__PH_NEWS);window.PH.playFromStart();true"
         })
 
-        try:
-            start=_cdp(ws,counter,"Page.startScreenRecording",{
-                "format":"webm","frameRate":FPS,"maxWidth":CAPTURE_WIDTH,"maxHeight":CAPTURE_HEIGHT
-            },timeout=15)
-        except Exception as exc:
-            raise RuntimeError(f"Chromium screen recording is unavailable: {exc}") from exc
+        # CDP screen recording is unreliable in headless CI (it can emit a
+        # near-empty stream). Use the documented screencast event stream instead:
+        # Chromium pushes compressed frames and we acknowledge each frame.
+        frames=work/"frames"
+        frames.mkdir()
+        _cdp(ws,counter,"Page.startScreencast",{
+            "everyNthFrame":1,
+            "format":"jpeg",
+            "quality":88,
+            "maxWidth":CAPTURE_WIDTH,
+            "maxHeight":CAPTURE_HEIGHT,
+            "maxFramesInFlight":1,
+        },timeout=15)
 
-        # The page's own requestAnimationFrame loop drives the motion graphics in real time.
-        # Record slightly beyond 18s, then trim to an exact 18.000s with FFmpeg.
-        time.sleep(DURATION+0.35)
-        stop=_cdp(ws,counter,"Page.stopScreenRecording",{},timeout=30)
-        handle=stop.get("stream") or start.get("stream")
-        if not handle:
-            raise RuntimeError(f"Chromium screen recording returned no stream: {stop}")
-        recording.write_bytes(_read_stream(ws,counter,handle))
-        if recording.stat().st_size<1024:
-            raise RuntimeError("Chromium screen recording returned an empty stream")
+        _cdp(ws,counter,"Runtime.evaluate",{
+            "expression":"window.PH.load(window.__PH_NEWS);window.PH.playFromStart();true"
+        })
+        capture_until=time.monotonic()+DURATION+0.35
+        frame_index=0
+        ws.settimeout(2)
+        try:
+            while time.monotonic()<capture_until:
+                try:
+                    raw=ws.recv()
+                except Exception:
+                    continue
+                msg=json.loads(raw)
+                if msg.get("method")!="Page.screencastFrame":
+                    continue
+                params=msg.get("params") or {}
+                data=params.get("data")
+                session_id=params.get("sessionId")
+                if data:
+                    (frames/f"f{frame_index:05d}.jpg").write_bytes(base64.b64decode(data))
+                    frame_index+=1
+                if session_id is not None:
+                    counter[0]+=1
+                    ws.send(json.dumps({
+                        "id":counter[0],
+                        "method":"Page.screencastFrameAck",
+                        "params":{"sessionId":session_id},
+                    }))
+        finally:
+            ws.settimeout(CDP_TIMEOUT)
+            try:
+                _cdp(ws,counter,"Page.stopScreencast",{},timeout=15)
+            except Exception:
+                pass
+
+        if frame_index < int(DURATION*FPS*0.75):
+            raise RuntimeError(f"Chromium screencast captured too few frames: {frame_index}")
+        print(f"Chromium screencast captured {frame_index} frames")
 
         subprocess.run([
-            "ffmpeg","-y","-i",str(recording),
-            "-t",str(DURATION),"-vf","scale=1080:1920:flags=lanczos",
-            "-r",str(FPS),"-c:v","libx264","-preset","veryfast","-crf","18",
+            "ffmpeg","-y","-framerate",str(FPS),"-i",str(frames/"f%05d.jpg"),
+            "-t",str(DURATION),
+            "-vf","fps=30,scale=1080:1920:flags=lanczos",
+            "-c:v","libx264","-preset","veryfast","-crf","18",
             "-pix_fmt","yuv420p","-an","-movflags","+faststart",str(silent)
         ],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 
