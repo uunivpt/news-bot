@@ -26,6 +26,15 @@ jobs:
           chromium --version
       - run: pip install -r requirements.txt
 
+      - name: Validate Python and deterministic tests
+        env:
+          PYTHONPATH: .
+          DATABASE_URL: ''
+          PGSSLMODE: ''
+        run: |
+          python -m compileall -q app api scripts run.py
+          python -m unittest discover -s tests -p 'test_*.py' -v
+
       - name: Build current HTML Reel without image
         env:
           PYTHONPATH: .
