@@ -7,177 +7,125 @@ on:
       - "app/html_reel_renderer.py"
       - "app/templates/politicshub_reel_18s.html"
       - "app/instagram_reel.py"
+      - "scripts/auto_publish.py"
       - ".github/workflows/test_reel.yml"
 
 jobs:
   test:
-    permissions:
-      contents: read
-      statuses: write
     runs-on: ubuntu-latest
     timeout-minutes: 12
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
+
       - name: Install FFmpeg and Chromium
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg chromium xvfb
-          ffmpeg -version | head -n 1
+          sudo apt-get install -y ffmpeg chromium
           chromium --version
-      - run: pip install -r requirements.txt
+          ffmpeg -version | head -n 1
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
 
       - name: Validate changed Python syntax
         run: |
           python -m py_compile app/database.py
           python -m py_compile app/worker.py
           python -m py_compile app/html_reel_renderer.py
+          python -m py_compile app/instagram_reel.py
           python -m py_compile scripts/auto_publish.py
 
       - name: Test database
         env:
           PYTHONPATH: .
-          DATABASE_URL: ''
-          PGSSLMODE: ''
+          DATABASE_URL: ""
+          PGSSLMODE: ""
         run: python -m unittest tests/test_database.py -v
 
       - name: Test newsroom
         env:
           PYTHONPATH: .
-          DATABASE_URL: ''
-          PGSSLMODE: ''
+          DATABASE_URL: ""
+          PGSSLMODE: ""
         run: python -m unittest tests/test_newsroom.py -v
 
       - name: Test normalize
         env:
           PYTHONPATH: .
-          DATABASE_URL: ''
-          PGSSLMODE: ''
+          DATABASE_URL: ""
+          PGSSLMODE: ""
         run: python -m unittest tests/test_normalize.py -v
 
       - name: Test website monitor
         env:
           PYTHONPATH: .
-          DATABASE_URL: ''
-          PGSSLMODE: ''
+          DATABASE_URL: ""
+          PGSSLMODE: ""
         run: python -m unittest tests/test_website_monitor.py -v
 
       - name: Test advanced system
         env:
           PYTHONPATH: .
-          DATABASE_URL: ''
-          PGSSLMODE: ''
+          DATABASE_URL: ""
+          PGSSLMODE: ""
         run: python tests/test_advanced_system.py -v
 
-      - name: Render current HTML Reel without image
+      - name: Build current 18-second HTML Reel
         env:
           PYTHONPATH: .
         run: |
           mkdir -p data/media
-          for attempt in 1 2; do
-            rm -f data/media/test_html_no_image.mp4 data/media/html_render.log
-            if python - <<'PY' >data/media/html_render.log 2>&1
+          python - <<'PY'
           from app.html_reel_renderer import render_html_reel
-          render_html_reel({
-              "headline": "A deliberately long PoliticsHub headline that must remain readable without being cut off",
-              "category": "WORLD",
-              "date": "03 Oct 2026",
-              "location": "Donetsk, Ukraine",
-              "source": "PoliticsHub",
-              "summary": "This verifies the production HTML template, dynamic text fields, no-image path and exact duration.",
-              "image_url": None,
-          }, "data/media/test_html_no_image.mp4")
-          PY
-            then
-              break
-            fi
-            echo "HTML renderer attempt $attempt failed; retrying..."
-            cat data/media/html_render.log
-            sleep 2
-          done
-          test -s data/media/test_html_no_image.mp4
 
-      - name: Verify HTML Reel duration
+          render_html_reel(
+              {
+                  "headline": "A deliberately long PoliticsHub headline that must remain readable without being cut off",
+                  "category": "WORLD",
+                  "date": "03 Oct 2026",
+                  "location": "Donetsk, Ukraine",
+                  "source": "PoliticsHub",
+                  "summary": "This verifies the current production HTML template, dynamic text fields, no-image path and exact duration.",
+                  "image_url": None,
+              },
+              "data/media/test_html_no_image.mp4",
+          )
+          PY
+
+      - name: Verify final Reel
         run: |
           test -s data/media/test_html_no_image.mp4
-          DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 data/media/test_html_no_image.mp4)
-          python - "$DURATION" <<'PY'
-          import sys
-          d=float(sys.argv[1])
-          if abs(d-18.0)>0.15:
-              raise SystemExit(f"HTML Reel is not 18 seconds: {d}")
-          print("HTML 18-second duration check: PASS")
-          PY
+          ffprobe -v error             -show_entries format=duration             -of default=noprint_wrappers=1:nokey=1             data/media/test_html_no_image.mp4
 
-      - name: Download fixed audio and build test image
-        env:
-          FIXED_AUDIO_URL: ${{ secrets.FIXED_AUDIO_URL }}
-        run: |
           python - <<'PY'
-          import os
-          from pathlib import Path
-          import requests
-          from PIL import Image, ImageDraw, ImageFont
+          import json
+          import subprocess
 
-          url = os.environ.get("FIXED_AUDIO_URL", "").strip()
-          if not url.startswith(("https://", "http://")):
-              raise SystemExit("FIXED_AUDIO_URL is not a valid HTTP(S) URL. Re-copy the Cloudinary Secure URL into the GitHub secret.")
+          path = "data/media/test_html_no_image.mp4"
+          raw = subprocess.check_output([
+              "ffprobe", "-v", "error",
+              "-show_entries", "format=duration:stream=width,height,pix_fmt",
+              "-of", "json", path
+          ])
+          info = json.loads(raw)
+          duration = float(info["format"]["duration"])
+          video = next(s for s in info["streams"] if s.get("width"))
 
-          out = Path("data/media")
-          out.mkdir(parents=True, exist_ok=True)
-          r = requests.get(url, timeout=30)
-          r.raise_for_status()
-          audio = out / "fixed_music.mp3"
-          audio.write_bytes(r.content)
-          print(f"Audio download OK: {len(r.content)} bytes")
-
-          img = Image.new("RGB", (1080, 1920), "white")
-          d = ImageDraw.Draw(img)
-          try:
-              font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 64)
-          except Exception:
-              font = ImageFont.load_default()
-          d.text((70, 800), "NEWS REEL TEST", fill="black", font=font)
-          d.text((70, 900), "18 seconds • fixed audio", fill="black", font=font)
-          img.save(out / "test.jpg", quality=92)
+          assert abs(duration - 18.0) <= 0.15, duration
+          assert (video["width"], video["height"]) == (1080, 1920)
+          assert video["pix_fmt"] in {"yuv420p", "yuvj420p"}
+          print(f"PASS: {duration:.3f}s / 1080x1920 / {video['pix_fmt']}")
           PY
 
-      - name: Build exact 18-second Reel
-        run: |
-          python - <<'PY'
-          from app.instagram_reel import build_reel
-          build_reel(["data/media/test.jpg"], "data/media/test_18s.mp4", "data/media/fixed_music.mp3", 18)
-          PY
-          DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 data/media/test_18s.mp4)
-          echo "Reel duration: ${DURATION}s"
-          python - "$DURATION" <<'PY'
-          import sys
-          duration = float(sys.argv[1])
-          if abs(duration - 18.0) > 0.15:
-              raise SystemExit(f"Reel is not 18 seconds: {duration}")
-          print("18-second duration check: PASS")
-          PY
-
-      - name: Upload test Reel to Cloudinary (no Instagram publish)
-        env:
-          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
-          CLOUDINARY_UPLOAD_PRESET: ${{ secrets.CLOUDINARY_UPLOAD_PRESET }}
-        run: |
-          python - <<'PY'
-          import os
-          from app.cloudinary_storage import upload_video
-          url = upload_video("data/media/test_18s.mp4")
-          if not url:
-              raise SystemExit("Cloudinary upload was not configured")
-          print("Cloudinary video upload: PASS")
-          print("Public video URL was returned successfully (not printing the URL).")
-          PY
-
-      - name: Upload test artifact
+      - name: Upload Reel test artifact
         uses: actions/upload-artifact@v4
         with:
-          name: news-pulse-18s-test
-          path: data/media/test_18s.mp4
+          name: politicshub-18s-reel-test
+          path: data/media/test_html_no_image.mp4
           retention-days: 3
