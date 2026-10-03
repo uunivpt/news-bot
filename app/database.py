@@ -44,7 +44,7 @@ CREATE INDEX IF NOT EXISTS idx_news_instagram ON news_items(instagram_status);
 CREATE INDEX IF NOT EXISTS idx_news_instagram_retry ON news_items(instagram_status, instagram_next_retry_at);
 CREATE INDEX IF NOT EXISTS idx_news_instagram_selected ON news_items(instagram_selected, instagram_status);
 CREATE INDEX IF NOT EXISTS idx_news_instagram_schedule ON news_items(instagram_status, instagram_scheduled_at);
-CREATE INDEX IF NOT EXISTS idx_news_instagram_queue_order ON news_items(instagram_selected, instagram_queue_order);
+CREATE INDEX IF NOT EXISTS idx_news_instagram_queue_order ON news_items(instagram_selected, instagram_queue_order);\nCREATE INDEX IF NOT EXISTS idx_admin_login_attempts_key_time ON admin_login_attempts(attempt_key, attempted_at);
 """
 MIGRATIONS = {
  "category":"ALTER TABLE news_items ADD COLUMN category TEXT NOT NULL DEFAULT 'general'", "status":"ALTER TABLE news_items ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'",
@@ -89,7 +89,7 @@ class NewsDatabase:
     raise last_error
    self.conn.autocommit=True
    # PostgreSQL drivers execute one statement at a time; keep schema creation explicit.
-   for statement in (SCHEMA, ADMIN_SCHEMA, ACTIVITY_SCHEMA):
+   for statement in (SCHEMA, ADMIN_SCHEMA, ACTIVITY_SCHEMA, AUTH_SCHEMA):
     self.conn.execute(statement.strip())
    self._migrate_postgres()
    for statement in INDEXES.split(";"):
@@ -99,7 +99,7 @@ class NewsDatabase:
    if os.getenv("VERCEL") and not self.database_url:
     raise RuntimeError("DATABASE_URL is required on Vercel; refusing to use local SQLite")
    self.path=Path(path); self.path.parent.mkdir(parents=True,exist_ok=True); self.conn=sqlite3.connect(self.path); self.conn.row_factory=sqlite3.Row
-   self.conn.executescript(SCHEMA.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")); self.conn.executescript(ADMIN_SCHEMA); self.conn.executescript(ACTIVITY_SCHEMA.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")); self._migrate_sqlite(); self.conn.executescript(INDEXES); self.conn.commit()
+   self.conn.executescript(SCHEMA.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")); self.conn.executescript(ADMIN_SCHEMA); self.conn.executescript(ACTIVITY_SCHEMA.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")); self.conn.executescript(AUTH_SCHEMA.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")); self._migrate_sqlite(); self.conn.executescript(INDEXES); self.conn.commit()
   self._seed_settings()
  def _migrate_postgres(self):
   for sql in MIGRATIONS.values():
@@ -126,6 +126,20 @@ class NewsDatabase:
    value=str(value)
    if self._postgres:self.conn.execute("INSERT INTO admin_settings (key,value,updated_at) VALUES (%s,%s,%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value,updated_at=EXCLUDED.updated_at",(key,value,now))
    else:self.conn.execute("INSERT INTO admin_settings (key,value,updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at",(key,value,now))
+  if not self._postgres:self.conn.commit()
+ def login_failures(self,attempt_key,since_iso):
+  ph="%s" if self._postgres else "?"
+  row=self.conn.execute(f"SELECT COUNT(*) AS count FROM admin_login_attempts WHERE attempt_key = {ph} AND attempted_at >= {ph}",(attempt_key,since_iso)).fetchone()
+  return int(row["count"] if self._postgres else row[0])
+ def record_login_failure(self,attempt_key,at_iso):
+  ph="%s" if self._postgres else "?"
+  self.conn.execute(f"INSERT INTO admin_login_attempts (attempt_key,attempted_at) VALUES ({ph},{ph})",(attempt_key,at_iso))
+  cleanup_before=(datetime.fromisoformat(at_iso.replace("Z","+00:00"))-timedelta(hours=1)).isoformat().replace("+00:00","Z")
+  self.conn.execute(f"DELETE FROM admin_login_attempts WHERE attempted_at < {ph}",(cleanup_before,))
+  if not self._postgres:self.conn.commit()
+ def clear_login_failures(self,attempt_key):
+  ph="%s" if self._postgres else "?"
+  self.conn.execute(f"DELETE FROM admin_login_attempts WHERE attempt_key = {ph}",(attempt_key,))
   if not self._postgres:self.conn.commit()
  def instagram_daily_count(self,start,end):
   ph="%s" if self._postgres else "?"; row=self.conn.execute(f"SELECT COUNT(*) AS count FROM news_items WHERE instagram_status='published' AND instagram_published_at >= {ph} AND instagram_published_at < {ph}",(start,end)).fetchone(); return int(row["count"] if self._postgres else row[0])
