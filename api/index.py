@@ -22,7 +22,7 @@ app=Flask(__name__, static_folder="../public", static_url_path="")
 _secret=os.getenv("FLASK_SECRET_KEY") or os.getenv("ADMIN_TOKEN") or os.getenv("ADMIN_SETUP_KEY")
 if not _secret:_secret=secrets.token_urlsafe(32)
 app.secret_key=_secret
-app.config.update(SESSION_COOKIE_NAME="politicshub_admin_session",SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SECURE=True,SESSION_COOKIE_SAMESITE="Lax",SESSION_COOKIE_PATH="/",SESSION_COOKIE_REFRESH_EACH_REQUEST=False)
+app.config.update(SESSION_COOKIE_NAME="__Host-politicshub_admin_session",SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SECURE=True,SESSION_COOKIE_SAMESITE="Strict",SESSION_COOKIE_PATH="/",SESSION_COOKIE_REFRESH_EACH_REQUEST=False)
 _LOGIN_WINDOW_SECONDS=300; _LOGIN_MAX_FAILURES=8; _SETUP_MAX_FAILURES=5; _login_failures={}
 
 
@@ -134,7 +134,7 @@ def security_headers(response):
  response.headers["X-Frame-Options"]="DENY"
  response.headers["Referrer-Policy"]="strict-origin-when-cross-origin"
  response.headers["Permissions-Policy"]="camera=(), microphone=(), geolocation=(), payment=(), usb=()"
- response.headers["Strict-Transport-Security"]="max-age=31536000; includeSubDomains"
+ response.headers["Strict-Transport-Security"]="max-age=63072000; includeSubDomains; preload"
  response.headers["Content-Security-Policy"]="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' https:; font-src 'self' data:; connect-src 'self'; frame-src 'none'; worker-src 'self'; upgrade-insecure-requests"
  response.headers["Cross-Origin-Opener-Policy"]="same-origin"
  response.headers["Cross-Origin-Resource-Policy"]="same-origin"
