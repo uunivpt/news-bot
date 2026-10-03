@@ -145,19 +145,14 @@ def select_sentences(text,limit,title=""):
         return not _is_duplicate_of_title(items[i],title)
 
     MATERIAL_FACT_RE=re.compile(
-        r"(?i)(?:\b(?:\d+(?:\.\d+)?%?|\$\d[\d,.]*|₹\s?\d[\d,.]*|\d{4})\b|"
-        r"\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b|"
-        r"\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|"
-        r"eleven|twelve)\s+(?:days?|weeks?|months?|years?|hours?|minutes?|"
-        r"workers?|buildings?|routes?|companies?|regions?)\b)",re.I
-    )
-    concrete=sorted(
-        [i for i in ranked if valid(i) and MATERIAL_FACT_RE.search(items[i])],
-        key=lambda i: (
-            -len(MATERIAL_FACT_RE.findall(items[i])),
-            -algorithm_scores[i],
-            i,
-        ),
+        r"(?i)(?:"
+        r"\\b(?:\\d+(?:\\.\\d+)?%?|\\$\\d[\\d,.]*|₹\\s?\\d[\\d,.]*|\\d{4})\\b"
+        r"|\\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\\b"
+        r"|\\b(?:\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
+        r"\\s+[A-Za-z][A-Za-z-]*(?:\\s+[A-Za-z][A-Za-z-]*){0,2}\\b"
+        r"|\\b(?:first|second|third|fourth|fifth|next|another|additional)\\s+[A-Za-z][A-Za-z-]*"
+        r"(?:\\s+[A-Za-z][A-Za-z-]*){0,2}\\b"
+        r")"
     )
     outcomes=[i for i in ranked if valid(i) and CONSEQUENCE_WORDS.search(items[i])]
 
@@ -231,19 +226,6 @@ def select_sentences(text,limit,title=""):
             )
             chosen[chosen.index(replace)]=i
         break
-
-    # Preserve a useful late-article fact when the source carries an
-    # important implementation detail, follow-up, operational change, or outcome
-    # near the end. Extractive news stories often place such details after the lead.
-    tail=len(items)-1
-    if tail>=0 and valid(tail) and tail not in chosen:
-        if len(chosen)<limit:
-            chosen.append(tail)
-        else:
-            replaceable=[j for j in chosen if j != 0 and not STRONG_OUTCOME_RE.search(items[j])]
-            if replaceable:
-                replace=min(replaceable,key=lambda j:(algorithm_scores[j],_score(items[j],j,len(items),title_words)))
-                chosen[chosen.index(replace)]=tail
 
     chosen=set(chosen)
     return [item for i,item in enumerate(items) if i in chosen][:limit]
