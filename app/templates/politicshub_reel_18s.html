@@ -132,7 +132,7 @@ const sweep=mk('',cam,'','left:-520px;top:-300px;width:180px;height:2600px;backg
 const sweepAc=mk('',cam,'','left:-620px;top:-300px;width:90px;height:2600px;background:linear-gradient(90deg,transparent,rgba(230,57,70,.22),transparent);transform:rotate(14deg);opacity:0');
 const dataRail=mk('',cam,'','left:76px;top:1780px;width:928px;height:2px;background:rgba(255,255,255,.16);opacity:0');
 const dataRailFill=mk('',dataRail,'','left:0;top:-1px;width:0;height:4px;background:var(--ac);box-shadow:0 0 14px var(--ac)');
-const dataRead=mk('m',cam,'SYS // LIVE FEED&nbsp;&nbsp; • &nbsp;&nbsp;30 FPS&nbsp;&nbsp; • &nbsp;&nbsp;SIGNAL LOCK','left:76px;top:1810px;font-size:18px;letter-spacing:4px;color:#777;opacity:0;white-space:nowrap');
+const dataRead=mk('m',cam,'SYS // LIVE FEED&nbsp;&nbsp; • &nbsp;&nbsp;60 FPS&nbsp;&nbsp; • &nbsp;&nbsp;SIGNAL LOCK','left:76px;top:1810px;font-size:18px;letter-spacing:4px;color:#777;opacity:0;white-space:nowrap');
 const micro=mk('m',cam,'PH // NEWS DESK // 001','right:76px;top:1810px;font-size:17px;letter-spacing:3px;color:#666;opacity:0;white-space:nowrap');
 const dots=[];
 [[116,310],[188,470],[920,360],[844,530],[138,870],[950,820],[214,1120],[876,1180],[112,1420],[936,1490],[280,1640],[800,1580]].forEach((q,i)=>{
@@ -166,7 +166,7 @@ D.push(t=>{cam.style.transform=`scale(${1.012+.03*t/DUR}) rotate(${.2*Math.sin(t
 const b=10*sg(t,6.6,7.6)+5*sg(t,12.1,12.9);if(imgE.firstChild)imgE.firstChild.style.filter=b?`blur(${b.toFixed(1)}px)`:'none';
 r1.style.transform=`rotate(${t*40}deg)`;r2.style.transform=`rotate(${-t*120}deg)`;mi.style.transform=`translateX(${-(t*170)%unit}px)`;
 sl.style.top=((t-12.8)*260%pH+pH)%pH+'px';
-tc.textContent=`00:${String(t|0).padStart(2,'0')}:${String(t%1*30|0).padStart(2,'0')}`;pf.style.width=928*t/DUR+'px';lv.firstChild.style.opacity=t*2%2<1?1:.25})}
+tc.textContent=`00:${String(t|0).padStart(2,'0')}:${String(t%1*60|0).padStart(2,'0')}`;pf.style.width=928*t/DUR+'px';lv.firstChild.style.opacity=t*2%2<1?1:.25})}
 
 const sc=$('#sc'),tm=$('#tm'),pb_=$('#pl'),sel=$('#sel'),wr=$('#w');
 function fitStage(){const k=Math.min((innerWidth-16)/1080,(innerHeight-130)/1920);st.style.transform=`scale(${k})`;wr.style.width=1080*k+'px';wr.style.height=1920*k+'px'}
@@ -178,5 +178,5 @@ addEventListener('resize',fitStage);fitStage();build(window.NEWS||S[0]);
 document.fonts&&document.fonts.ready.then(()=>build(window.NEWS||S[+sel.value]));
 requestAnimationFrame(t=>{last=t;loop(t)});
 /* Pipeline hooks: PH.load({headline,category,date,location,source,summary,img,focus:[x,y],cta}); PH.render(seconds) draws any frame deterministically (headless capture @ PH.fps) */
-window.PH={render,DUR,fps:30,load:o=>build({...S[0],...o}),stop:()=>{pl=false;if(rafId){cancelAnimationFrame(rafId);rafId=0}},playFromStart:()=>{if(!rafId)rafId=requestAnimationFrame(loop);T=0;pl=true;last=performance.now();render(0)},ready:document.fonts?document.fonts.ready:Promise.resolve()};
+window.PH={render,DUR,fps:60,load:o=>build({...S[0],...o}),stop:()=>{pl=false;if(rafId){cancelAnimationFrame(rafId);rafId=0}},playFromStart:()=>{if(!rafId)rafId=requestAnimationFrame(loop);T=0;pl=true;last=performance.now();render(0)},ready:document.fonts?document.fonts.ready:Promise.resolve()};
 </script></body></html>
