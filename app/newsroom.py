@@ -151,7 +151,14 @@ def select_sentences(text,limit,title=""):
         r"eleven|twelve)\s+(?:days?|weeks?|months?|years?|hours?|minutes?|"
         r"workers?|buildings?|routes?|companies?|regions?)\b)",re.I
     )
-    concrete=[i for i in ranked if valid(i) and MATERIAL_FACT_RE.search(items[i])]
+    concrete=sorted(
+        [i for i in ranked if valid(i) and MATERIAL_FACT_RE.search(items[i])],
+        key=lambda i: (
+            -len(MATERIAL_FACT_RE.findall(items[i])),
+            -algorithm_scores[i],
+            i,
+        ),
+    )
     outcomes=[i for i in ranked if valid(i) and CONSEQUENCE_WORDS.search(items[i])]
 
     chosen=[]
