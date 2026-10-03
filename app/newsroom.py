@@ -144,7 +144,14 @@ def select_sentences(text,limit,title=""):
     def valid(i):
         return not _is_duplicate_of_title(items[i],title)
 
-    concrete=[i for i in ranked if valid(i) and DATE_OR_NUMBER_RE.search(items[i])]
+    MATERIAL_FACT_RE=re.compile(
+        r"(?i)(?:\\b(?:\\d+(?:\\.\\d+)?%?|\\$\\d[\\d,.]*|₹\\s?\\d[\\d,.]*|\\d{4})\\b|"
+        r"\\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\\b|"
+        r"\\b(?:\\d+|one|two|three|four|five|six|seven|eight|nine|ten|"
+        r"eleven|twelve)\\s+(?:days?|weeks?|months?|years?|hours?|minutes?|"
+        r"workers?|buildings?|routes?|companies?|regions?)\\b)",re.I
+    )
+    concrete=[i for i in ranked if valid(i) and MATERIAL_FACT_RE.search(items[i])]
     outcomes=[i for i in ranked if valid(i) and CONSEQUENCE_WORDS.search(items[i])]
 
     chosen=[]
@@ -203,7 +210,7 @@ def select_sentences(text,limit,title=""):
             chosen.append(i)
             break
         # Only replace a non-concrete sentence. Concrete facts are protected.
-        non_concrete=[j for j in chosen if not DATE_OR_NUMBER_RE.search(items[j])]
+        non_concrete=[j for j in chosen if not MATERIAL_FACT_RE.search(items[j])]
         if non_concrete:
             replace=min(
                 non_concrete,
