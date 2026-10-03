@@ -35,6 +35,11 @@ CREATE TABLE IF NOT EXISTS admin_activity (
  details TEXT, created_at TEXT NOT NULL
 )
 """
+AUTH_SCHEMA = """
+CREATE TABLE IF NOT EXISTS admin_login_attempts (
+ id BIGSERIAL PRIMARY KEY, attempt_key TEXT NOT NULL, attempted_at TEXT NOT NULL
+)
+"""
 INDEXES = """
 CREATE INDEX IF NOT EXISTS idx_news_published_at ON news_items(published_at);
 CREATE INDEX IF NOT EXISTS idx_news_source ON news_items(source_name);
