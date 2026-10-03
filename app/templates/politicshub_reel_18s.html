@@ -125,6 +125,36 @@ A(mk('',cam,lg(70,MARK),'left:76px;top:150px'),3.4,4,{fx:-40,c:[100,0,0,0],out:X
 const lv=mk('m',cam,'<i class=pin style="background:#ff2d2d"></i>Live','left:176px;top:166px;font-size:26px'),tc=mk('m',cam,'','right:76px;top:166px;font-size:26px;color:#bbb'),pb=mk('',cam,'','left:76px;top:236px;width:928px;height:3px;background:rgba(255,255,255,.25)'),pf=mk('',pb,'','left:0;top:0;height:3px;width:0;background:#fff');
 A(lv,3.5,4,{fx:-40,out:XH});A(tc,3.5,4,{fx:40,out:XH});A(pb,3.6,4.2,{c:[0,100,0,0],out:XH});
 
+/* MOTION GRAPHICS LAYER — broadcast-style kinetic overlays */
+const scan=mk('',cam,'','left:0;top:0;width:1080px;height:3px;background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.08) 18%,#fff 50%,rgba(255,255,255,.08) 82%,transparent 100%);box-shadow:0 0 18px rgba(255,255,255,.55);opacity:.0');
+const scan2=mk('',cam,'','left:0;top:0;width:1080px;height:1px;background:var(--ac);box-shadow:0 0 14px var(--ac);opacity:.0');
+const sweep=mk('',cam,'','left:-520px;top:-300px;width:180px;height:2600px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.18),transparent);transform:rotate(14deg);opacity:0');
+const sweepAc=mk('',cam,'','left:-620px;top:-300px;width:90px;height:2600px;background:linear-gradient(90deg,transparent,rgba(230,57,70,.22),transparent);transform:rotate(14deg);opacity:0');
+const dataRail=mk('',cam,'','left:76px;top:1780px;width:928px;height:2px;background:rgba(255,255,255,.16);opacity:0');
+const dataRailFill=mk('',dataRail,'','left:0;top:-1px;width:0;height:4px;background:var(--ac);box-shadow:0 0 14px var(--ac)');
+const dataRead=mk('m',cam,'SYS // LIVE FEED&nbsp;&nbsp; • &nbsp;&nbsp;30 FPS&nbsp;&nbsp; • &nbsp;&nbsp;SIGNAL LOCK','left:76px;top:1810px;font-size:18px;letter-spacing:4px;color:#777;opacity:0;white-space:nowrap');
+const micro=mk('m',cam,'PH // NEWS DESK // 001','right:76px;top:1810px;font-size:17px;letter-spacing:3px;color:#666;opacity:0;white-space:nowrap');
+const dots=[];
+[[116,310],[188,470],[920,360],[844,530],[138,870],[950,820],[214,1120],[876,1180],[112,1420],[936,1490],[280,1640],[800,1580]].forEach((q,i)=>{
+  const e=mk('',cam,'',`left:${q[0]}px;top:${q[1]}px;width:5px;height:5px;border-radius:50%;background:var(--ac);box-shadow:0 0 12px var(--ac);opacity:0`);
+  dots.push(e);
+});
+const glitch=[];
+[0,1,2].forEach(i=>{
+  const e=mk('',cam,'',`left:48px;top:${700+i*72}px;width:${220+i*95}px;height:2px;background:rgba(255,255,255,.5);opacity:0`);
+  glitch.push(e);
+});
+A(scan,3.6,4.4,{fy:-30,fo:0,to:.65,out:[14.8,15.6],ty:1980,ez:E.io});
+A(scan2,4.0,4.8,{fy:-30,fo:0,to:.8,out:[14.8,15.6],ty:1980,ez:E.io});
+A(sweep,5.9,6.7,{fx:0,fo:0,to:.75,ez:E.io,out:[6.45,6.9],tx:1780});
+A(sweepAc,11.55,12.35,{fx:0,fo:0,to:.55,ez:E.io,out:[12.15,12.55],tx:1900});
+A(dataRail,8.7,9.3,{c:[0,100,0,0],fo:0,to:.7,out:[14.8,15.6]});
+A(dataRailFill,9.0,15.2,{fo:1,to:1,out:[14.8,15.6],tx:850});
+A(dataRead,8.9,9.7,{fx:-35,fo:0,to:1,out:[14.8,15.6],tx:20});
+A(micro,9.15,9.9,{fx:35,fo:0,to:1,out:[14.8,15.6],tx:-20});
+dots.forEach((e,i)=>A(e,7.0+i*.12,7.55+i*.12,{fs:.4,fo:0,to:.75,fy:(i%3-1)*18,fx:(i%2?12:-12),out:[14.8,15.6]}));
+glitch.forEach((e,i)=>A(e,7.75+i*.13,8.0+i*.13,{fx:-30+i*18,fo:0,to:.7,fr:i%2?2:-2,out:[8.05+i*.13,8.22+i*.13]}));
+
 /* TRANSITIONS */
 [0,1,2,3].forEach(i=>{const d=i%2?-1:1,a=2.7+i*.06;A(mk('',cam,'',`left:0;top:${i*480}px;width:1080px;height:480px;background:${['#fff','var(--ac)','#8f8f8f','#fff'][i]}`),a,a+.35,{fx:-d*1080,fo:1,to:1,ez:E.io,out:[a+.4,a+.75],tx:d*1080})});
 const sw=(t,c)=>{const o=mk('',cam,'','left:-400px;top:-100px;width:1900px;height:2120px');mk('',o,'',`left:0;top:0;width:1900px;height:2120px;background:${c};transform:skewX(-14deg)`);A(o,t,t+.45,{fx:-2000,fo:1,to:1,ez:E.io,out:[t+.4,t+.85],tx:2000})};
