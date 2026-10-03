@@ -26,14 +26,43 @@ jobs:
           chromium --version
       - run: pip install -r requirements.txt
 
-      - name: Validate Python and deterministic tests
+      - name: Validate Python syntax
+        run: python -m compileall -q app api scripts run.py
+
+      - name: Test database
         env:
           PYTHONPATH: .
           DATABASE_URL: ''
           PGSSLMODE: ''
-        run: |
-          python -m compileall -q app api scripts run.py
-          python -m unittest discover -s tests -p 'test_*.py' -v
+        run: python -m unittest tests/test_database.py -v
+
+      - name: Test newsroom
+        env:
+          PYTHONPATH: .
+          DATABASE_URL: ''
+          PGSSLMODE: ''
+        run: python -m unittest tests/test_newsroom.py -v
+
+      - name: Test normalize
+        env:
+          PYTHONPATH: .
+          DATABASE_URL: ''
+          PGSSLMODE: ''
+        run: python -m unittest tests/test_normalize.py -v
+
+      - name: Test website monitor
+        env:
+          PYTHONPATH: .
+          DATABASE_URL: ''
+          PGSSLMODE: ''
+        run: python -m unittest tests/test_website_monitor.py -v
+
+      - name: Test advanced system
+        env:
+          PYTHONPATH: .
+          DATABASE_URL: ''
+          PGSSLMODE: ''
+        run: python -m unittest discover -s tests -p 'test_advanced_system.py' -v
 
       - name: Build current HTML Reel without image
         env:
