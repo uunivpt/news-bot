@@ -14,10 +14,10 @@ from pathlib import Path
 import requests
 import websocket
 
-FPS = 30
+FPS = 60
 DURATION = 18.0
-WIDTH = 540
-HEIGHT = 960
+WIDTH = 1080
+HEIGHT = 1920
 CDP_TIMEOUT = float(os.getenv("PH_CDP_TIMEOUT", "30"))
 
 
@@ -228,8 +228,8 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
 
         # The HTML template also contains a browser-only preview toolbar (#ui).
         # Never capture that editor UI in a production Reel. The stage itself is
-        # 1080x1920, so at our 540x960 capture size it must be displayed at exactly
-        # 50% and fill the complete viewport with no surrounding page layout.
+        # 1080x1920 and the renderer now captures at native resolution, so the stage
+        # fills the complete viewport with no scaling or surrounding page layout.
         _cdp(
             ws,
             counter,
@@ -244,18 +244,18 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
                         const ui = document.getElementById('ui');
                         if (!body || !html || !wrap || !stage) throw new Error('Reel stage not found');
                         if (ui) ui.style.display = 'none';
-                        html.style.width = '540px';
-                        html.style.height = '960px';
+                        html.style.width = '1080px';
+                        html.style.height = '1920px';
                         html.style.overflow = 'hidden';
-                        body.style.width = '540px';
-                        body.style.height = '960px';
+                        body.style.width = '1080px';
+                        body.style.height = '1920px';
                         body.style.margin = '0';
                         body.style.padding = '0';
                         body.style.display = 'block';
                         body.style.overflow = 'hidden';
                         body.style.background = '#050506';
-                        wrap.style.width = '540px';
-                        wrap.style.height = '960px';
+                        wrap.style.width = '1080px';
+                        wrap.style.height = '1920px';
                         wrap.style.margin = '0';
                         wrap.style.boxShadow = 'none';
                         wrap.style.overflow = 'hidden';
@@ -314,7 +314,7 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
                 "Page.captureScreenshot",
                 {
                     "format": "jpeg",
-                    "quality": 88,
+                    "quality": 95,
                     "captureBeyondViewport": False,
                     "fromSurface": True,
                 },
@@ -339,13 +339,13 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
                 "-t",
                 f"{DURATION:.6f}",
                 "-vf",
-                f"scale=1080:1920:flags=lanczos,fps={FPS}",
+                f"fps={FPS}",
                 "-c:v",
                 "libx264",
                 "-preset",
-                "veryfast",
+                "medium",
                 "-crf",
-                "18",
+                "16",
                 "-pix_fmt",
                 "yuv420p",
                 "-an",
