@@ -201,10 +201,15 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
             session_id=params.get("sessionId")
             data=params.get("data")
             if session_id is not None:
-                try:
-                    _cdp(ws,counter,"Page.screencastFrameAck",{"sessionId":session_id},timeout=5)
-                except Exception:
-                    pass
+                # ACK immediately without waiting for the ACK response. Waiting
+                # here would cause _cdp() to discard concurrent screencastFrame
+                # events and starve the capture stream.
+                counter[0]+=1
+                ws.send(json.dumps({
+                    "id":counter[0],
+                    "method":"Page.screencastFrameAck",
+                    "params":{"sessionId":session_id},
+                }))
             if data:
                 frame_data.append(base64.b64decode(data))
                 frame_index+=1
