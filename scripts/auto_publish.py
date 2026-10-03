@@ -188,7 +188,7 @@ def _process_instagram_untracked(db,row,music):
   audit_stage(db,item_id,"REEL_QA","completed",{"renderer":"politicshub_html_18s","layout":layout["id"],"preview":preview_path})
   record_preview(db,item_id,str(video),preview_path,qa_card,layout["id"])
   render_id=uuid.uuid4().hex[:12]
-   public_id=f"politicshub/reels/item-{item_id}-render-{render_id}"
+  public_id=f"politicshub/reels/item-{item_id}-render-{render_id}"
   url=upload_video(str(video),public_id=public_id) or public_video_url(str(video))
   if not url:raise RuntimeError("Public Reel video URL unavailable")
   db.update(item_id,reel_cloudinary_url=url,reel_cloudinary_public_id=public_id)
