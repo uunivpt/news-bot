@@ -188,9 +188,16 @@ def select_sentences(text,limit,title=""):
         if CONSEQUENCE_WORDS.search(items[i]) and not _is_duplicate_of_title(items[i],title)
     ]
     for item in outcome_candidates:
-        if len(selected)>=limit or item in selected:
+        if item in selected:
             continue
-        selected.append(item)
+        if len(selected)<limit:
+            selected.append(item)
+        else:
+            replace_at=min(
+                range(len(selected)),
+                key=lambda pos: _score(selected[pos], pos, len(items), title_words)
+            )
+            selected[replace_at]=item
         break
 
     return [item for item in items if item in selected][:limit]
