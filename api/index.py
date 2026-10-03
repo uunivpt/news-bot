@@ -99,13 +99,13 @@ def _publicize(row):
    try:
     dt=datetime.fromisoformat(str(raw).replace("Z","+00:00")); dt=dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc); r["published_at"]=dt.astimezone(ZoneInfo("Asia/Kolkata")).strftime("%d %b %Y · %H:%M")
    except ValueError:pass
-  r["title"]=_strip_promo_nav(r.get("title")); r["summary"]=_strip_promo_nav(dict(row).get("bot_summary") or ""); r["article"]=_strip_promo_nav(dict(row).get("bot_article") or "")
+  r["title"]=_strip_promo_nav(r.get("title")); r["summary"]=_strip_promo_nav(dict(row).get("bot_summary") or dict(row).get("summary") or ""); r["article"]=_strip_promo_nav(dict(row).get("bot_article") or dict(row).get("bot_summary") or dict(row).get("summary") or "")
  return r
 
 def rows_json(rows,compact=False):
  out=[]
  for row in rows:
-  if not (admin_ok() or (row.get("status")=="published" and row.get("bot_article"))):continue
+  if not (admin_ok() or row.get("status")=="published"):continue
   item=_publicize(row)
   if compact and admin_ok():
    item={k:item.get(k) for k in ("id","title","source_name","category","status","instagram_status","instagram_attempts","instagram_error","instagram_selected","instagram_scheduled_at","instagram_queue_order","fact_check_status","bot_summary")}
@@ -195,7 +195,7 @@ def article(item_id):
  database=db()
  try:
   row=next((dict(r) for r in database.latest(1000,status="all") if int(r["id"])==item_id),None)
-  if not row or (row["status"]!="published" and not admin_ok()) or (not admin_ok() and not row.get("bot_article")):return jsonify({"error":"not found"}),404
+  if not row or (row["status"]!="published" and not admin_ok()):return jsonify({"error":"not found"}),404
   return jsonify(_publicize(row))
  finally:database.close()
 
