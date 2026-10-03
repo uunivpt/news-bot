@@ -48,8 +48,8 @@ REEL_HASHTAGS="#reel #update #news #politics #global"
 
 def caption(row):
  title=clean_instagram_text(row.get("title") or "",""); text=clean_instagram_text(row.get("bot_summary") or row.get("summary") or "",row.get("source_name") or ""); text=_dedupe_caption_text(title,text)
- base=f"{title}\\n\\n{text}" if text else title
- return f"{base}\\n\\n{REEL_HASHTAGS}"
+ base=f"{title}\n\n{text}" if text else title
+ return f"{base}\n\n{REEL_HASHTAGS}"
 
 def audio_path():
  path=os.getenv("FIXED_AUDIO_PATH","").strip()
