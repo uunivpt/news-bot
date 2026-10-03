@@ -6,14 +6,41 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg chromium
+          chromium --version
       - run: pip install -r requirements.txt
+
+      - name: Build current HTML Reel without image
+        env:
+          PYTHONPATH: .
+        run: |
+          mkdir -p data/media
+          python - <<'PY'
+          from app.html_reel_renderer import render_html_reel
+          render_html_reel({
+              "headline": "A deliberately long PoliticsHub headline that must remain readable without being cut off",
+              "category": "WORLD",
+              "date": "03 Oct 2026",
+              "location": "Donetsk, Ukraine",
+              "source": "PoliticsHub",
+              "summary": "This verifies the production HTML template, dynamic text fields, no-image path and exact duration.",
+              "image_url": None,
+          }, "data/media/test_html_no_image.mp4")
+          PY
+          DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprappers=1:nokey=1 data/media/test_html_no_image.mp4)
+          python - "$DURATION" <<'PY'
+          import sys
+          d=float(sys.argv[1])
+          if abs(d-18.0)>0.15:
+              raise SystemExit(f"HTML Reel is not 18 seconds: {d}")
+          print("HTML 18-second duration check: PASS")
+          PY
 
       - name: Download fixed audio and build test image
         env:
