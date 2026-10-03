@@ -4,6 +4,7 @@ from pathlib import Path
 import requests, websocket
 
 CAPTURE_WIDTH, CAPTURE_HEIGHT, FPS, DURATION = 540, 960, 30, 18.0
+CDP_TIMEOUT = float(os.getenv("PH_CDP_TIMEOUT", "180"))
 
 def _find_browser():
     import shutil
@@ -63,7 +64,7 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
                 if tabs: ws_url=tabs[0]["webSocketDebuggerUrl"]; break
             except Exception: time.sleep(.1)
         if not ws_url: raise RuntimeError("Could not connect to Chromium DevTools")
-        ws=websocket.create_connection(ws_url,timeout=30); counter=[0]
+        ws=websocket.create_connection(ws_url,timeout=CDP_TIMEOUT); counter=[0]
         _cdp(ws,counter,"Page.enable"); _cdp(ws,counter,"Runtime.enable")
         _cdp(ws,counter,"Emulation.setDeviceMetricsOverride",{"width":CAPTURE_WIDTH,"height":CAPTURE_HEIGHT,
              "deviceScaleFactor":1,"mobile":False,"screenWidth":CAPTURE_WIDTH,"screenHeight":CAPTURE_HEIGHT})
