@@ -272,7 +272,7 @@ def _is_duplicate_of_title(sentence,title):
     return overlap>=0.72 and reverse>=0.55
 
 def _unique_news_sentences(title,source_text,limit):
-    chosen=select_sentences(source_text,max(limit+3,6),title=title)
+    chosen=select_sentences(source_text,limit,title=title)
     result=[];seen=set()
     for item in chosen:
         key=re.sub(r"[^a-z0-9]+"," ",item.lower()).strip()
