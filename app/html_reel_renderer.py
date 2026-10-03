@@ -1,251 +1,403 @@
 from __future__ import annotations
-import base64, json, os, socket, subprocess, tempfile, time, urllib.request
-from pathlib import Path
-import requests, websocket
 
-CAPTURE_WIDTH, CAPTURE_HEIGHT, FPS, DURATION = 540, 960, 30, 18.0
+import base64
+import json
+import os
+import shutil
+import socket
+import subprocess
+import tempfile
+import time
+import urllib.request
+from pathlib import Path
+
+import requests
+import websocket
+
+FPS = 30
+DURATION = 18.0
+WIDTH = 540
+HEIGHT = 960
 CDP_TIMEOUT = float(os.getenv("PH_CDP_TIMEOUT", "30"))
 
+
 def _find_browser():
-    import shutil
-    for c in (os.getenv("CHROMIUM_BIN","").strip(), os.getenv("CHROME_BIN","").strip(),
-              "chromium","chromium-browser","google-chrome","google-chrome-stable"):
-        if c and (Path(c).exists() if "/" in c else shutil.which(c)):
-            return c
+    for name in (
+        os.getenv("CHROMIUM_BIN", "").strip(),
+        os.getenv("CHROME_BIN", "").strip(),
+        "chromium",
+        "chromium-browser",
+        "google-chrome",
+        "google-chrome-stable",
+    ):
+        if name and (Path(name).exists() if "/" in name else shutil.which(name)):
+            return name
     return None
 
+
 def _free_port():
-    with socket.socket() as s:
-        s.bind(("127.0.0.1",0))
-        return s.getsockname()[1]
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
 
 def _data_uri(url):
-    if not url or not str(url).startswith(("http://","https://")):
+    if not url or not str(url).startswith(("http://", "https://")):
         return url
     try:
-        r=requests.get(str(url),timeout=15,headers={"User-Agent":"PoliticsHub/1.0"})
-        r.raise_for_status()
-        mime=(r.headers.get("content-type") or "image/jpeg").split(";",1)[0]
-        return f"data:{mime};base64,"+base64.b64encode(r.content).decode() if mime.startswith("image/") else None
+        response = requests.get(
+            str(url),
+            timeout=15,
+            headers={"User-Agent": "PoliticsHub/1.0"},
+        )
+        response.raise_for_status()
+        mime = (response.headers.get("content-type") or "image/jpeg").split(";", 1)[0]
+        if not mime.startswith("image/"):
+            return None
+        return "data:" + mime + ";base64," + base64.b64encode(response.content).decode()
     except Exception:
         return None
 
-def _cdp(ws,counter,method,params=None,timeout=None):
-    counter[0]+=1
-    ident=counter[0]
-    old_timeout=ws.gettimeout()
+
+def _cdp(ws, counter, method, params=None, timeout=None):
+    counter[0] += 1
+    ident = counter[0]
+    old_timeout = ws.gettimeout()
     ws.settimeout(timeout or CDP_TIMEOUT)
     try:
-        ws.send(json.dumps({"id":ident,"method":method,"params":params or {}}))
+        ws.send(json.dumps({"id": ident, "method": method, "params": params or {}}))
         while True:
-            msg=json.loads(ws.recv())
-            if msg.get("id")==ident:
-                if "error" in msg:
-                    raise RuntimeError(f"CDP {method} failed: {msg['error']}")
-                return msg.get("result",{})
+            message = json.loads(ws.recv())
+            if message.get("id") != ident:
+                continue
+            if "error" in message:
+                raise RuntimeError(f"CDP {method} failed: {message['error']}")
+            return message.get("result", {})
     finally:
         ws.settimeout(old_timeout)
 
-def _read_stream(ws,counter,handle):
-    chunks=[]
-    while True:
-        result=_cdp(ws,counter,"IO.read",{"handle":handle,"size":1024*1024},timeout=60)
-        data=result.get("data","")
-        if data:
-            chunks.append(base64.b64decode(data) if result.get("base64Encoded") else data.encode())
-        if result.get("eof"):
-            break
-    try:
-        _cdp(ws,counter,"IO.close",{"handle":handle},timeout=10)
-    except Exception:
-        pass
-    return b"".join(chunks)
 
 def render_html_reel(news, output_path, audio_path=None, template_path=None):
-    template=Path(template_path or os.getenv("POLITICSHUB_REEL_TEMPLATE","app/templates/politicshub_reel_18s.html"))
+    template = Path(
+        template_path
+        or os.getenv(
+            "POLITICSHUB_REEL_TEMPLATE",
+            "app/templates/politicshub_reel_18s.html",
+        )
+    )
     if not template.exists():
         raise FileNotFoundError(f"PoliticsHub HTML template not found: {template}")
-    browser=_find_browser()
+
+    browser = _find_browser()
     if not browser:
-        raise RuntimeError("Chromium/Chrome is required for the PoliticsHub HTML Reel renderer")
+        raise RuntimeError("Chromium/Chrome is required for the HTML Reel renderer")
 
-    item=dict(news)
-    item["headline"]=str(item.get("headline") or item.get("title") or "Latest news update")
-    item["category"]=str(item.get("category") or "News")
-    item["date"]=str(item.get("date") or "")
-    item["location"]=str(item.get("location") or "")
-    item["source"]=str(item.get("source") or item.get("source_name") or "")
-    item["summary"]=str(item.get("summary") or "")
-    item["cta"]=str(item.get("cta") or "Follow for daily politics & world updates")
-    item["img"]=_data_uri(item.get("img") or item.get("image_url"))
-    item.pop("image_url",None)
+    item = dict(news)
+    item["headline"] = str(item.get("headline") or item.get("title") or "Latest news update")
+    item["category"] = str(item.get("category") or "News")
+    item["date"] = str(item.get("date") or "")
+    item["location"] = str(item.get("location") or "")
+    item["source"] = str(item.get("source") or item.get("source_name") or "")
+    item["summary"] = str(item.get("summary") or "")
+    item["cta"] = str(item.get("cta") or "Follow for daily politics & world updates")
+    item["img"] = _data_uri(item.get("img") or item.get("image_url"))
+    item.pop("image_url", None)
 
-    out=Path(output_path)
-    out.parent.mkdir(parents=True,exist_ok=True)
-    work=Path(tempfile.mkdtemp(prefix="ph_html_reel_"))
-    recording=work/"recording.webm"
-    silent=work/"video.mp4"
-    profile=work/"chrome-profile"
-    port=_free_port()
-    proc=ws=None
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    work = Path(tempfile.mkdtemp(prefix="politicshub_reel_"))
+    frames = work / "frames"
+    frames.mkdir()
+    silent = work / "silent.mp4"
+    profile = work / "chrome-profile"
+    port = _free_port()
+
+    process = None
+    ws = None
 
     try:
-        import shutil
-        chrome_args=[
-            "--disable-gpu","--no-sandbox","--disable-dev-shm-usage",
-            "--hide-scrollbars","--mute-audio","--remote-allow-origins=*",
-            "--window-size=540,960",
-            "--disable-background-timer-throttling","--disable-renderer-backgrounding",
-            "--disable-backgrounding-occluded-windows",
-            "--run-all-compositor-stages-before-draw",
-            f"--remote-debugging-port={port}",f"--user-data-dir={profile}","about:blank"
-        ]
-        xvfb=shutil.which("xvfb-run")
-        if xvfb:
-            chrome_cmd=[xvfb,"-a","-s","-screen 0 540x960x24",browser,*chrome_args]
-            print("Launching Chromium under Xvfb for visible compositor capture.")
-        else:
-            chrome_cmd=[browser,"--headless=new",*chrome_args]
-            print("Launching Chromium in headless mode.")
-        proc=subprocess.Popen(chrome_cmd,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        process = subprocess.Popen(
+            [
+                browser,
+                "--headless=new",
+                "--disable-gpu",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--hide-scrollbars",
+                "--mute-audio",
+                "--remote-allow-origins=*",
+                "--run-all-compositor-stages-before-draw",
+                "--disable-background-timer-throttling",
+                "--disable-renderer-backgrounding",
+                "--disable-backgrounding-occluded-windows",
+                f"--window-size={WIDTH},{HEIGHT}",
+                f"--remote-debugging-port={port}",
+                f"--user-data-dir={profile}",
+                "about:blank",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
-        deadline=time.time()+15
-        ws_url=None
-        while time.time()<deadline:
+        deadline = time.time() + 20
+        debugger_url = None
+        while time.time() < deadline:
             try:
-                with urllib.request.urlopen(f"http://127.0.0.1:{port}/json",timeout=1) as r:
-                    tabs=json.loads(r.read())
-                if tabs:
-                    ws_url=tabs[0]["webSocketDebuggerUrl"]
+                debugger_url = requests.get(
+                    f"http://127.0.0.1:{port}/json",
+                    timeout=2,
+                ).json()
+                if debugger_url:
                     break
             except Exception:
-                time.sleep(.1)
-        if not ws_url:
-            raise RuntimeError("Could not connect to Chromium DevTools")
+                time.sleep(0.1)
 
-        ws=websocket.create_connection(ws_url,timeout=CDP_TIMEOUT)
-        counter=[0]
-        _cdp(ws,counter,"Page.enable")
-        _cdp(ws,counter,"Runtime.enable")
-        _cdp(ws,counter,"Emulation.setDeviceMetricsOverride",{
-            "width":CAPTURE_WIDTH,"height":CAPTURE_HEIGHT,"deviceScaleFactor":1,
-            "mobile":False,"screenWidth":CAPTURE_WIDTH,"screenHeight":CAPTURE_HEIGHT
-        })
+        if not debugger_url:
+            raise RuntimeError("Chromium DevTools endpoint did not start")
 
-        payload=json.dumps(item,ensure_ascii=False)
-        _cdp(ws,counter,"Page.addScriptToEvaluateOnNewDocument",{"source":f"window.__PH_NEWS={payload};"})
-        _cdp(ws,counter,"Page.navigate",{"url":template.resolve().as_uri()})
-        # Chromium can report ERR_ABORTED for a local file navigation even when
-        # the document is already committed. Verify the DOM instead of failing
-        # on that transient navigation status.
-        time.sleep(1)
-        ready=_cdp(ws,counter,"Runtime.evaluate",{
-            "expression":"Boolean(document.getElementById('st') && window.PH)",
-            "returnByValue":True,
-        })
-        if not ready.get("result",False):
-            raise RuntimeError("PoliticsHub Reel template did not initialize in Chromium")
+        page = next(
+            (entry for entry in debugger_url if entry.get("type") == "page"),
+            None,
+        )
+        if not page or not page.get("webSocketDebuggerUrl"):
+            raise RuntimeError("Chromium page target was not available")
 
-        _cdp(ws,counter,"Page.bringToFront")
-        _cdp(ws,counter,"Page.setWebLifecycleState",{"state":"active"})
-        _cdp(ws,counter,"Runtime.evaluate",{"expression":
-            "document.body.style.background='#050506';"
-            "document.body.style.margin='0';"
-            "document.body.style.display='block';"
-            "document.getElementById('ui').style.display='none';"
-            "document.getElementById('w').style.width='540px';"
-            "document.getElementById('w').style.height='960px';"
-            "document.getElementById('w').style.boxShadow='none';"
-            "document.getElementById('st').style.transform='scale(0.5');"
-            "window.PH.load(window.__PH_NEWS);window.PH.render(0);true"
-        })
-        _cdp(ws,counter,"Runtime.evaluate",{
-            "expression":"(document.fonts&&document.fonts.ready?document.fonts.ready:Promise.resolve()).then(()=>true)",
-            "awaitPromise":True,
-            "timeout":10,
-        },timeout=12)
-        # Fonts can resolve after the first build; rebuild once before recording.
-        _cdp(ws,counter,"Runtime.evaluate",{"expression":
-            "window.PH.load(window.__PH_NEWS);window.PH.playFromStart();true"
-        })
+        ws = websocket.create_connection(
+            page["webSocketDebuggerUrl"],
+            timeout=CDP_TIMEOUT,
+            origin="http://localhost",
+        )
+        counter = [0]
 
-        # Capture a real compositor stream. In CI/Linux we run Chromium under
-        # Xvfb so the page is genuinely visible; this avoids headless screencast
-        # visibility throttling while keeping the exact HTML template unchanged.
-        frames=work/"frames"
-        frames.mkdir()
-        frame_data=[]
-        frame_index=0
-        _cdp(ws,counter,"Page.startScreencast",{
-            "format":"jpeg",
-            "quality":88,
-            "maxWidth":VIEW_W,
-            "maxHeight":VIEW_H,
-            "maxFramesInFlight":3,
-            "sendLastFrame":True,
-        })
-        _cdp(ws,counter,"Runtime.evaluate",{"expression":"window.PH.playFromStart()"})
-        deadline=time.monotonic()+DURATION+1.5
-        while time.monotonic()<deadline:
-            try:
-                raw=ws.recv()
-            except Exception:
-                continue
-            try:
-                msg=json.loads(raw)
-            except Exception:
-                continue
-            if msg.get("method")!="Page.screencastFrame":
-                continue
-            params=msg.get("params") or {}
-            session_id=params.get("sessionId")
-            data=params.get("data")
-            if session_id is not None:
-                # ACK immediately without waiting for the ACK response. Waiting
-                # here would cause _cdp() to discard concurrent screencastFrame
-                # events and starve the capture stream.
-                counter[0]+=1
-                ws.send(json.dumps({
-                    "id":counter[0],
-                    "method":"Page.screencastFrameAck",
-                    "params":{"sessionId":session_id},
-                }))
-            if data:
-                frame_data.append(base64.b64decode(data))
-                frame_index+=1
+        _cdp(ws, counter, "Page.enable")
+        _cdp(ws, counter, "Runtime.enable")
+        _cdp(
+            ws,
+            counter,
+            "Emulation.setDeviceMetricsOverride",
+            {
+                "width": WIDTH,
+                "height": HEIGHT,
+                "deviceScaleFactor": 1,
+                "mobile": True,
+            },
+        )
+
+        file_url = template.resolve().as_uri()
         try:
-            _cdp(ws,counter,"Page.stopScreencast",{},timeout=10)
-        except Exception:
-            pass
-        if frame_index < int(DURATION*FPS*0.75):
-            raise RuntimeError(f"Chromium screencast captured too few frames: {frame_index}")
-        for idx,data in enumerate(frame_data):
-            (frames/f"f{idx:05d}.jpg").write_bytes(data)
-        print(f"Chromium screencast captured {frame_index} frames")
+            _cdp(
+                ws,
+                counter,
+                "Page.navigate",
+                {"url": file_url},
+                timeout=10,
+            )
+        except RuntimeError as exc:
+            if "ERR_ABORTED" not in str(exc):
+                raise
 
-        subprocess.run([
-            "ffmpeg","-y","-framerate",str(FPS),"-i",str(frames/"f%05d.jpg"),
-            "-t",str(DURATION),
-            "-vf","fps=30,scale=1080:1920:flags=lanczos",
-            "-c:v","libx264","-preset","veryfast","-crf","18",
-            "-pix_fmt","yuv420p","-an","-movflags","+faststart",str(silent)
-        ],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-
-        if audio_path:
-            subprocess.run([
-                "ffmpeg","-y","-i",str(silent),"-stream_loop","-1","-i",str(audio_path),
-                "-map","0:v:0","-map","1:a:0","-t",str(DURATION),
-                "-c:v","copy","-c:a","aac","-b:a","128k","-ar","48000","-ac","2",
-                "-movflags","+faststart",str(out)
-            ],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        ready_deadline = time.time() + 15
+        while time.time() < ready_deadline:
+            result = _cdp(
+                ws,
+                counter,
+                "Runtime.evaluate",
+                {
+                    "expression": "Boolean(document.getElementById('st') && window.PH)",
+                    "returnByValue": True,
+                },
+                timeout=5,
+            )
+            if result.get("result", {}).get("value"):
+                break
+            time.sleep(0.1)
         else:
-            silent.replace(out)
-        return str(out)
+            raise RuntimeError("PoliticsHub HTML template did not initialize")
+
+        payload = json.dumps(item, ensure_ascii=False)
+        _cdp(
+            ws,
+            counter,
+            "Runtime.evaluate",
+            {
+                "expression": f"window.__PH_NEWS={json.dumps(payload)}; "
+                "window.PH.load(JSON.parse(window.__PH_NEWS));"
+            },
+        )
+        _cdp(
+            ws,
+            counter,
+            "Runtime.evaluate",
+            {
+                "expression": """
+                    (document.fonts && document.fonts.ready)
+                      ? document.fonts.ready.then(() => true)
+                      : Promise.resolve(true)
+                """,
+                "awaitPromise": True,
+            },
+            timeout=15,
+        )
+        _cdp(
+            ws,
+            counter,
+            "Runtime.evaluate",
+            {"expression": "window.PH.load(JSON.parse(window.__PH_NEWS)); window.PH.render(0);"},
+        )
+
+        total_frames = int(round(DURATION * FPS))
+        print(f"Capturing {total_frames} frames from the current HTML template...")
+
+        for index in range(total_frames):
+            timestamp = index / FPS
+            expression = (
+                "(function(){"
+                "window.PH.render(" + f"{timestamp:.6f}" + ");"
+                "return true;"
+                "})()"
+            )
+            _cdp(
+                ws,
+                counter,
+                "Runtime.evaluate",
+                {"expression": expression},
+                timeout=10,
+            )
+            shot = _cdp(
+                ws,
+                counter,
+                "Page.captureScreenshot",
+                {
+                    "format": "jpeg",
+                    "quality": 88,
+                    "captureBeyondViewport": False,
+                    "fromSurface": True,
+                },
+                timeout=10,
+            )
+            data = shot.get("data")
+            if not data:
+                raise RuntimeError(f"Chromium returned no screenshot at frame {index}")
+            (frames / f"f{index:05d}.jpg").write_bytes(base64.b64decode(data))
+
+            if index and index % 90 == 0:
+                print(f"Captured {index}/{total_frames} frames")
+
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-framerate",
+                str(FPS),
+                "-i",
+                str(frames / "f%05d.jpg"),
+                "-t",
+                f"{DURATION:.6f}",
+                "-vf",
+                f"scale=1080:1920:flags=lanczos,fps={FPS}",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "veryfast",
+                "-crf",
+                "18",
+                "-pix_fmt",
+                "yuv420p",
+                "-an",
+                str(silent),
+            ],
+            check=True,
+        )
+
+        if audio_path and Path(audio_path).exists():
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    str(silent),
+                    "-i",
+                    str(audio_path),
+                    "-map",
+                    "0:v:0",
+                    "-map",
+                    "1:a:0",
+                    "-c:v",
+                    "copy",
+                    "-c:a",
+                    "aac",
+                    "-b:a",
+                    "128k",
+                    "-shortest",
+                    "-t",
+                    f"{DURATION:.6f}",
+                    "-movflags",
+                    "+faststart",
+                    str(output),
+                ],
+                check=True,
+            )
+        else:
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    str(silent),
+                    "-t",
+                    f"{DURATION:.6f}",
+                    "-movflags",
+                    "+faststart",
+                    "-c",
+                    "copy",
+                    str(output),
+                ],
+                check=True,
+            )
+
+        probe = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration:stream=width,height,pix_fmt",
+                "-of",
+                "json",
+                str(output),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        info = json.loads(probe.stdout)
+        duration = float(info["format"]["duration"])
+        video = next(
+            stream for stream in info["streams"] if stream.get("width")
+        )
+        if abs(duration - DURATION) > 0.15:
+            raise RuntimeError(f"HTML Reel duration is {duration:.3f}s, expected 18.000s")
+        if video.get("width") != 1080 or video.get("height") != 1920:
+            raise RuntimeError(
+                f"HTML Reel resolution is {video.get('width')}x{video.get('height')}, expected 1080x1920"
+            )
+        if video.get("pix_fmt") not in {"yuv420p", "yuvj420p"}:
+            raise RuntimeError(f"HTML Reel pixel format is {video.get('pix_fmt')}")
+
+        print(f"HTML Reel PASS: {duration:.3f}s, 1080x1920, {video.get('pix_fmt')}")
+        return str(output)
+
     finally:
-        if ws:
-            try: ws.close()
-            except Exception: pass
-        if proc:
-            proc.terminate()
-            try: proc.wait(timeout=3)
-            except Exception: proc.kill()
+        if ws is not None:
+            try:
+                ws.close()
+            except Exception:
+                pass
+        if process is not None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+        shutil.rmtree(work, ignore_errors=True)
