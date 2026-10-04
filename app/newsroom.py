@@ -72,7 +72,7 @@ def sentences(text:str)->list[str]:
     result=[]
     for index,part in enumerate(parts):
         item=part.strip(" \t-–—")
-        if len(item)<30 or BAD_LINE_RE.search(item):
+        if len(item)<20 or BAD_LINE_RE.search(item):
             continue
         if index==len(parts)-1 and not re.search(r"[.!?][\"'’”)]*$",item):
             continue
