@@ -177,9 +177,8 @@ def select_sentences(text,limit,title=""):
     chosen=concrete[:limit]
 
     hard_status_re=re.compile(
-        r"\b(?:remain|remains|remained|suspend|suspended|shutdown|"
-        r"reopen|reopened|cancel|cancelled|closed|not affected|"
-        r"resume|resumed)\b",re.I
+        r"\b(?:suspend|suspended|shutdown|reopen|reopened|"
+        r"cancel|cancelled|closed|not affected|resume|resumed)\b",re.I
     )
     hard_status=[
         i for i in ranked
@@ -189,19 +188,29 @@ def select_sentences(text,limit,title=""):
         if len(chosen)>=limit:break
         chosen.append(i)
 
-    if len(chosen)<limit:
-        factual_fill=[
-            i for i in ranked
-            if valid(i) and i not in chosen and FACT_VERBS.search(items[i])
-        ]
-        for i in factual_fill:
-            if len(chosen)>=limit:break
-            chosen.append(i)
+    # Fill remaining slots with ranked, diverse source sentences rather than
+    # merely scanning for a small verb allow-list. This captures concrete
+    # details expressed as noun phrases ("replacement buses", "fiber
+    # connection", "field verification", "temporary shelter") even when the
+    # sentence uses no special reporting verb.
+    while len(chosen)<limit:
+        best=None
+        for i in ranked:
+            if not valid(i) or i in chosen:
+                continue
+            redundancy=max((_jaccard(items[i],items[j]) for j in chosen),default=0.0)
+            candidate_score=algorithm_scores[i]-(2.0*redundancy)
+            candidate=(candidate_score,algorithm_scores[i],-i,i)
+            if best is None or candidate>best:
+                best=candidate
+        if best is None:
+            break
+        chosen.append(best[3])
 
     if len(chosen)<limit:
-        for i in ranked:
+        for i in source_order:
             if len(chosen)>=limit:break
-            if valid(i) and i not in chosen:
+            if i not in chosen:
                 chosen.append(i)
 
     if chosen:
