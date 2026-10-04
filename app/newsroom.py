@@ -152,7 +152,7 @@ def select_sentences(text,limit,title=""):
         r"|\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b"
         r"|\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
         r"\s+[A-Za-z][A-Za-z-]*(?:\s+[A-Za-z][A-Za-z-]*){0,2}\b"
-        r"|\b(?:first|second|third|fourth|fifth|next|another|additional)\s+[A-Za-z][A-Za-z-]*"
+        r"|\b(?:first|next|another|additional)\s+[A-Za-z][A-Za-z-]*"
         r"(?:\s+[A-Za-z][A-Za-z-]*){0,2}\b"
         r")"
     )
