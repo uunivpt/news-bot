@@ -190,6 +190,24 @@ def logout():
 @app.get("/api/admin/me")
 def me():return jsonify({"authenticated":bool(session.get("admin_user")),"username":session.get("admin_user"),"role":session.get("admin_role"),"csrf_token":session.get("csrf_token") if session.get("admin_user") else None})
 
+@app.get("/robots.txt")
+def robots():
+ return app.response_class("User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /admin\nSitemap: https://www.politicshub.in/sitemap.xml\n",mimetype="text/plain")
+
+@app.get("/sitemap.xml")
+def sitemap():
+ database=db()
+ try:
+  rows=database.latest(5000,"all","published")
+  urls=["https://www.politicshub.in/","https://www.politicshub.in/settings.html","https://www.politicshub.in/privacy.html","https://www.politicshub.in/cookies.html"]
+  for row in rows:
+   try: urls.append("https://www.politicshub.in/article.html?id="+str(int(row["id"])))
+   except Exception: pass
+  seen=set(); urls=[u for u in urls if not (u in seen or seen.add(u))]
+  body='<?xml version="1.0" encoding="UTF-8"?>\\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\\n'+"".join("<url><loc>"+u+"</loc></url>\\n" for u in urls)+"</urlset>"
+  return app.response_class(body,mimetype="application/xml")
+ finally: database.close()
+
 @app.get("/api/health")
 def health():
  database=db()
