@@ -212,6 +212,7 @@ PH.loadArticle=async function(){
       '<div class="article-meta">'+this.esc(this.fmt(n.published_at||n.published_at_site))+' · '+this.esc(n.source_name||"PoliticsHub")+'</div>'+
       (has?this.image(n,true).replace("<img ","<img class=\"article-hero\" "):"")+
       '<div class="article-body">'+this.esc(n.article||n.bot_article||n.summary||n.bot_summary||"")+'</div>'+
+      '<div class="article-share"><span>SHARE</span><a target="_blank" rel="noopener noreferrer" href="https://wa.me/?text='+encodeURIComponent((n.title||"PoliticsHub story")+" "+location.href)+'">WhatsApp</a><a target="_blank" rel="noopener noreferrer" href="https://t.me/share/url?url='+encodeURIComponent(location.href)+'&text='+encodeURIComponent(n.title||"PoliticsHub story")+'">Telegram</a><a target="_blank" rel="noopener noreferrer" href="https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(location.href)+'">Facebook</a><a target="_blank" rel="noopener noreferrer" href="https://twitter.com/intent/tweet?text='+encodeURIComponent(n.title||"PoliticsHub story")+'&url='+encodeURIComponent(location.href)+'">X</a></div>'+
       (n.source_name?'<div class="article-source">Source: '+(n.url?'<a href="'+this.esc(n.url)+'" target="_blank" rel="noopener noreferrer">'+this.esc(n.source_name)+'</a>':this.esc(n.source_name))+'</div>':"");
   }catch(e){this.articleError("Article unavailable","The requested story could not be loaded.")}
 };
@@ -229,3 +230,5 @@ PH.bindChrome=function(){
   const trigger=document.getElementById("searchTrigger");
   if(trigger&&!trigger.dataset.bound){trigger.dataset.bound="1";trigger.addEventListener("click",()=>this.openSearch())}
 };
+
+PH.setArticleMeta=function(n){const desc=String(n.summary||n.bot_summary||n.article||"").slice(0,300);const set=(name,content)=>{let m=document.querySelector('meta[name="'+name+'"]');if(!m){m=document.createElement("meta");m.name=name;document.head.appendChild(m)}m.content=content};const prop=(name,content)=>{let m=document.querySelector('meta[property="'+name+'"]');if(!m){m=document.createElement("meta");m.setAttribute("property",name);document.head.appendChild(m)}m.content=content};set("description",desc);prop("og:title",n.title||"PoliticsHub.in");prop("og:description",desc);prop("og:type","article");prop("og:url",location.href);if(n.image_url)prop("og:image",n.image_url);let canonical=document.querySelector('link[rel="canonical"]');if(!canonical){canonical=document.createElement("link");canonical.rel="canonical";document.head.appendChild(canonical)}canonical.href=location.href};
