@@ -77,9 +77,10 @@ PH.filtered=function(){
 };
 
 PH.image=function(n,hero=false){
+  const attr=hero?'fetchpriority="high"':'loading="lazy"';
   return this.validImage(n.image_url)
-    ? '<img '+(hero?'fetchpriority="high"':'loading="lazy")+' src="'+this.esc(n.image_url)+'" alt="" onerror="this.closest("'+(hero?".lead-media":".story-card")+'")?.classList.add("image-failed");this.remove()">'
-    :"";
+    ? '<img '+attr+' src="'+this.esc(n.image_url)+'" alt="" onerror="this.remove()">'
+    : "";
 };
 
 PH.card=function(n){
