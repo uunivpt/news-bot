@@ -222,6 +222,20 @@ def select_sentences(text,limit,title=""):
     if impact_candidates and len(chosen)<limit:
         chosen.append(impact_candidates[0])
 
+    # Preserve one explicit month/date reference when a slot remains. Keep it
+    # after the impact pass so generic dates do not crowd out a stronger
+    # operational consequence.
+    MONTH_RE=re.compile(
+        r"\b(?:January|February|March|April|May|June|July|August|September|"
+        r"October|November|December)\b",re.I
+    )
+    month_candidates=[
+        i for i in source_order
+        if i not in chosen and MONTH_RE.search(items[i])
+    ]
+    if month_candidates and len(chosen)<limit:
+        chosen.append(month_candidates[0])
+
     # Fill remaining slots with ranked, diverse source sentences rather than
     # merely scanning for a small verb allow-list. This captures concrete
     # details expressed as noun phrases ("replacement buses", "fiber
