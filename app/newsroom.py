@@ -180,8 +180,8 @@ def select_sentences(text,limit,title=""):
 
     if len(chosen)<limit:
         status_outcome_re=re.compile(
-            r"\\b(?:remain|remains|remained|suspended|shutdown|closed|"
-            r"cancelled|cancelled|reopen|reopened|not affected)\\b",re.I
+            r"\b(?:remain|remains|remained|suspended|shutdown|closed|
+            r"cancelled|reopen|reopened|not affected)\b",re.I
         )
         status_fill=[
             i for i in source_order
