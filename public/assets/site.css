@@ -151,3 +151,6 @@ html[data-theme="dark"] .site-footer,html[data-theme="dark"] .page-footer-inner{
   .article-page{padding:38px 35px 65px}.article-title{font-size:45px;letter-spacing:-2px}.article-dek{font-size:16px}.article-body{font-size:18px;line-height:1.8}
   .inner-page{padding:0 35px 55px}.inner-wrap{padding-top:34px}.page-heading{font-size:48px;letter-spacing:-2px}.page-lead{font-size:16px}.paper-card{padding:20px}.connect h2{font-size:32px}.page-footer{padding:0 35px 35px}.page-footer-inner{display:block}.page-footer-inner .links{margin-top:12px}.page-footer a{margin:0 16px 0 0}
 }
+
+.article-share{display:flex;align-items:center;gap:10px;flex-wrap:wrap;max-width:790px;margin-top:28px;padding-top:18px;border-top:1px solid var(--line)}
+.article-share span{font-size:9px;font-weight:950;letter-spacing:.14em;color:var(--muted);margin-right:4px}.article-share a{border:1px solid var(--line);padding:9px 12px;text-decoration:none;font-size:9px;font-weight:900;letter-spacing:.05em;color:var(--ink);background:var(--panel)}.article-share a:hover{border-color:var(--ink);transform:translateY(-1px)}
