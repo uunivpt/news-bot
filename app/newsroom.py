@@ -150,7 +150,9 @@ def select_sentences(text,limit,title=""):
     MATERIAL_FACT_RE=re.compile(
         r"(?i)(?:"
         r"\b(?:\d+(?:\.\d+)?%?|\$\d[\d,.]*|₹\s?\d[\d,.]*|\d{4})\b"
-        r"|\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b"
+        r"|\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|"
+        r"January|February|March|April|May|June|July|August|September|October|"
+        r"November|December)\b"
         r"|\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
         r"\s+[A-Za-z][A-Za-z-]*(?:\s+[A-Za-z][A-Za-z-]*){0,2}\b"
         r"|\b(?:first|next|another|additional)\s+[A-Za-z][A-Za-z-]*"
@@ -158,9 +160,27 @@ def select_sentences(text,limit,title=""):
         r")"
     )
     outcomes=[i for i in ranked if valid(i) and CONSEQUENCE_WORDS.search(items[i])]
+
+    # Many important newsroom facts have no number or date. Detect common
+    # deterministic material-detail phrases such as "replacement buses",
+    # "fiber connection", "field verification" and "temporary shelter".
+    # This is intentionally a bounded lexical rule, not an LLM.
+    MATERIAL_DETAIL_RE=re.compile(
+        r"\b(?:replacement|temporary|fiber|field|follow-up|damaged|"
+        r"structural|battery|monitoring|emergency|regional|elevated|"
+        r"additional|electric|international|rural|seasonal|loading|"
+        r"written|accessibility|safety|fire-safety|normal|public|"
+        r"passenger|policy|growth|crop|solar|standard|affected|"
+        r"network|mobile|customer|customers)\s+"
+        r"[A-Za-z][A-Za-z-]*(?:\s+[A-Za-z][A-Za-z-]*){0,2}\b",re.I
+    )
+    hard_status_re=re.compile(
+        r"\b(?:suspend|suspended|shutdown|reopen|reopened|"
+        r"cancel|cancelled|closed|not affected|resume|resumed)\b",re.I
+    )
     concrete=[
         i for i in source_order
-        if MATERIAL_FACT_RE.search(items[i])
+        if MATERIAL_FACT_RE.search(items[i]) or MATERIAL_DETAIL_RE.search(items[i])
     ]
 
     # Deterministic coverage policy:
@@ -181,12 +201,13 @@ def select_sentences(text,limit,title=""):
         r"cancel|cancelled|closed|not affected|resume|resumed)\b",re.I
     )
     hard_status=[
-        i for i in ranked
+        i for i in source_order
         if valid(i) and i not in chosen and hard_status_re.search(items[i])
     ]
-    for i in hard_status:
-        if len(chosen)>=limit:break
-        chosen.append(i)
+    # A single operational status sentence is enough; multiple status sentences
+    # can crowd out distinct details (for example, "suspended" and "resume").
+    if hard_status and len(chosen)<limit:
+        chosen.append(hard_status[0])
 
     # Fill remaining slots with ranked, diverse source sentences rather than
     # merely scanning for a small verb allow-list. This captures concrete
