@@ -155,6 +155,10 @@ def select_sentences(text,limit,title=""):
         r")"
     )
     outcomes=[i for i in ranked if valid(i) and CONSEQUENCE_WORDS.search(items[i])]
+    concrete=[
+        i for i in ranked
+        if valid(i) and MATERIAL_FACT_RE.search(items[i])
+    ]
 
     chosen=[]
 
