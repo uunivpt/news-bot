@@ -146,12 +146,12 @@ def select_sentences(text,limit,title=""):
 
     MATERIAL_FACT_RE=re.compile(
         r"(?i)(?:"
-        r"\\b(?:\\d+(?:\\.\\d+)?%?|\\$\\d[\\d,.]*|₹\\s?\\d[\\d,.]*|\\d{4})\\b"
-        r"|\\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\\b"
-        r"|\\b(?:\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
-        r"\\s+[A-Za-z][A-Za-z-]*(?:\\s+[A-Za-z][A-Za-z-]*){0,2}\\b"
-        r"|\\b(?:first|second|third|fourth|fifth|next|another|additional)\\s+[A-Za-z][A-Za-z-]*"
-        r"(?:\\s+[A-Za-z][A-Za-z-]*){0,2}\\b"
+        r"\b(?:\d+(?:\.\d+)?%?|\$\d[\d,.]*|₹\s?\d[\d,.]*|\d{4})\b"
+        r"|\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b"
+        r"|\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
+        r"\s+[A-Za-z][A-Za-z-]*(?:\s+[A-Za-z][A-Za-z-]*){0,2}\b"
+        r"|\b(?:first|second|third|fourth|fifth|next|another|additional)\s+[A-Za-z][A-Za-z-]*"
+        r"(?:\s+[A-Za-z][A-Za-z-]*){0,2}\b"
         r")"
     )
     outcomes=[i for i in ranked if valid(i) and CONSEQUENCE_WORDS.search(items[i])]
