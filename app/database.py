@@ -52,7 +52,7 @@ CREATE INDEX IF NOT EXISTS idx_news_instagram_retry ON news_items(instagram_stat
 CREATE INDEX IF NOT EXISTS idx_news_instagram_selected ON news_items(instagram_selected, instagram_status);
 CREATE INDEX IF NOT EXISTS idx_news_instagram_schedule ON news_items(instagram_status, instagram_scheduled_at);
 CREATE INDEX IF NOT EXISTS idx_news_instagram_queue_order ON news_items(instagram_selected, instagram_queue_order);
-CREATE INDEX IF NOT EXISTS idx_admin_login_attempts_key_time ON admin_login_attempts(attempt_key, attempted_at);\nCREATE INDEX IF NOT EXISTS idx_admin_login_attempts_key_time ON admin_login_attempts(attempt_key, attempted_at);
+CREATE INDEX IF NOT EXISTS idx_admin_login_attempts_key_time ON admin_login_attempts(attempt_key, attempted_at);
 """
 MIGRATIONS = {
  "category":"ALTER TABLE news_items ADD COLUMN category TEXT NOT NULL DEFAULT 'general'", "status":"ALTER TABLE news_items ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'",
@@ -134,34 +134,6 @@ class NewsDatabase:
    value=str(value)
    if self._postgres:self.conn.execute("INSERT INTO admin_settings (key,value,updated_at) VALUES (%s,%s,%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value,updated_at=EXCLUDED.updated_at",(key,value,now))
    else:self.conn.execute("INSERT INTO admin_settings (key,value,updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at",(key,value,now))
-  if not self._postgres:self.conn.commit()
- def login_failures(self,attempt_key,since_iso):
-  ph="%s" if self._postgres else "?"
-  row=self.conn.execute(f"SELECT COUNT(*) AS count FROM admin_login_attempts WHERE attempt_key = {ph} AND attempted_at >= {ph}",(attempt_key,since_iso)).fetchone()
-  return int(row["count"] if self._postgres else row[0])
- def record_login_failure(self,attempt_key,at_iso):
-  ph="%s" if self._postgres else "?"
-  self.conn.execute(f"INSERT INTO admin_login_attempts (attempt_key,attempted_at) VALUES ({ph},{ph})",(attempt_key,at_iso))
-  cleanup_before=(datetime.fromisoformat(at_iso.replace("Z","+00:00"))-timedelta(hours=1)).isoformat().replace("+00:00","Z")
-  self.conn.execute(f"DELETE FROM admin_login_attempts WHERE attempted_at < {ph}",(cleanup_before,))
-  if not self._postgres:self.conn.commit()
- def clear_login_failures(self,attempt_key):
-  ph="%s" if self._postgres else "?"
-  self.conn.execute(f"DELETE FROM admin_login_attempts WHERE attempt_key = {ph}",(attempt_key,))
-  if not self._postgres:self.conn.commit()
- def login_failures(self,attempt_key,since_iso):
-  ph="%s" if self._postgres else "?"
-  row=self.conn.execute(f"SELECT COUNT(*) AS count FROM admin_login_attempts WHERE attempt_key = {ph} AND attempted_at >= {ph}",(attempt_key,since_iso)).fetchone()
-  return int(row["count"] if self._postgres else row[0])
- def record_login_failure(self,attempt_key,at_iso):
-  ph="%s" if self._postgres else "?"
-  self.conn.execute(f"INSERT INTO admin_login_attempts (attempt_key,attempted_at) VALUES ({ph},{ph})",(attempt_key,at_iso))
-  cleanup_before=(datetime.fromisoformat(at_iso.replace("Z","+00:00"))-timedelta(hours=1)).isoformat().replace("+00:00","Z")
-  self.conn.execute(f"DELETE FROM admin_login_attempts WHERE attempted_at < {ph}",(cleanup_before,))
-  if not self._postgres:self.conn.commit()
- def clear_login_failures(self,attempt_key):
-  ph="%s" if self._postgres else "?"
-  self.conn.execute(f"DELETE FROM admin_login_attempts WHERE attempt_key = {ph}",(attempt_key,))
   if not self._postgres:self.conn.commit()
  def instagram_daily_count(self,start,end):
   ph="%s" if self._postgres else "?"; row=self.conn.execute(f"SELECT COUNT(*) AS count FROM news_items WHERE instagram_status='published' AND instagram_published_at >= {ph} AND instagram_published_at < {ph}",(start,end)).fetchone(); return int(row["count"] if self._postgres else row[0])
