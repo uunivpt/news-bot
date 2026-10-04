@@ -1,3 +1,5 @@
+(function(){try{const t=localStorage.getItem("ph_theme");document.documentElement.dataset.theme=t==="dark"?"dark":"bright"}catch(e){document.documentElement.dataset.theme="bright"}})();
+
 const PH={
   state:{
     category:new URLSearchParams(location.search).get("category")||"all",
