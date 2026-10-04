@@ -144,6 +144,13 @@ def select_sentences(text,limit,title=""):
     def valid(i):
         return not _is_duplicate_of_title(items[i],title)
 
+    # The source order is the safest deterministic editorial baseline: once
+    # the headline sentence is removed, keep the first complete source facts
+    # rather than letting centrality discard a distinct operational detail.
+    source_order=[i for i in range(len(items)) if valid(i)]
+    if len(source_order)>=limit:
+        return [items[i] for i in source_order[:limit]]
+
     MATERIAL_FACT_RE=re.compile(
         r"(?i)(?:"
         r"\b(?:\d+(?:\.\d+)?%?|\$\d[\d,.]*|₹\s?\d[\d,.]*|\d{4})\b"
