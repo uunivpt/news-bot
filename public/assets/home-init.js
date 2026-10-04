@@ -17,7 +17,7 @@
       if(q) view=view.filter(n => [n.title,n.summary,n.bot_summary,n.category,n.source_name].filter(Boolean).join(" ").toLowerCase().includes(q));
       const card = (n) => {
         const has=imageOK(n.image_url);
-        return '<a class="story-card '+(has?"":"no-image")+'" href="/article.html?id='+encodeURIComponent(n.id)+'"><div><div class="story-kicker">'+esc(n.category||"News")+'</div><h3 class="story-title">'+esc(n.title||"Untitled story")+'</h3><p class="story-summary">'+esc(n.summary||n.bot_summary||n.article||"")+'</p><div class="story-meta">'+esc(fmt(n.published_at||n.published_at_site))+' · '+esc(n.source_name||"PoliticsHub")+'</div></div>'+(has?'<img loading="lazy" src="'+esc(n.image_url)+'" alt="" onerror="this.remove()">':"")+'</a>';
+        return '<a class="story-card '+(has?"":"no-image")+'" href="/article.html?id='+encodeURIComponent(n.id)+'"><div><div class="story-kicker">'+esc(n.category||"News")+'</div><h3 class="story-title">'+esc(n.title||"Untitled story")+'</h3><p class="story-summary">'+esc(n.summary||n.bot_summary||n.article||"")+'</p><div class="story-meta">'+esc(fmt(n.published_at||n.published_at_site))+' · '+esc(n.source_name||"PoliticsHub")+'</div></div>'+(has?'<img class="story-image" loading="lazy" src="'+esc(n.image_url)+'" alt="" onerror="this.remove()">':"")+'</a>';
       };
       $("news").innerHTML=view.length?view.map(card).join(""):'<div class="empty">No published stories match this view.</div>';
       $("count").textContent=view.length+" stories";
