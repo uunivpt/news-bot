@@ -144,12 +144,7 @@ def select_sentences(text,limit,title=""):
     def valid(i):
         return not _is_duplicate_of_title(items[i],title)
 
-    # The source order is the safest deterministic editorial baseline: once
-    # the headline sentence is removed, keep the first complete source facts
-    # rather than letting centrality discard a distinct operational detail.
     source_order=[i for i in range(len(items)) if valid(i)]
-    if len(source_order)>=limit:
-        return [items[i] for i in source_order[:limit]]
 
     MATERIAL_FACT_RE=re.compile(
         r"(?i)(?:"
@@ -163,9 +158,47 @@ def select_sentences(text,limit,title=""):
     )
     outcomes=[i for i in ranked if valid(i) and CONSEQUENCE_WORDS.search(items[i])]
     concrete=[
-        i for i in ranked
-        if valid(i) and MATERIAL_FACT_RE.search(items[i])
+        i for i in source_order
+        if MATERIAL_FACT_RE.search(items[i])
     ]
+
+    # Deterministic coverage policy:
+    # - keep up to three sentences carrying explicit material facts;
+    # - fill remaining slots with the earliest distinct factual sentences;
+    # - prefer a clear status outcome only when no better factual detail exists.
+    # This preserves source order while preventing dates, quantities and
+    # operational details from being dropped by a centrality tie-breaker.
+    chosen=concrete[:limit]
+    if len(chosen)<limit:
+        factual_fill=[
+            i for i in source_order
+            if i not in chosen and FACT_VERBS.search(items[i])
+        ]
+        for i in factual_fill:
+            if len(chosen)>=limit:break
+            chosen.append(i)
+
+    if len(chosen)<limit:
+        status_outcome_re=re.compile(
+            r"\\b(?:remain|remains|remained|suspended|shutdown|closed|"
+            r"cancelled|cancelled|reopen|reopened|not affected)\\b",re.I
+        )
+        status_fill=[
+            i for i in source_order
+            if i not in chosen and status_outcome_re.search(items[i])
+        ]
+        for i in status_fill:
+            if len(chosen)>=limit:break
+            chosen.append(i)
+
+    if len(chosen)<limit:
+        for i in source_order:
+            if len(chosen)>=limit:break
+            if i not in chosen:
+                chosen.append(i)
+
+    if len(chosen)>=limit:
+        return [items[i] for i in sorted(chosen)[:limit]]
 
     chosen=[]
 
