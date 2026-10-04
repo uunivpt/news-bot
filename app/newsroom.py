@@ -179,10 +179,7 @@ def select_sentences(text,limit,title=""):
             chosen.append(i)
 
     if len(chosen)<limit:
-        status_outcome_re=re.compile(
-            r"\b(?:remain|remains|remained|suspended|shutdown|closed|
-            r"cancelled|reopen|reopened|not affected)\b",re.I
-        )
+        status_outcome_re=re.compile(r"\b(?:remain|remains|remained|suspended|shutdown|closed|cancelled|reopen|reopened|not affected)\b",re.I)
         status_fill=[
             i for i in source_order
             if i not in chosen and status_outcome_re.search(items[i])
