@@ -170,7 +170,7 @@ def select_sentences(text,limit,title=""):
         r"structural|battery|monitoring|emergency|regional|elevated|"
         r"additional|electric|international|rural|seasonal|loading|"
         r"written|accessibility|safety|fire-safety|normal|public|"
-        r"passenger|policy|growth|crop|solar|standard|affected|"
+        r"passenger|policy|crop|solar|standard|affected|"
         r"network|mobile|customer|customers)\s+"
         r"[A-Za-z][A-Za-z-]*(?:\s+[A-Za-z][A-Za-z-]*){0,2}\b",re.I
     )
@@ -233,6 +233,27 @@ def select_sentences(text,limit,title=""):
             if len(chosen)>=limit:break
             if i not in chosen:
                 chosen.append(i)
+
+    # Final invariant: a concrete operational status must survive compression.
+    # If ranking crowded it out, replace the least-material selected sentence.
+    selected_status=next((i for i in chosen if hard_status_re.search(items[i])),None)
+    if selected_status is None:
+        replacement_status=next(
+            (i for i in source_order if i not in chosen and hard_status_re.search(items[i])),
+            None,
+        )
+        if replacement_status is not None and chosen:
+            replace_candidates=[
+                i for i in chosen
+                if not MATERIAL_FACT_RE.search(items[i])
+                and not MATERIAL_DETAIL_RE.search(items[i])
+            ]
+            if replace_candidates:
+                weakest=min(
+                    replace_candidates,
+                    key=lambda i:(algorithm_scores[i],-i),
+                )
+                chosen[chosen.index(weakest)]=replacement_status
 
     if chosen:
         return [items[i] for i in sorted(chosen)[:limit]]
