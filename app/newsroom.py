@@ -35,7 +35,7 @@ FACT_VERBS=re.compile(
     r"returned|operated|operate|publish|published|generating|generated|"
     r"treated|remain|remains|reviewed|review|continues|continuing|"
     r"installed|added|deployed|receive|received|applies|affects|"
-    r"available|begin|begins|run|runs|resume|resumed)\b",re.I
+    r"available|begin|begins|run|runs|resume|resumed|includes|connects|provides|contains|covers)\b",re.I
 )
 CONSEQUENCE_WORDS=re.compile(
     r"\b(?:effective|from|starting|next|result|following|after|because|"
