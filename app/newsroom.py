@@ -209,6 +209,21 @@ def select_sentences(text,limit,title=""):
     if hard_status and len(chosen)<limit:
         chosen.append(hard_status[0])
 
+    # Prefer one explicit operational consequence when available. This
+    # preserves useful outcomes such as "reduce waiting times" instead of
+    # allowing a generic review/update sentence to consume the last slot.
+    IMPACT_RE=re.compile(
+        r"\b(?:reduce|reduces|reduced|fall|falls|fell|increase|increases|"
+        r"increased|send|sends|improve|improves|improved|affect|affects|"
+        r"impact|impacts|allow|allows|require|requires)\b",re.I
+    )
+    impact_candidates=[
+        i for i in ranked
+        if valid(i) and i not in chosen and IMPACT_RE.search(items[i])
+    ]
+    if impact_candidates and len(chosen)<limit:
+        chosen.append(impact_candidates[0])
+
     # Fill remaining slots with ranked, diverse source sentences rather than
     # merely scanning for a small verb allow-list. This captures concrete
     # details expressed as noun phrases ("replacement buses", "fiber
