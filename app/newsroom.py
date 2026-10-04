@@ -34,7 +34,8 @@ FACT_VERBS=re.compile(
     r"effective|scheduled|resigned|appointed|elected|found|identified|"
     r"returned|operated|operate|publish|published|generating|generated|"
     r"treated|remain|remains|reviewed|review|continues|continuing|"
-    r"installed|added|deployed|receive|received|applies|affects|"
+    r"installed|added|deployed|receive|received|replaced|told|found|remove|removed|"
+r"send|sends|reduce|reduces|applies|affects|"
     r"available|begin|begins|run|runs|resume|resumed|includes|connects|provides|contains|covers)\b",re.I
 )
 CONSEQUENCE_WORDS=re.compile(
@@ -163,38 +164,47 @@ def select_sentences(text,limit,title=""):
     ]
 
     # Deterministic coverage policy:
-    # - keep up to three sentences carrying explicit material facts;
-    # - fill remaining slots with the earliest distinct factual sentences;
-    # - prefer a clear status outcome only when no better factual detail exists.
-    # This preserves source order while preventing dates, quantities and
-    # operational details from being dropped by a centrality tie-breaker.
+    # 1) protect explicit material facts (numbers, dates, measured quantities);
+    # 2) protect hard operational status changes (suspended, shutdown, reopened);
+    # 3) fill remaining slots with the best factual sentences by editorial rank;
+    # 4) restore source order only after selection.
+    #
+    # The old implementation filled from source order too early. That made
+    # generic "will..." or "receive..." sentences displace a later material
+    # outcome such as "production remains suspended". Conversely, a source-order
+    # fallback could omit a middle sentence containing a key fact such as
+    # "damaged equipment". Selection is therefore quality-first, ordering last.
     chosen=concrete[:limit]
+
+    hard_status_re=re.compile(
+        r"\b(?:remain|remains|remained|suspend|suspended|shutdown|"
+        r"reopen|reopened|cancel|cancelled|closed|not affected|"
+        r"resume|resumed)\b",re.I
+    )
+    hard_status=[
+        i for i in ranked
+        if valid(i) and i not in chosen and hard_status_re.search(items[i])
+    ]
+    for i in hard_status:
+        if len(chosen)>=limit:break
+        chosen.append(i)
+
     if len(chosen)<limit:
         factual_fill=[
-            i for i in source_order
-            if i not in chosen and FACT_VERBS.search(items[i])
+            i for i in ranked
+            if valid(i) and i not in chosen and FACT_VERBS.search(items[i])
         ]
         for i in factual_fill:
             if len(chosen)>=limit:break
             chosen.append(i)
 
     if len(chosen)<limit:
-        status_outcome_re=re.compile(r"\b(?:remain|remains|remained|suspended|shutdown|closed|cancelled|reopen|reopened|not affected)\b",re.I)
-        status_fill=[
-            i for i in source_order
-            if i not in chosen and status_outcome_re.search(items[i])
-        ]
-        for i in status_fill:
+        for i in ranked:
             if len(chosen)>=limit:break
-            chosen.append(i)
-
-    if len(chosen)<limit:
-        for i in source_order:
-            if len(chosen)>=limit:break
-            if i not in chosen:
+            if valid(i) and i not in chosen:
                 chosen.append(i)
 
-    if len(chosen)>=limit:
+    if chosen:
         return [items[i] for i in sorted(chosen)[:limit]]
 
     chosen=[]
