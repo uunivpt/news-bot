@@ -252,6 +252,7 @@ def _article_html(row):
 <div class="by"><span>By <a href="/author/politicshub-news-desk">{EDITORIAL_DESK}</a></span><span>{html.escape(str(published or ""))}</span><span>{html.escape(source)}</span></div></div>
 {"<div class='ahero'><img src='"+html.escape(str(row.get("image_url") or image))+"' alt='"+html.escape(title)+"' loading='eager'></div>" if row.get("image_url") else ""}
 <div class="body">{paras}</div>
+<div class="src"><strong>Source transparency:</strong> This is a source-linked brief prepared from the originating report. When multiple independent sources are available, PoliticsHub compares their reported details; otherwise no independent reporting claim is made.</div>
 <div class="src">Source: {html.escape(source)}. {"<a href='"+html.escape(str(row.get("url")))+"' rel='nofollow noopener' target='_blank'>Read the original report</a>" if row.get("url") else ""}</div>
 <div class="article-share"><span>SHARE</span><a href="https://wa.me/?text={html.escape(title)}%20{html.escape(canonical)}">WhatsApp</a><a href="https://t.me/share/url?url={html.escape(canonical)}&text={html.escape(title)}">Telegram</a><a href="https://www.facebook.com/sharer/sharer.php?u={html.escape(canonical)}">Facebook</a><a href="https://twitter.com/intent/tweet?text={html.escape(title)}&url={html.escape(canonical)}">X</a></div>
 </article></main>
