@@ -1,4 +1,12 @@
 User-agent: *
 Allow: /
+Allow: /ads.txt
+Allow: /api/
+Allow: /api/news
+
+# Keep private/admin surfaces out of search indexing.
+Disallow: /admin/
+Disallow: /admin.js
+Disallow: /newsroom-console-8x4m7k2q.html
 
 Sitemap: https://www.politicshub.in/sitemap.xml
