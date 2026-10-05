@@ -185,7 +185,7 @@ def _publicize(row):
 
 SITE_ORIGIN="https://www.politicshub.in"
 EDITORIAL_DESK="PoliticsHub Editorial Desk"
-EDITORIAL_EMAIL="news@politicshub.in"
+EDITORIAL_EMAIL="politicshub.in@gmail.com"
 CATEGORY_SLUGS={"general":"india","india":"india","world":"world","politics":"politics","business":"business","technology":"technology","sports":"sports","entertainment":"entertainment","science":"science","health":"health","hindi":"hindi"}
 
 def _slugify(value):
@@ -255,7 +255,7 @@ def _article_html(row):
 <div class="src">Source: {html.escape(source)}. {"<a href='"+html.escape(str(row.get("url")))+"' rel='nofollow noopener' target='_blank'>Read the original report</a>" if row.get("url") else ""}</div>
 <div class="article-share"><span>SHARE</span><a href="https://wa.me/?text={html.escape(title)}%20{html.escape(canonical)}">WhatsApp</a><a href="https://t.me/share/url?url={html.escape(canonical)}&text={html.escape(title)}">Telegram</a><a href="https://www.facebook.com/sharer/sharer.php?u={html.escape(canonical)}">Facebook</a><a href="https://twitter.com/intent/tweet?text={html.escape(title)}&url={html.escape(canonical)}">X</a></div>
 </article></main>
-<footer><div class="wrap"><div><img src="/brand.svg?v=phlogo1" alt="PoliticsHub.in"><p class="ser">Source-based news. Clearly.</p></div><div><h4>Navigate</h4><ul><li><a href="/">Home</a></li><li><a href="/about.html">About</a></li><li><a href="/editorial-policy.html">Editorial Policy</a></li><li><a href="/corrections.html">Corrections</a></li><li><a href="/contact.html">Contact</a></li><li><a href="/disclaimer.html">Disclaimer</a></li><li><a href="/privacy.html">Privacy</a></li><li><a href="/cookies.html">Cookies</a></li><li><a href="/terms.html">Terms</a></li><li><a href="/newsletter.html">Newsletter</a></li><li><a href="/settings.html">Settings</a></li><li><a href="/debug.html">System Status</a></li></ul></div><div><h4>Contact</h4><ul><li><a href="mailto:news@politicshub.in">news@politicshub.in</a></li></ul></div></div></footer>
+<footer><div class="wrap"><div><img src="/brand.svg?v=phlogo1" alt="PoliticsHub.in"><p class="ser">Source-linked news. Clearly.</p></div><div><h4>Navigate</h4><ul><li><a href="/">Home</a></li><li><a href="/about.html">About</a></li><li><a href="/editorial-policy.html">Editorial Policy</a></li><li><a href="/corrections.html">Corrections</a></li><li><a href="/contact.html">Contact</a></li><li><a href="/disclaimer.html">Disclaimer</a></li><li><a href="/privacy.html">Privacy</a></li><li><a href="/cookies.html">Cookies</a></li><li><a href="/terms.html">Terms</a></li><li><a href="/newsletter.html">Newsletter</a></li><li><a href="/settings.html">Settings</a></li><li><a href="/debug.html">System Status</a></li></ul></div><div><h4>Contact</h4><ul><li><a href="mailto:news@politicshub.in">news@politicshub.in</a></li></ul></div></div></footer>
 <script src="/assets/site.js?v=phui8"></script>
 </body></html>"""
 
@@ -421,7 +421,7 @@ def og_home():
  image=Image.new("RGB",(1200,630),(245,245,242));draw=ImageDraw.Draw(image)
  try: font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",72); small=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",28)
  except Exception: font=ImageFont.load_default();small=ImageFont.load_default()
- draw.rectangle((0,0,1200,18),fill=(200,16,46));draw.text((70,70),"PoliticsHub.in",font=small,fill=(70,70,70));draw.text((70,190),"What matters, clearly.",font=font,fill=(15,15,18));draw.text((70,520),"Independent reporting · Politics · India · World",font=small,fill=(105,105,105))
+ draw.rectangle((0,0,1200,18),fill=(200,16,46));draw.text((70,70),"PoliticsHub.in",font=small,fill=(70,70,70));draw.text((70,190),"What matters, clearly.",font=font,fill=(15,15,18));draw.text((70,520),"Source-linked news · Politics · India · World",font=small,fill=(105,105,105))
  out=io.BytesIO();image.save(out,format="PNG",optimize=True);return Response(out.getvalue(),mimetype="image/png",headers={"Cache-Control":"public, max-age=86400, s-maxage=86400"})
 
 @app.get("/api/og/<int:item_id>")
