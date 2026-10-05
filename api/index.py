@@ -1,4 +1,5 @@
 # Production deployment marker: deterministic newsroom + public source attribution.
+# Controlled production release: public quality, attribution and image-safety gates enabled.
 from __future__ import annotations
 
 import json, os, re, secrets, time, html, io
