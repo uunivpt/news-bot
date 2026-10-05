@@ -154,9 +154,9 @@ def _strip_promo_nav(value):
  return re.sub(r"\s{2,}"," ",r).strip(" |•·/-")
 
 def _public_title(title,source_text=""):
- raw=re.sub(r"\\s+"," ",str(title or "")).strip()
- raw=re.sub(r"^[^\\w]+","",raw).strip()
- raw=re.sub(r"\\s*[,;:]\\s*[A-Za-z]{1,2}$","",raw).strip(" .,:;-")
+ raw=re.sub(r"\s+"," ",str(title or "")).strip()
+ raw=re.sub(r"^[^\w]+","",raw).strip()
+ raw=re.sub(r"\s*[,;:]\s*[A-Za-z]{1,2}$","",raw).strip(" .,:;-")
  words=raw.split()
  # Repair the characteristic ingestion truncation where the first 1–3
  # lowercase letters of a headline survive but the rest of the first word is lost.
@@ -186,7 +186,7 @@ def _publicize(row):
   r["title"]=_public_title(r.get("title"),source_text)
   r["summary"]=_strip_promo_nav(dict(row).get("bot_summary") or dict(row).get("summary") or "")
   article_text=_strip_promo_nav(source_text)
-  article_text=re.sub(r"(?:\\n|\n|\s)*Why it matters:\s*$","",article_text,flags=re.I).strip()
+  article_text=re.sub(r"(?:\n|\s)*Why it matters:\s*$","",article_text,flags=re.I).strip()
   r["article"]=article_text
   # Keep verified source images public; the frontend already handles missing images safely.
   r.pop("editorial_context",None)
