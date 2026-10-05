@@ -28,11 +28,11 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       PGSSLMODE: require
-      PHI4_ENABLED: ${{ secrets.PHI4_ENABLED }}
+      PHI4_ENABLED: ${{ secrets.PHI4_ENABLED || 'true' }}
       PHI4_API_KEY: ${{ secrets.PHI4_API_KEY }}
       PHI4_ENDPOINT: ${{ secrets.PHI4_ENDPOINT }}
       PHI4_MODEL: ${{ secrets.PHI4_MODEL || 'microsoft/phi-4' }}
-      PHI4_TIMEOUT_SECONDS: ${{ secrets.PHI4_TIMEOUT_SECONDS }}
+      PHI4_TIMEOUT_SECONDS: ${{ secrets.PHI4_TIMEOUT_SECONDS || '25' }}
       NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
       NEWSDATA_API_KEY: ${{ secrets.NEWSDATA_API_KEY }}
     steps:
@@ -49,10 +49,11 @@ jobs:
           PYTHONPATH: .
         run: python -m compileall -q app api scripts run.py
       - name: Verify Phi-4 configuration
+        if: env.PHI4_ENABLED == 'true'
         run: |
-          test -n "$PHI4_API_KEY" || { echo "ERROR: PHI4_API_KEY is missing."; exit 1; }
-          test -n "$PHI4_ENDPOINT" || { echo "ERROR: PHI4_ENDPOINT is missing."; exit 1; }
-          test -n "$PHI4_MODEL" || { echo "ERROR: PHI4_MODEL is missing."; exit 1; }
+          test -n "$PHI4_API_KEY" || { echo "ERROR: PHI4_API_KEY is missing while PHI4_ENABLED=true."; exit 1; }
+          test -n "$PHI4_ENDPOINT" || { echo "ERROR: PHI4_ENDPOINT is missing while PHI4_ENABLED=true."; exit 1; }
+          test -n "$PHI4_MODEL" || { echo "ERROR: PHI4_MODEL is missing while PHI4_ENABLED=true."; exit 1; }
           echo "Phi-4 configuration present; model=$PHI4_MODEL"
       - name: Test deterministic newsroom bot
         env:
