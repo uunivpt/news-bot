@@ -33,6 +33,8 @@ jobs:
       PHI4_ENDPOINT: ${{ secrets.PHI4_ENDPOINT }}
       PHI4_MODEL: ${{ secrets.PHI4_MODEL }}
       PHI4_TIMEOUT_SECONDS: ${{ secrets.PHI4_TIMEOUT_SECONDS }}
+      NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
+      NEWSDATA_API_KEY: ${{ secrets.NEWSDATA_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
