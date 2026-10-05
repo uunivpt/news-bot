@@ -235,6 +235,12 @@ def _og_image(item_id):
  draw.text((70,560),f"{str(row.get('category') or 'News')} · {EDITORIAL_DESK}",font=font_small,fill=(105,105,105))
  out=io.BytesIO();image.save(out,format="PNG",optimize=True);return out.getvalue()
 
+def _editorial_page(title,lead,kind="page"):
+ links=["Home","About","Editorial Policy","Corrections","Contact"]
+ nav="<ul>"+"".join("<li>"+html.escape(x)+"</li>" for x in links)+"</ul>"
+ body="<p>PoliticsHub.in is an independent digital newsroom focused on politics, public affairs, India and the world.</p>" if kind=="author" else ""
+ page='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(title)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(lead[:160])+'"><link rel="canonical" href="'+SITE_ORIGIN+request.path+'"><link rel="icon" href="/brand.svg?v=phlogo1"><link rel="stylesheet" href="/assets/site.css?v=phui8"></head><body><header id="hd"><div class="top"><a class="logo" href="/"><img id="lg" src="/brand.svg?v=phlogo1" alt="PoliticsHub.in"></a></div></header><main class="wrap"><article class="art"><div class="ah"><span class="lbl red">PoliticsHub.in</span><h1>'+html.escape(title)+'</h1><p class="dek">'+html.escape(lead)+'</p></div><div class="body">'+body+'</div></article></main><footer><div class="wrap"><div><img src="/brand.svg?v=phlogo1" alt="PoliticsHub.in"><p class="ser">Independent reporting. Clearly.</p></div><div><h4>Navigate</h4>'+nav+'</div></div></footer></body></html>'
+ return Response(page,mimetype="text/html")
 def rows_json(rows,compact=False):
  out=[]
  for row in rows:
@@ -305,15 +311,79 @@ def login():
   valid=False; role=None; ph="%s" if database._postgres else "?"
   row=database.conn.execute("SELECT username,password_hash,role FROM admin_users WHERE username = "+ph,(username,)).fetchone(); valid=bool(row and check_password_hash(row["password_hash"] if database._postgres else row[1],password)); role=(row["role"] if database._postgres else row[2]) if row else None
   if not valid and username=="admin":
-   count=int(database.conn.execute("SELECT COUNT(*) AS count FROM admin_users").fetchone()["count"] if database._postgres else database.conn.execute("SELECT COUNT(*) AS count FROM admin_users").fetchone()[0]); bootstrap=os.getenv("ADMIN_SETUP_KEY","") or os.getenv("ADMIN_TOKEN","")
-   if count==0 and bootstrap and secrets.compare_digest(password,bootstrap):
-    now=datetime.now(timezone.utc).isoformat(); database.conn.execute(f"INSERT INTO admin_users (username,password_hash,role,created_at) VALUES ({ph},{ph},{ph},{ph})",("admin",generate_password_hash(password),"owner",now)); valid=True; role="owner"
-  if not valid:
-   record=users().get(username); valid=bool(record and check_password_hash(record,password)); role="owner" if valid else None
-  if not valid:
-   _auth_failed(database,attempt_key); _auth_failed(database,ip_attempt_key); return jsonify({"error":"invalid credentials"}),401
-  _auth_clear(database,attempt_key); _auth_clear(database,ip_attempt_key); session.clear(); session["admin_user"]=username; session["admin_role"]=role or "owner"; session["csrf_token"]=secrets.token_urlsafe(32); return jsonify({"ok":True,"username":username,"role":session["admin_role"],"csrf_token":session["csrf_token"]})
- finally:database.close()
+   count=int(database.conn.execute("SELECT COUNT(*) AS count FROM admin_users").fetchone()["count"] if database._postgres else database.conn.execute("SELECT COUNT(*) AS count FROM admin_users").fetchone()[0]); bootstrap=os.getenv("ADMIN_SETUP_KEY","") or os.ge@app.before_request
+def canonical_host():
+ host=(request.host or "").split(":")[0].lower()
+ if host=="politicshub.in": return redirect("https://www.politicshub.in"+request.full_path,code=301)
+
+@app.get("/robots.txt")
+def robots():
+ return app.response_class("User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /admin\nDisallow: /admin.html\nSitemap: https://www.politicshub.in/sitemap.xml\nSitemap: https://www.politicshub.in/news-sitemap.xml\n",mimetype="text/plain")
+
+@app.get("/sitemap.xml")
+def sitemap():
+ database=db()
+ try:
+  rows=database.latest(50000,"all","published")
+  urls=["https://www.politicshub.in/"]+[f"https://www.politicshub.in/{x}/" for x in sorted(set(CATEGORY_SLUGS.values()))]+["https://www.politicshub.in/about.html","https://www.politicshub.in/contact.html","https://www.politicshub.in/editorial-policy.html","https://www.politicshub.in/corrections.html","https://www.politicshub.in/terms.html","https://www.politicshub.in/disclaimer.html","https://www.politicshub.in/privacy.html","https://www.politicshub.in/cookies.html","https://www.politicshub.in/author/politicshub-news-desk"]
+  body="<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n"
+  body+="".join("<url><loc>"+html.escape(u)+"</loc></url>\n" for u in urls)
+  for row in rows:
+   try: body+="<url><loc>"+html.escape(SITE_ORIGIN+article_path(row))+"</loc></url>\n"
+   except Exception: pass
+  body+="</urlset>"; return app.response_class(body,mimetype="application/xml")
+ finally: database.close()
+
+@app.get("/news-sitemap.xml")
+def news_sitemap():
+ database=db()
+ try:
+  cutoff=datetime.now(timezone.utc)-timedelta(days=2); rows=[]
+  for row in database.latest(5000,"all","published"):
+   raw=row.get("published_at_site") or row.get("published_at")
+   try: dt=datetime.fromisoformat(str(raw).replace("Z","+00:00")); dt=dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+   except Exception: continue
+   if dt>=cutoff: rows.append(row)
+   if len(rows)>=1000: break
+  body="<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\" xmlns:news=\"http://www.google.com/schemas/sitemap-news/0.9\">\n"
+  for row in rows:
+   raw=row.get("published_at_site") or row.get("published_at")
+   try: dt=datetime.fromisoformat(str(raw).replace("Z","+00:00")); dt=dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc); pub=dt.astimezone(timezone.utc).isoformat().replace("+00:00","Z")
+   except Exception: continue
+   title=html.escape(str(row.get("title") or "")[:110]); loc=html.escape(SITE_ORIGIN+article_path(row))
+   body+=f"<url><loc>{loc}</loc><news:news><news:publication><news:name>PoliticsHub.in</news:name><news:language>en</news:language></news:publication><news:publication_date>{html.escape(pub)}</news:publication_date><news:title>{title}</news:title></news:news></url>\n"
+  body+="</urlset>"; return app.response_class(body,mimetype="application/xml")
+ finally: database.close()
+
+@app.get("/api/og/<int:item_id>")
+def og_image(item_id):
+ payload=_og_image(item_id)
+ if not payload:return jsonify({"error":"not found"}),404
+ return Response(payload,mimetype="image/png",headers={"Cache-Control":"public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800"})
+
+@app.get("/api/newsletter")
+def newsletter_status(): return jsonify({"ok":True,"available":True})
+
+@app.post("/api/newsletter")
+def newsletter_subscribe():
+ if not _public_rate_allowed(20,3600):return jsonify({"error":"too many requests"}),429
+ body=request.get_json(silent=True) or request.form.to_dict() or {}; email=str(body.get("email","")).strip().lower()
+ if not re.fullmatch(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",email):return jsonify({"error":"Enter a valid email address"}),400
+ database=db()
+ try: database.subscribe_newsletter(email); return jsonify({"ok":True,"message":"You are on the PoliticsHub newsletter list."})
+ finally: database.close()
+
+@app.get("/author/politicshub-news-desk")
+def author_page(): return _editorial_page("PoliticsHub News Desk","The PoliticsHub Editorial Desk publishes and edits newsroom stories, source links and public corrections.","author")
+
+@app.get("/<category>/<int:item_id>-<slug>")
+def seo_article(category,item_id,slug):
+ row=_public_row_by_id(item_id)
+ if not row:return jsonify({"error":"not found"}),404
+ canonical_path=article_path(row); requested=f"/{category}/{item_id}-{slug}"
+ if requested.rstrip("/")!=canonical_path.rstrip("/"):return redirect(SITE_ORIGIN+canonical_path,code=301)
+ return Response(_article_html(row),mimetype="text/html")
+tabase.close()
 
 @app.post("/api/admin/logout")
 def logout():
