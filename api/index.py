@@ -120,7 +120,7 @@ def _public_rows_for_section(category="all",limit=200):
   except Exception as exc: print(f"SSR section proxy failed: {exc}"); return []
 
 def _section_html(category="all"):
- rows=_public_rows_for_section(category,200)
+ rows=_public_rows_for_section(category,40)
  label="Latest news" if category=="all" else str(category).title()+" news"
  canonical=SITE_ORIGIN+"/" if category=="all" else SITE_ORIGIN+"/"+category+"/"
  links=[]
