@@ -226,7 +226,7 @@ def me():return jsonify({"authenticated":bool(session.get("admin_user")),"userna
 
 @app.get("/robots.txt")
 def robots():
- return app.response_class("User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /admin\nSitemap: https://www.politicshub.in/sitemap.xml\n",mimetype="text/plain")
+ return app.response_class("User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /admin\nDisallow: /admin.html\nSitemap: https://www.politicshub.in/sitemap.xml\n",mimetype="text/plain")
 
 @app.get("/sitemap.xml")
 def sitemap():
