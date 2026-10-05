@@ -29,7 +29,9 @@
       "source_class": "government",
       "category": "india",
       "enabled": true,
-      "public_source": true
+      "public_source": true,
+      "timeout_seconds": 12,
+      "max_items": 50
     },
     {
       "name": "PIB Media Invitations",
@@ -37,7 +39,9 @@
       "source_class": "government",
       "category": "india",
       "enabled": true,
-      "public_source": true
+      "public_source": true,
+      "timeout_seconds": 12,
+      "max_items": 50
     },
     {
       "name": "GovInfo Presidential Documents",
@@ -45,7 +49,9 @@
       "source_class": "government",
       "category": "world",
       "enabled": true,
-      "public_source": true
+      "public_source": true,
+      "timeout_seconds": 12,
+      "max_items": 50
     },
     {
       "name": "GovInfo Federal Register",
@@ -53,7 +59,9 @@
       "source_class": "government",
       "category": "world",
       "enabled": true,
-      "public_source": true
+      "public_source": true,
+      "timeout_seconds": 12,
+      "max_items": 50
     },
     {
       "name": "GovInfo Code of Federal Regulations",
@@ -61,7 +69,9 @@
       "source_class": "government",
       "category": "world",
       "enabled": true,
-      "public_source": true
+      "public_source": true,
+      "timeout_seconds": 12,
+      "max_items": 50
     }
   ],
   "telegram": [
@@ -115,7 +125,7 @@
         "/Allrel.aspx",
         "/newsite/PressReleaseDetail.aspx"
       ],
-      "max_links": 80,
+      "max_links": 20,
       "check_every_minutes": 5
     },
     {
@@ -161,7 +171,7 @@
         "/releases/",
         "/presidential-actions/"
       ],
-      "max_links": 100,
+      "max_links": 20,
       "check_every_minutes": 5
     },
     {
@@ -182,7 +192,7 @@
         "/news/",
         "/docs/"
       ],
-      "max_links": 80,
+      "max_links": 20,
       "check_every_minutes": 5
     },
     {
