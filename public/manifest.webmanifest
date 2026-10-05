@@ -1,0 +1,11 @@
+{
+  "name":"PoliticsHub.in",
+  "short_name":"PoliticsHub",
+  "start_url":"/",
+  "scope":"/",
+  "display":"standalone",
+  "background_color":"#f2f2f6",
+  "theme_color":"#c8102e",
+  "description":"Independent reporting on politics, power and the stories shaping India.",
+  "icons":[{"src":"/brand.svg?v=phlogo1","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}
