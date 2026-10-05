@@ -1,4 +1,4 @@
-name: Test 16s Reel
+name: Production Reel Regression
 
 on:
   workflow_dispatch:
@@ -75,17 +75,19 @@ jobs:
           node --check public/assets/article-init.js
           node --check public/assets/site.js
 
+      - name: Test source configuration
+        env:
+          PYTHONPATH: .
+          DATABASE_URL: ""
+          PGSSLMODE: ""
+        run: python -m unittest tests/test_source_config.py -v
+
       - name: Test database
         env:
           PYTHONPATH: .
           DATABASE_URL: ""
           PGSSLMODE: ""
         run: python -m unittest tests/test_database.py -v
-
-      - name: Test newsroom summarization
-        env:
-          PYTHONPATH: .
-        run: python -m unittest tests/test_newsroom.py -v
 
       - name: Test newsroom
         env:
@@ -115,7 +117,7 @@ jobs:
           PGSSLMODE: ""
         run: python tests/test_advanced_system.py -v
 
-      - name: Build current 16-second HTML Reel
+      - name: Build current production 16-second HTML Reel
         env:
           PYTHONPATH: .
         run: |
