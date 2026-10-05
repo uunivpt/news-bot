@@ -152,7 +152,7 @@ def _strip_promo_nav(value):
  return re.sub(r"\s{2,}"," ",r).strip(" |•·/-")
 
 def _public_title(title,source_text=""):
- raw=SPACE_RE.sub(" ",str(title or "")).strip()
+ raw=re.sub(r"\\s+"," ",str(title or "")).strip()
  raw=re.sub(r"^[^\\w]+","",raw).strip()
  raw=re.sub(r"\\s*[,;:]\\s*[A-Za-z]{1,2}$","",raw).strip(" .,:;-")
  if len(raw.split())>18: raw=" ".join(raw.split()[:18]).rstrip(" .,:;-")
@@ -177,7 +177,7 @@ def _publicize(row):
   article_text=re.sub(r"(?:\\n|\n|\s)*Why it matters:\s*$","",article_text,flags=re.I).strip()
   r["article"]=article_text
   if r.get("image_url"): r["image_url"]=None
-  r.pop("editorial_context",None)
+  r.pop("editorial_context",None)\n  if "editorial_value" in r: r["editorial_value"]=bool(r.get("editorial_value"))\n  if "source_count" in r: r["source_count"]=int(r.get("source_count") or 0)
  score=story_score(r.get("title",""),r.get("summary",""),r.get("category") or "general",r.get("source_name") or "")
  r["news_score"]=score; r["is_breaking"]=is_breaking(r.get("title",""),r.get("summary",""),score)
  return r
@@ -255,7 +255,7 @@ def _article_html(row):
 <div class="src">Source: {html.escape(source)}. {"<a href='"+html.escape(str(row.get("url")))+"' rel='nofollow noopener' target='_blank'>Read the original report</a>" if row.get("url") else ""}</div>
 <div class="article-share"><span>SHARE</span><a href="https://wa.me/?text={html.escape(title)}%20{html.escape(canonical)}">WhatsApp</a><a href="https://t.me/share/url?url={html.escape(canonical)}&text={html.escape(title)}">Telegram</a><a href="https://www.facebook.com/sharer/sharer.php?u={html.escape(canonical)}">Facebook</a><a href="https://twitter.com/intent/tweet?text={html.escape(title)}&url={html.escape(canonical)}">X</a></div>
 </article></main>
-<footer><div class="wrap"><div><img src="/brand.svg?v=phlogo1" alt="PoliticsHub.in"><p class="ser">Source-linked news. Clearly.</p></div><div><h4>Navigate</h4><ul><li><a href="/">Home</a></li><li><a href="/about.html">About</a></li><li><a href="/editorial-policy.html">Editorial Policy</a></li><li><a href="/corrections.html">Corrections</a></li><li><a href="/contact.html">Contact</a></li><li><a href="/disclaimer.html">Disclaimer</a></li><li><a href="/privacy.html">Privacy</a></li><li><a href="/cookies.html">Cookies</a></li><li><a href="/terms.html">Terms</a></li><li><a href="/newsletter.html">Newsletter</a></li><li><a href="/settings.html">Settings</a></li><li><a href="/debug.html">System Status</a></li></ul></div><div><h4>Contact</h4><ul><li><a href="mailto:news@politicshub.in">news@politicshub.in</a></li></ul></div></div></footer>
+<footer><div class="wrap"><div><img src="/brand.svg?v=phlogo1" alt="PoliticsHub.in"><p class="ser">Source-linked news. Clearly.</p></div><div><h4>Navigate</h4><ul><li><a href="/">Home</a></li><li><a href="/about.html">About</a></li><li><a href="/editorial-policy.html">Editorial Policy</a></li><li><a href="/corrections.html">Corrections</a></li><li><a href="/contact.html">Contact</a></li><li><a href="/disclaimer.html">Disclaimer</a></li><li><a href="/privacy.html">Privacy</a></li><li><a href="/cookies.html">Cookies</a></li><li><a href="/terms.html">Terms</a></li><li><a href="/newsletter.html">Newsletter</a></li><li><a href="/settings.html">Settings</a></li><li><a href="/debug.html">System Status</a></li></ul></div><div><h4>Contact</h4><ul><li><a href="mailto:politicshub.in@gmail.com">politicshub.in@gmail.com</a></li></ul></div></div></footer>
 <script src="/assets/site.js?v=phui8"></script>
 </body></html>"""
 
@@ -829,6 +829,45 @@ def edit_news(item_id):
  try:database.update(item_id,**fields); log_admin(database,"news.edit",item_id,",".join(fields.keys())); return jsonify({"ok":True,"fields":fields})
  finally:database.close()
 
+def _editorial_source_packets(database, row, limit=4):
+ """Collect distinct source material for factual cross-source curation."""
+ target_hash=str(row.get("title_hash") or "").strip()
+ target_title=str(row.get("title") or "").strip()
+ target_source=str(row.get("source_name") or "").strip()
+ candidates=[]
+ for item in database.latest(1000,status="all"):
+  item=dict(item)
+  if int(item.get("id") or 0)==int(row.get("id") or 0): continue
+  source_name=str(item.get("source_name") or "").strip()
+  if not source_name or source_name==target_source: continue
+  same_hash=bool(target_hash and str(item.get("title_hash") or "").strip()==target_hash)
+  a=set(re.findall(r"[a-z0-9]+",target_title.lower()))
+  b=set(re.findall(r"[a-z0-9]+",str(item.get("title") or "").lower()))
+  similarity=len(a&b)/max(1,len(a|b))
+  if same_hash or similarity>=0.62:
+   candidates.append(item)
+  if len(candidates)>=12: break
+
+ packets=[]
+ seen=set()
+ # Primary source first.
+ primary=enrich_source_text(target_title,str(row.get("summary") or ""),str(row.get("url") or ""))
+ if primary.get("text"):
+  packets.append({"source_name":target_source or "Primary source","url":primary.get("url") or row.get("url") or "","text":primary.get("text")})
+  seen.add(target_source or "Primary source")
+
+ for item in candidates:
+  name=str(item.get("source_name") or "").strip()
+  if not name or name in seen: continue
+  fetched=enrich_source_text(str(item.get("title") or ""),str(item.get("summary") or ""),str(item.get("url") or ""))
+  text_value=fetched.get("text") or ""
+  if len(text_value)<80: continue
+  packets.append({"source_name":name,"url":fetched.get("url") or item.get("url") or "","text":text_value})
+  seen.add(name)
+  if len(packets)>=limit: break
+ return packets
+
+
 @app.post("/api/news/<int:item_id>/process")
 def process_item(item_id):
  err=require_admin()
@@ -839,9 +878,9 @@ def process_item(item_id):
  try:
   row=next((dict(r) for r in database.latest(1000,status="all") if int(r["id"])==item_id),None)
   if not row:return jsonify({"error":"not found"}),404
-  source=enrich_source_text(row.get("title") or "",row.get("summary") or ""); material=source.get("text") or row.get("summary") or row.get("title") or ""; result=process_news(row["title"],material,row.get("category") or "general")
+  source=enrich_source_text(row.get("title") or "",row.get("summary") or "",row.get("url") or ""); material=source.get("text") or row.get("summary") or row.get("title") or ""; packets=_editorial_source_packets(database,row); result=process_news(row["title"],material,row.get("category") or "general",source_materials=packets)
   if not result:return jsonify({"error":"bot could not produce complete content from available material"}),422
-  fields={"title":result["headline"],"summary":result["summary"],"bot_summary":result["summary"],"bot_article":result["article"]}
+  fields={"title":result["headline"],"summary":result["summary"],"bot_summary":result["summary"],"bot_article":result["article"],"editorial_context":result.get("editorial_context") or "", "editorial_value":1 if result.get("editorial_value") else 0, "source_count":int(result.get("source_count") or 0)}
   # Never persist Telegram CDN images as site assets. A branded OG image is generated server-side.
   if source.get("image_url") and not is_telegram_image(source.get("image_url")) and not row.get("image_url"):fields["image_url"]=source["image_url"]
   elif row.get("image_url") and is_telegram_image(row.get("image_url")):fields["image_url"]=None
@@ -903,9 +942,9 @@ def instagram_publish_now(item_id):
   row=next((dict(r) for r in database.latest(1000,status="published",instagram_status="all") if int(r["id"])==item_id),None)
   if not row:return jsonify({"error":"published story not found"}),404
   if not row.get("bot_article") or not row.get("bot_summary"):
-   source=enrich_source_text(row.get("title") or "",row.get("summary") or "",row.get("url") or ""); material=source.get("text") or row.get("summary") or row.get("title") or ""; result=process_news(row.get("title") or "",material,row.get("category") or "general")
+   source=enrich_source_text(row.get("title") or "",row.get("summary") or "",row.get("url") or ""); material=source.get("text") or row.get("summary") or row.get("title") or ""; packets=_editorial_source_packets(database,row); result=process_news(row.get("title") or "",material,row.get("category") or "general",source_materials=packets)
    if not result:return jsonify({"error":"story could not be processed by the newsroom bot"}),422
-   fields={"title":result["headline"],"summary":result["summary"],"bot_summary":result["summary"],"bot_article":result["article"]}
+   fields={"title":result["headline"],"summary":result["summary"],"bot_summary":result["summary"],"bot_article":result["article"],"editorial_context":result.get("editorial_context") or "", "editorial_value":1 if result.get("editorial_value") else 0, "source_count":int(result.get("source_count") or 0)}
    if source.get("image_url") and not row.get("image_url"):fields["image_url"]=source["image_url"]
    database.update(item_id,**fields); row.update(fields); log_admin(database,"news.process",item_id,"auto before Instagram")
   if row.get("instagram_status")=="published":return jsonify({"error":"already published to Instagram"}),409
