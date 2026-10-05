@@ -25,6 +25,11 @@ jobs:
       - name: Verify Instagram worker configuration
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PHI4_ENABLED: ${{ secrets.PHI4_ENABLED }}
+          PHI4_API_KEY: ${{ secrets.PHI4_API_KEY }}
+          PHI4_ENDPOINT: ${{ secrets.PHI4_ENDPOINT }}
+          PHI4_MODEL: ${{ secrets.PHI4_MODEL }}
+          PHI4_TIMEOUT_SECONDS: ${{ secrets.PHI4_TIMEOUT_SECONDS }}
           META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
           META_INSTAGRAM_ACCOUNT_ID: ${{ secrets.META_INSTAGRAM_ACCOUNT_ID }}
           CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
