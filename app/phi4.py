@@ -12,7 +12,7 @@ import requests
 _TIMEOUT = max(5, int((os.getenv("PHI4_TIMEOUT_SECONDS") or "25").strip()))
 _ENDPOINT = os.getenv("PHI4_ENDPOINT", "").rstrip("/")
 _API_KEY = os.getenv("PHI4_API_KEY", "").strip()
-_MODEL = os.getenv("PHI4_MODEL", "Phi-4").strip()
+_MODEL = os.getenv("PHI4_MODEL", "microsoft/phi-4").strip()
 _ENABLED = os.getenv("PHI4_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
 
 
