@@ -1123,6 +1123,77 @@ def legacy_home():
  return redirect("/",code=301)
 
 # Render web-service compatibility: serve remaining static assets/pages.
+
+@app.post("/api/ai/translate")
+def ai_translate():
+    err=require_admin()
+    if err:return err
+    err=require_csrf()
+    if err:return err
+    body=request.get_json(silent=True) or {}
+    text_value=str(body.get("text") or "").strip()
+    language=str(body.get("target_language") or "").strip()
+    if not text_value or language.lower() not in {"english","hindi","marathi"}:
+        return jsonify({"error":"text and target_language (English/Hindi/Marathi) are required"}),400
+    try:
+        from app.phi4 import translate
+        return jsonify({"ok":True,"provider":"microsoft_phi4","translation":translate(text_value,language)})
+    except Exception as exc:
+        return jsonify({"error":str(exc)[:500]}),503
+
+
+@app.post("/api/ai/neutrality")
+def ai_neutrality():
+    err=require_admin()
+    if err:return err
+    err=require_csrf()
+    if err:return err
+    body=request.get_json(silent=True) or {}
+    title=str(body.get("title") or "").strip()
+    article=str(body.get("article") or "").strip()
+    if not title or not article:return jsonify({"error":"title and article are required"}),400
+    try:
+        from app.phi4 import neutrality_check
+        result=neutrality_check(title,article)
+        return jsonify({"ok":True,"provider":"microsoft_phi4","result":result})
+    except Exception as exc:
+        return jsonify({"error":str(exc)[:500]}),503
+
+
+@app.post("/api/ai/reel-script")
+def ai_reel_script():
+    err=require_admin()
+    if err:return err
+    err=require_csrf()
+    if err:return err
+    body=request.get_json(silent=True) or {}
+    title=str(body.get("title") or "").strip()
+    article=str(body.get("article") or "").strip()
+    if not title or not article:return jsonify({"error":"title and article are required"}),400
+    try:
+        from app.phi4 import reel_script
+        return jsonify({"ok":True,"provider":"microsoft_phi4","script":reel_script(title,article)})
+    except Exception as exc:
+        return jsonify({"error":str(exc)[:500]}),503
+
+
+@app.post("/api/ai/assistant")
+def ai_assistant():
+    err=require_admin()
+    if err:return err
+    err=require_csrf()
+    if err:return err
+    body=request.get_json(silent=True) or {}
+    instruction=str(body.get("instruction") or "").strip()
+    context=str(body.get("context") or "").strip()
+    if not instruction:return jsonify({"error":"instruction is required"}),400
+    try:
+        from app.phi4 import newsroom_assistant
+        return jsonify({"ok":True,"provider":"microsoft_phi4","answer":newsroom_assistant(instruction,context)})
+    except Exception as exc:
+        return jsonify({"error":str(exc)[:500]}),503
+
+
 @app.route("/<path:path>")
 def _render_public(path):
  if path.startswith("api/"): return jsonify({"error":"not found"}),404
