@@ -152,7 +152,7 @@ def _strip_promo_nav(value):
  return re.sub(r"\s{2,}"," ",r).strip(" |•·/-")
 
 def _public_title(title,source_text=""):
- raw=SPACE_RE.sub(" ",str(title or "")).strip()
+ raw=re.sub(r"\s+"," ",str(title or "")).strip()
  raw=re.sub(r"^[^\\w]+","",raw).strip()
  raw=re.sub(r"\\s*[,;:]\\s*[A-Za-z]{1,2}$","",raw).strip(" .,:;-")
  if len(raw.split())>18: raw=" ".join(raw.split()[:18]).rstrip(" .,:;-")
