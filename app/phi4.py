@@ -23,10 +23,17 @@ def available() -> bool:
 def _chat(system: str, user: str, *, temperature: float = 0.2, max_tokens: int = 1800) -> str:
     if not available():
         raise RuntimeError("Phi-4 is not configured")
-    url = f"{_ENDPOINT}/openai/v1/chat/completions"
+    # AICredits is OpenAI-compatible. Its base URL already includes /v1,
+    # so use /chat/completions and Bearer authentication.
+    if _ENDPOINT.endswith("/v1"):
+        url = f"{_ENDPOINT}/chat/completions"
+    elif _ENDPOINT.endswith("/openai/v1"):
+        url = f"{_ENDPOINT}/chat/completions"
+    else:
+        url = f"{_ENDPOINT}/v1/chat/completions"
     response = requests.post(
         url,
-        headers={"api-key": _API_KEY, "Content-Type": "application/json"},
+        headers={"Authorization": f"Bearer {_API_KEY}", "Content-Type": "application/json"},
         json={
             "model": _MODEL,
             "messages": [
