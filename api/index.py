@@ -107,7 +107,9 @@ def _rank_public(rows):
 def _public_rows_for_section(category="all",limit=200):
  try:
   database=db()
-  try:return [dict(x) for x in database.latest(limit,category,"published")]
+  try:
+   rows=[dict(x) for x in database.latest(max(limit*3,limit),category,"published")]
+   return dedupe_story_rows(rows,threshold=0.78)[:limit]
   finally:database.close()
  except RuntimeError:
   try:
@@ -132,7 +134,7 @@ def _section_html(category="all"):
    links.append('<article><h2><a href="'+href+'">'+title+'</a></h2><p>'+summary+'</p><time>'+date+'</time></article>')
   except Exception: pass
  body="".join(links) or '<p class="msg">No stories are available in this section right now.</p>'
- return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="Latest '+html.escape(label.lower())+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home"><link rel="icon" href="/brand.svg?v=phlogo1"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui8"></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/brand.svg?v=phlogo1" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app"><div class="art"><div class="ah"><span class="lbl red">PoliticsHub.in</span><h1>'+html.escape(label)+'</h1><p class="dek">What matters, clearly.</p></div><section class="body">'+body+'</section></div></div></main><footer><div class="wrap"><div><img src="/brand.svg?v=phlogo1" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/terms.html">Terms</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=phui8"></script></body></html>'
+ return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="Latest '+html.escape(label.lower())+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home"><link rel="icon" href="/brand.svg?v=phlogo1"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui8"></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/brand.svg?v=phlogo1" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app"><div class="art"><div class="ah"><span class="lbl red">PoliticsHub.in</span><h1>'+html.escape(label)+'</h1><p class="dek">What matters, clearly.</p></div><section class="body">'+body+'</section></div></div></main><footer><div class="wrap"><div><img src="/brand.svg?v=phlogo1" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="/settings.html">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=phui8"></script></body></html>'
 
 def db():
  database=NewsDatabase(); _ensure_admin_users(database); _bootstrap_news_snapshot(database); return database
@@ -155,7 +157,17 @@ def _public_title(title,source_text=""):
  raw=re.sub(r"\\s+"," ",str(title or "")).strip()
  raw=re.sub(r"^[^\\w]+","",raw).strip()
  raw=re.sub(r"\\s*[,;:]\\s*[A-Za-z]{1,2}$","",raw).strip(" .,:;-")
- if len(raw.split())>18: raw=" ".join(raw.split()[:18]).rstrip(" .,:;-")
+ words=raw.split()
+ # Repair the characteristic ingestion truncation where the first 1–3
+ # lowercase letters of a headline survive but the rest of the first word is lost.
+ first=words[0] if words else ""
+ damaged=bool(first and len(first)<=3 and first.islower() and len(words)>=4)
+ if damaged or len(words)>18 or "..." in raw or "…" in raw:
+  candidate=quality_headline(raw,source_text)
+  if candidate and not (len(candidate.split())<=3 and candidate==raw):
+   raw=candidate
+ if len(raw.split())>18:
+  raw=" ".join(raw.split()[:18]).rstrip(" .,:;-")
  return raw or quality_headline(title,source_text)
 
 def _publicize(row):
@@ -176,7 +188,7 @@ def _publicize(row):
   article_text=_strip_promo_nav(source_text)
   article_text=re.sub(r"(?:\\n|\n|\s)*Why it matters:\s*$","",article_text,flags=re.I).strip()
   r["article"]=article_text
-  if r.get("image_url"): r["image_url"]=None
+  # Keep verified source images public; the frontend already handles missing images safely.
   r.pop("editorial_context",None)
   if "editorial_value" in r: r["editorial_value"]=bool(r.get("editorial_value"))
   if "source_count" in r: r["source_count"]=int(r.get("source_count") or 0)
@@ -510,12 +522,14 @@ def news():
     q=search.lower()
     rows=[x for x in rows if q in str(x.get("title") or "").lower() or q in str(x.get("summary") or x.get("bot_summary") or "").lower()]
    rows=_rank_public(rows)
+   rows=dedupe_story_rows(rows,threshold=0.78)
    return jsonify(rows_json(rows[:limit],compact=compact))
   except Exception as snapshot_exc:
    print(f"News snapshot fallback failed: {snapshot_exc}")
    return jsonify({"error":"news backend unavailable"}),503
  try:
-  rows=_rank_public(database.latest(max(limit*3,limit),category,status,search,review,ig))
+  rows=_rank_public(database.latest(max(limit*6,limit),category,status,search,review,ig))
+  rows=dedupe_story_rows(rows,threshold=0.78)
   return jsonify(rows_json(rows[:limit],compact=compact))
  finally:database.close()
 
@@ -531,7 +545,8 @@ def public_search():
   proxied=_proxy_public("/api/news")
   return proxied or (jsonify({"error":"news backend unavailable"}),503)
  try:
-  rows=_rank_public(database.latest(min(limit*4,200),"all","published",q))
+  rows=_rank_public(database.latest(min(limit*8,400),"all","published",q))
+  rows=dedupe_story_rows(rows,threshold=0.78)
   return jsonify(rows_json(rows[:limit]))
  finally:database.close()
 
