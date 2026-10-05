@@ -14,6 +14,7 @@ on:
       - 'config/sources.json'
       - 'scripts/auto_publish.py'
       - 'run.py'
+      - 'api/index.py'
       - '.github/workflows/process.yml'
 
 concurrency:
