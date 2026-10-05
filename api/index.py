@@ -352,37 +352,31 @@ def robots():
 @app.get("/sitemap.xml")
 def sitemap():
  rows=_public_rows_for_section("all",50000)
- try:
-  urls=["https://www.politicshub.in/"]+[f"https://www.politicshub.in/{x}/" for x in sorted(set(CATEGORY_SLUGS.values()))]+["https://www.politicshub.in/about.html","https://www.politicshub.in/contact.html","https://www.politicshub.in/editorial-policy.html","https://www.politicshub.in/corrections.html","https://www.politicshub.in/terms.html","https://www.politicshub.in/disclaimer.html","https://www.politicshub.in/privacy.html","https://www.politicshub.in/cookies.html","https://www.politicshub.in/author/politicshub-news-desk"]
-  body="<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n"
-  body+="".join("<url><loc>"+html.escape(u)+"</loc></url>\n" for u in urls)
-  for row in rows:
-   try: body+="<url><loc>"+html.escape(SITE_ORIGIN+article_path(row))+"</loc></url>\n"
-   except Exception: pass
-  body+="</urlset>"; return app.response_class(body,mimetype="application/xml")
- finally: database.close()
+ urls=["https://www.politicshub.in/"]+[f"https://www.politicshub.in/{x}/" for x in sorted(set(CATEGORY_SLUGS.values()))]+["https://www.politicshub.in/about.html","https://www.politicshub.in/contact.html","https://www.politicshub.in/editorial-policy.html","https://www.politicshub.in/corrections.html","https://www.politicshub.in/terms.html","https://www.politicshub.in/disclaimer.html","https://www.politicshub.in/privacy.html","https://www.politicshub.in/cookies.html","https://www.politicshub.in/author/politicshub-news-desk"]
+ body="<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n"
+ body+="".join("<url><loc>"+html.escape(u)+"</loc></url>\n" for u in urls)
+ for row in rows:
+  try: body+="<url><loc>"+html.escape(SITE_ORIGIN+article_path(row))+"</loc></url>\n"
+  except Exception: pass
+ body+="</urlset>"; return app.response_class(body,mimetype="application/xml")
 
 @app.get("/news-sitemap.xml")
 def news_sitemap():
- rows=_public_rows_for_section("all",5000)
- try:
-  cutoff=datetime.now(timezone.utc)-timedelta(days=2); selected=[]
-  for row in rows:
-   raw=row.get("published_at_site") or row.get("published_at")
-   try: dt=datetime.fromisoformat(str(raw).replace("Z","+00:00")); dt=dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
-   except Exception: continue
-   if dt>=cutoff: rows.append(row)
-   if len(rows)>=1000: break
-  body="<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\" xmlns:news=\"http://www.google.com/schemas/sitemap-news/0.9\">\n"
-  for row in rows:
-   raw=row.get("published_at_site") or row.get("published_at")
-   try: dt=datetime.fromisoformat(str(raw).replace("Z","+00:00")); dt=dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc); pub=dt.astimezone(timezone.utc).isoformat().replace("+00:00","Z")
-   except Exception: continue
-   title=html.escape(str(row.get("title") or "")[:110]); loc=html.escape(SITE_ORIGIN+article_path(row))
-   body+=f"<url><loc>{loc}</loc><news:news><news:publication><news:name>PoliticsHub.in</news:name><news:language>en</news:language></news:publication><news:publication_date>{html.escape(pub)}</news:publication_date><news:title>{title}</news:title></news:news></url>\n"
-  body+="</urlset>"; return app.response_class(body,mimetype="application/xml")
-
-
+ rows=_public_rows_for_section("all",5000); cutoff=datetime.now(timezone.utc)-timedelta(days=2); selected=[]
+ for row in rows:
+  raw=row.get("published_at_site") or row.get("published_at")
+  try: dt=datetime.fromisoformat(str(raw).replace("Z","+00:00")); dt=dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+  except Exception: continue
+  if dt>=cutoff: selected.append(row)
+  if len(selected)>=1000: break
+ body="<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\" xmlns:news=\"http://www.google.com/schemas/sitemap-news/0.9\">\n"
+ for row in selected:
+  raw=row.get("published_at_site") or row.get("published_at")
+  try: dt=datetime.fromisoformat(str(raw).replace("Z","+00:00")); dt=dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc); pub=dt.astimezone(timezone.utc).isoformat().replace("+00:00","Z")
+  except Exception: continue
+  title=html.escape(str(row.get("title") or "")[:110]); loc=html.escape(SITE_ORIGIN+article_path(row))
+  body+=f"<url><loc>{loc}</loc><news:news><news:publication><news:name>PoliticsHub.in</news:name><news:language>en</news:language></news:publication><news:publication_date>{html.escape(pub)}</news:publication_date><news:title>{title}</news:title></news:news></url>\n"
+ body+="</urlset>"; return app.response_class(body,mimetype="application/xml")
 @app.get("/api/og-home")
 def og_home():
  from PIL import Image, ImageDraw, ImageFont
