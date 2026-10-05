@@ -306,7 +306,7 @@ def security_headers(response):
  response.headers["Referrer-Policy"]="strict-origin-when-cross-origin"
  response.headers["Permissions-Policy"]="camera=(), microphone=(), geolocation=(), payment=(), usb=()"
  response.headers["Strict-Transport-Security"]="max-age=63072000; includeSubDomains; preload"
- response.headers["Content-Security-Policy"]="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://www.googletagmanager.com https://www.google-analytics.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; media-src 'self' https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://www.google-analytics.com; frame-src 'none'; worker-src 'self'; upgrade-insecure-requests"
+ response.headers["Content-Security-Policy"]="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://www.googletagmanager.com https://www.google-analytics.com https://pagead2.googlesyndication.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; media-src 'self' https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://www.google-analytics.com https://pagead2.googlesyndication.com https://googleads.g.doubleclick.net; frame-src https://googleads.g.doubleclick.net https://tpc.googlesyndication.com; worker-src 'self'; upgrade-insecure-requests"
  response.headers["Cross-Origin-Opener-Policy"]="same-origin"
  response.headers["Cross-Origin-Resource-Policy"]="same-origin"
  response.headers["X-Permitted-Cross-Domain-Policies"]="none"
