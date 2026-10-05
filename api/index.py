@@ -333,13 +333,34 @@ def setup_owner():
 
 @app.post("/api/admin/login")
 def login():
- body=request.get_json(silent=True) or request.form.to_dict() or {}; username=str(body.get("username","")).strip(); password=str(body.get("password","")); database=db(); attempt_key=_auth_key(username); ip_attempt_key=_ip_key()
+ body=request.get_json(silent=True) or request.form.to_dict() or {}
+ username=str(body.get("username","")).strip()
+ password=str(body.get("password",""))
+ database=db()
+ attempt_key=_auth_key(username)
+ ip_attempt_key=_ip_key()
  try:
-  if not _auth_allowed(database,attempt_key,_LOGIN_MAX_FAILURES) or not _auth_allowed(database,ip_attempt_key,20):return jsonify({"error":"too many login attempts; try again later"}),429
-  valid=False; role=None; ph="%s" if database._postgres else "?"
-  row=database.conn.execute("SELECT username,password_hash,role FROM admin_users WHERE username = "+ph,(username,)).fetchone(); valid=bool(row and check_password_hash(row["password_hash"] if database._postgres else row[1],password)); role=(row["role"] if database._postgres else row[2]) if row else None
-  if not valid and username=="admin":
-   count=int(database.conn.execute("SELECT COUNT(*) AS count FROM admin_users").fetchone()["count"] if database._postgres else database.conn.execute("SELECT COUNT(*) AS count FROM admin_users").fetchone()[0]); bootstrap=os.getenv("ADMIN_SETUP_KEY","") or os.getenv("ADMIN_SETUP_KEY","")@app.before_request
+  if not _auth_allowed(database,attempt_key,_LOGIN_MAX_FAILURES) or not _auth_allowed(database,ip_attempt_key,20):
+   return jsonify({"error":"too many login attempts; try again later"}),429
+  ph="%s" if database._postgres else "?"
+  row=database.conn.execute("SELECT username,password_hash,role FROM admin_users WHERE username = "+ph,(username,)).fetchone()
+  valid=bool(row and check_password_hash(row["password_hash"] if database._postgres else row[1],password))
+  role=(row["role"] if database._postgres else row[2]) if row else None
+  if not valid:
+   _auth_failed(database,attempt_key)
+   _auth_failed(database,ip_attempt_key)
+   return jsonify({"error":"invalid username or password"}),401
+  _auth_clear(database,attempt_key)
+  _auth_clear(database,ip_attempt_key)
+  session.clear()
+  session["admin_user"]=username
+  session["admin_role"]=role or "owner"
+  session["csrf_token"]=secrets.token_urlsafe(32)
+  return jsonify({"ok":True,"username":username,"role":role or "owner","csrf_token":session["csrf_token"]})
+ finally:
+  database.close()
+
+@app.before_request
 def canonical_host():
  host=(request.host or "").split(":")[0].lower()
  if host=="politicshub.in": return redirect("https://www.politicshub.in"+request.full_path,code=301)
