@@ -27,6 +27,11 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       PGSSLMODE: require
+      PHI4_ENABLED: ${{ secrets.PHI4_ENABLED }}
+      PHI4_API_KEY: ${{ secrets.PHI4_API_KEY }}
+      PHI4_ENDPOINT: ${{ secrets.PHI4_ENDPOINT }}
+      PHI4_MODEL: ${{ secrets.PHI4_MODEL }}
+      PHI4_TIMEOUT_SECONDS: ${{ secrets.PHI4_TIMEOUT_SECONDS }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -72,6 +77,8 @@ jobs:
                   cur.execute("SELECT COUNT(*) FROM news_items")
                   print("news_items before collection:", cur.fetchone()[0])
           PY
+      - name: Validate source configuration
+        run: python -m json.tool config/sources.json >/dev/null
       - name: Collect fresh news from configured sources
         env:
           PYTHONPATH: .
