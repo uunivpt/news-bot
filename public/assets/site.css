@@ -138,3 +138,6 @@ footer h4{font:600 11px var(--sans);letter-spacing:.14em;text-transform:uppercas
 @media(max-width:560px){.trend-section{padding:20px;border-radius:26px}.trend-list{grid-template-columns:1fr}.trend-item{padding:13px}.trend-item>b{font-size:22px}}
 
 .tk a b{font:800 10px var(--sans);letter-spacing:.08em;color:var(--k);margin-right:6px}
+
+.newsletter-card{margin:48px 0;padding:34px;border-radius:32px;background:var(--k);color:#fff}.newsletter-card h2{font:800 clamp(28px,4vw,48px) var(--display);margin:10px 0}.newsletter-card p{color:rgba(255,255,255,.78)}.newsletter-card form{display:flex;gap:10px;max-width:620px;margin-top:20px}.newsletter-card input{flex:1;min-width:0;border:0;border-radius:999px;padding:14px 18px;font:500 15px var(--sans)}.newsletter-card .btn{background:#fff;color:var(--k)}.newsletter-card small{display:block;margin-top:10px;color:#fff}.social-note{font-size:12px!important;color:#9a9aa5!important;line-height:1.5}
+@media(max-width:560px){.newsletter-card form{flex-direction:column}.newsletter-card .btn{width:100%}}
