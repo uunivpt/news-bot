@@ -36,6 +36,11 @@ CREATE TABLE IF NOT EXISTS admin_activity (
 )
 """
 # Persistent authentication throttling must be defined before connection-time schema creation.
+NEWSLETTER_SCHEMA = """
+CREATE TABLE IF NOT EXISTS newsletter_subscribers (
+ email TEXT PRIMARY KEY, subscribed_at TEXT NOT NULL, source TEXT NOT NULL DEFAULT 'website', confirmed INTEGER NOT NULL DEFAULT 0
+)
+"""
 AUTH_SCHEMA = """
 CREATE TABLE IF NOT EXISTS admin_login_attempts (
  id BIGSERIAL PRIMARY KEY, attempt_key TEXT NOT NULL, attempted_at TEXT NOT NULL
@@ -100,7 +105,7 @@ class NewsDatabase:
     raise last_error
    self.conn.autocommit=True
    # PostgreSQL drivers execute one statement at a time; keep schema creation explicit.
-   for statement in (SCHEMA, ADMIN_SCHEMA, ACTIVITY_SCHEMA, AUTH_SCHEMA):
+   for statement in (SCHEMA, ADMIN_SCHEMA, ACTIVITY_SCHEMA, NEWSLETTER_SCHEMA, AUTH_SCHEMA):
     self.conn.execute(statement.strip())
    self._migrate_postgres()
    for statement in INDEXES.split(";"):
@@ -110,7 +115,7 @@ class NewsDatabase:
    if os.getenv("VERCEL") and not self.database_url:
     raise RuntimeError("DATABASE_URL is required on Vercel; refusing to use local SQLite")
    self.path=Path(path); self.path.parent.mkdir(parents=True,exist_ok=True); self.conn=sqlite3.connect(self.path); self.conn.row_factory=sqlite3.Row
-   self.conn.executescript(SCHEMA.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")); self.conn.executescript(ADMIN_SCHEMA); self.conn.executescript(ACTIVITY_SCHEMA.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")); self.conn.executescript(AUTH_SCHEMA.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")); self._migrate_sqlite(); self.conn.executescript(INDEXES); self.conn.commit()
+   self.conn.executescript(SCHEMA.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")); self.conn.executescript(ADMIN_SCHEMA); self.conn.executescript(ACTIVITY_SCHEMA.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")); self.conn.executescript(NEWSLETTER_SCHEMA); self.conn.executescript(AUTH_SCHEMA.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")); self._migrate_sqlite(); self.conn.executescript(INDEXES); self.conn.commit()
   self._seed_settings()
  def _migrate_postgres(self):
   for sql in MIGRATIONS.values():
@@ -157,6 +162,15 @@ class NewsDatabase:
  def instagram_last_published_at(self):
   row=self.conn.execute("SELECT instagram_published_at FROM news_items WHERE instagram_status='published' AND instagram_published_at IS NOT NULL ORDER BY instagram_published_at DESC LIMIT 1").fetchone(); return (row["instagram_published_at"] if self._postgres else row[0]) if row else None
  def close(self):self.conn.close()
+ def subscribe_newsletter(self,email,source="website"):
+  email=str(email or "").strip().lower()
+  now=NewsItem.now_iso()
+  ph="%s" if self._postgres else "?"
+  if self._postgres:self.conn.execute(f"INSERT INTO newsletter_subscribers (email,subscribed_at,source,confirmed) VALUES ({ph},{ph},{ph},0) ON CONFLICT (email) DO NOTHING",(email,now,source))
+  else:self.conn.execute(f"INSERT OR IGNORE INTO newsletter_subscribers (email,subscribed_at,source,confirmed) VALUES ({ph},{ph},{ph},0)",(email,now,source));self.conn.commit()
+ def newsletter_count(self):
+  row=self.conn.execute("SELECT COUNT(*) AS count FROM newsletter_subscribers").fetchone()
+  return int(row["count"] if self._postgres else row[0])
  def increment_view(self,item_id:int,at_iso=None):
   at_iso=at_iso or NewsItem.now_iso()
   ph="%s" if self._postgres else "?"
