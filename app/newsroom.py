@@ -533,9 +533,32 @@ def build_editorial_value(title, source_materials):
 def process_news(title,source_text,category="general",source_materials=None):
     material=clean_text(source_text)
     if len(material)<80:return None
-    headline=quality_headline(title,material)
-    summary=make_summary(headline,material)
-    article=make_article(headline,material)
+    ai_result=None
+    try:
+        from app.phi4 import available, synthesize_sources, rewrite_article, neutrality_check
+        if available():
+            packets=source_materials or []
+            ai_result=(synthesize_sources(title,packets,category) if len(packets)>=2
+                       else rewrite_article(title,material,category))
+            verdict=str(ai_result.get("NEUTRALITY") or "").upper()
+            if verdict.startswith("REVIEW"):
+                ai_result=None
+            elif ai_result.get("HEADLINE") and ai_result.get("SUMMARY") and ai_result.get("ARTICLE"):
+                audit=neutrality_check(ai_result["HEADLINE"],ai_result["ARTICLE"])
+                if str(audit.get("VERDICT") or "").upper().startswith("REVIEW"):
+                    ai_result=None
+    except Exception as exc:
+        print(f"Phi-4 unavailable; using deterministic newsroom fallback: {exc}")
+
+    if ai_result:
+        headline=clean_text(ai_result["HEADLINE"]).replace("\n"," ").strip()
+        summary=clean_text(ai_result["SUMMARY"]).replace("\n"," ").strip()
+        article=clean_text(ai_result["ARTICLE"]).strip()
+    else:
+        headline=quality_headline(title,material)
+        summary=make_summary(headline,material)
+        article=make_article(headline,material)
+
     value=build_editorial_value(headline,source_materials or [])
     if article and value["eligible"]:
         article=article+"\n\nEditorial source comparison: "+value["text"]
@@ -547,6 +570,7 @@ def process_news(title,source_text,category="general",source_materials=None):
         "editorial_value":value["eligible"],
         "source_count":value["source_count"],
         "sources":value["sources"],
+        "ai_provider":"microsoft_phi4" if ai_result else "deterministic",
     }
     if len(result["summary"])<50 or len(result["article"])<120:return None
     return result
