@@ -355,6 +355,15 @@ def news_sitemap():
   body+="</urlset>"; return app.response_class(body,mimetype="application/xml")
  finally: database.close()
 
+@app.get("/api/og-home")
+def og_home():
+ from PIL import Image, ImageDraw, ImageFont
+ image=Image.new("RGB",(1200,630),(245,245,242));draw=ImageDraw.Draw(image)
+ try: font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",72); small=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",28)
+ except Exception: font=ImageFont.load_default();small=ImageFont.load_default()
+ draw.rectangle((0,0,1200,18),fill=(200,16,46));draw.text((70,70),"PoliticsHub.in",font=small,fill=(70,70,70));draw.text((70,190),"What matters, clearly.",font=font,fill=(15,15,18));draw.text((70,520),"Independent reporting · Politics · India · World",font=small,fill=(105,105,105))
+ out=io.BytesIO();image.save(out,format="PNG",optimize=True);return Response(out.getvalue(),mimetype="image/png",headers={"Cache-Control":"public, max-age=86400, s-maxage=86400"})
+
 @app.get("/api/og/<int:item_id>")
 def og_image(item_id):
  payload=_og_image(item_id)
