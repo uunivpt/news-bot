@@ -31,7 +31,7 @@ jobs:
       PHI4_ENABLED: ${{ secrets.PHI4_ENABLED }}
       PHI4_API_KEY: ${{ secrets.PHI4_API_KEY }}
       PHI4_ENDPOINT: ${{ secrets.PHI4_ENDPOINT }}
-      PHI4_MODEL: ${{ secrets.PHI4_MODEL }}
+      PHI4_MODEL: ${{ secrets.PHI4_MODEL || 'microsoft/phi-4' }}
       PHI4_TIMEOUT_SECONDS: ${{ secrets.PHI4_TIMEOUT_SECONDS }}
       NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
       NEWSDATA_API_KEY: ${{ secrets.NEWSDATA_API_KEY }}
@@ -48,6 +48,12 @@ jobs:
         env:
           PYTHONPATH: .
         run: python -m compileall -q app api scripts run.py
+      - name: Verify Phi-4 configuration
+        run: |
+          test -n "$PHI4_API_KEY" || { echo "ERROR: PHI4_API_KEY is missing."; exit 1; }
+          test -n "$PHI4_ENDPOINT" || { echo "ERROR: PHI4_ENDPOINT is missing."; exit 1; }
+          test -n "$PHI4_MODEL" || { echo "ERROR: PHI4_MODEL is missing."; exit 1; }
+          echo "Phi-4 configuration present; model=$PHI4_MODEL"
       - name: Test deterministic newsroom bot
         env:
           PYTHONPATH: .
@@ -178,23 +184,28 @@ jobs:
           if git diff --cached --quiet; then
             echo "Public snapshot unchanged."
           else
-            git commit -m "chore: refresh public news snapshot [skip ci]"
-            # Another workflow/manual commit can land on main while this job is
-            # building the snapshot. Rebase our generated commit onto the latest
-            # main before pushing, and retry a few times instead of failing the
-            # entire news-processing run on a harmless fast-forward race.
+            # Build the snapshot commit from the latest main. If another commit
+            # lands during the push, reset to that latest main and recommit the
+            # already-generated snapshot instead of rebasing generated files.
             pushed=false
-            for attempt in 1 2 3; do
+            for attempt in 1 2 3 4 5; do
+              git fetch origin main
+              git reset --mixed origin/main
+              git add public/news-data.json public/static-sitemap.xml public/sitemap.xml public/news-sitemap*.xml
+              if git diff --cached --quiet; then
+                echo "Public snapshot already matches latest main."
+                pushed=true
+                break
+              fi
+              git commit -m "chore: refresh public news snapshot [skip ci]"
               if git push origin HEAD:main; then
                 pushed=true
                 break
               fi
-              echo "Snapshot push raced with another main commit; rebasing (attempt $attempt/3)."
-              git fetch origin main
-              git rebase origin/main
+              echo "Snapshot push raced with another main commit; regenerating commit on latest main (attempt $attempt/5)."
             done
             if [ "$pushed" != "true" ]; then
-              echo "ERROR: Could not push public snapshot after 3 retries."
+              echo "ERROR: Could not push public snapshot after 5 retries."
               exit 1
             fi
           fi
