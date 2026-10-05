@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 LAYOUTS = [
     {"id": "editorial", "base": 0, "family": "editorial", "palette": "light", "font_scale": 1.00, "crop": "cover", "motion": "static"},
@@ -181,11 +182,6 @@ def audit_stage(db, item_id, stage, status="completed", details=None):
         db.conn.commit()
 
 
-def duplicate_key(title, url=""):
-    norm = re.sub(r"[^a-z0-9 ]+", " ", f"{title} {url}".lower())
-    return hashlib.sha1(re.sub(r"\s+", " ", norm).strip().encode()).hexdigest()
-
-
 def duplicate_similarity(a, b):
     def words(v):
         return set(re.findall(r"[a-z0-9]{3,}", str(v or "").lower()))
@@ -243,7 +239,10 @@ def live_dashboard(db):
         total=db.count()
         published=len(db.latest(1000,"all","published"))
         review_needed=len(db.latest(1000,"all","published",None,"needs_review"))
-        stats={"total":total,"published":published,"review_needed":review_needed,"instagram_today":db.instagram_daily_count(*_india_day_bounds()) if "_india_day_bounds" in globals() else 0,"instagram_limit":int(settings.get("instagram_daily_limit","5"))}
+        india_today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+        start = datetime.combine(india_today, datetime.min.time(), tzinfo=ZoneInfo("Asia/Kolkata")).astimezone(timezone.utc).isoformat()
+        end = (datetime.combine(india_today, datetime.min.time(), tzinfo=ZoneInfo("Asia/Kolkata")) + timedelta(days=1)).astimezone(timezone.utc).isoformat()
+        stats={"total":total,"published":published,"review_needed":review_needed,"instagram_today":db.instagram_daily_count(start,end),"instagram_limit":int(settings.get("instagram_daily_limit","5"))}
     except Exception:
         stats={"total":0,"published":0,"review_needed":0,"instagram_today":0,"instagram_limit":int(settings.get("instagram_daily_limit","5"))}
     recent=db.conn.execute("SELECT stage,status,item_id,details,created_at FROM ph_audit ORDER BY id DESC LIMIT 40").fetchall()
