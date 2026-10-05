@@ -452,6 +452,11 @@ def seo_article(category,item_id,slug):
  if not row:return jsonify({"error":"not found"}),404
  canonical_path=article_path(row); requested=f"/{category}/{item_id}-{slug}"
  if requested.rstrip("/")!=canonical_path.rstrip("/"):return redirect(SITE_ORIGIN+canonical_path,code=301)
+ try:
+  database=db()
+  try: database.increment_view(item_id,datetime.now(timezone.utc).isoformat())
+  finally: database.close()
+ except Exception as exc: print(f"view counter skipped: {exc}")
  return Response(_article_html(row),mimetype="text/html")
 
 @app.post("/api/admin/logout")
