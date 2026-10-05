@@ -16,8 +16,10 @@ Configure permitted sources in `config/sources.json`. Do not copy full copyright
 - Instagram: `META_ACCESS_TOKEN`, `META_INSTAGRAM_ACCOUNT_ID`, optional `META_API_VERSION`
 - Public Reel storage: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_UPLOAD_PRESET`
 - Fixed music: `FIXED_AUDIO_PATH` on the worker. Only use music you have permission to publish.
+- India news APIs: `NEWSAPI_KEY`, `NEWSDATA_API_KEY`.
+- Phi-4 worker secrets: `PHI4_ENABLED`, `PHI4_API_KEY`, `PHI4_ENDPOINT`, `PHI4_MODEL`, `PHI4_TIMEOUT_SECONDS` in GitHub Actions; the same values may be configured in Vercel for API routes.
 
-No AI API, AI model, or AI API key is required by the publishing workflow. Story processing is deterministic and extractive.
+Story processing is deterministic by default and can optionally use the server-side Microsoft Phi-4 layer when `PHI4_ENABLED` and its credentials are configured. Never expose `PHI4_API_KEY` to the browser.
 
 Generate admin hashes with `python scripts/hash_password.py`.
 
