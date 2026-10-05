@@ -147,7 +147,7 @@
         "/en/press-releases/",
         "/en/"
       ],
-      "max_links": 60,
+      "max_links": 20,
       "check_every_minutes": 5
     },
     {
@@ -212,7 +212,7 @@
       "article_path_prefixes": [
         "/en/news-updates/"
       ],
-      "max_links": 80,
+      "max_links": 20,
       "check_every_minutes": 5
     }
   ],
