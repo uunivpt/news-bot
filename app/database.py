@@ -52,6 +52,7 @@ CREATE INDEX IF NOT EXISTS idx_news_instagram_retry ON news_items(instagram_stat
 CREATE INDEX IF NOT EXISTS idx_news_instagram_selected ON news_items(instagram_selected, instagram_status);
 CREATE INDEX IF NOT EXISTS idx_news_instagram_schedule ON news_items(instagram_status, instagram_scheduled_at);
 CREATE INDEX IF NOT EXISTS idx_news_instagram_queue_order ON news_items(instagram_selected, instagram_queue_order);
+CREATE INDEX IF NOT EXISTS idx_news_views ON news_items(view_count DESC, published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_admin_login_attempts_key_time ON admin_login_attempts(attempt_key, attempted_at);
 """
 MIGRATIONS = {
@@ -68,6 +69,8 @@ MIGRATIONS = {
  "reel_cloudinary_public_id":"ALTER TABLE news_items ADD COLUMN reel_cloudinary_public_id TEXT", "reel_cloudinary_url":"ALTER TABLE news_items ADD COLUMN reel_cloudinary_url TEXT", "instagram_selected":"ALTER TABLE news_items ADD COLUMN instagram_selected INTEGER NOT NULL DEFAULT 0",
  "instagram_scheduled_at":"ALTER TABLE news_items ADD COLUMN instagram_scheduled_at TEXT",
  "instagram_queue_order":"ALTER TABLE news_items ADD COLUMN instagram_queue_order INTEGER NOT NULL DEFAULT 0", "image_source":"ALTER TABLE news_items ADD COLUMN image_source TEXT", "image_license":"ALTER TABLE news_items ADD COLUMN image_license TEXT", "image_credit":"ALTER TABLE news_items ADD COLUMN image_credit TEXT", "image_source_url":"ALTER TABLE news_items ADD COLUMN image_source_url TEXT", "image_search_query":"ALTER TABLE news_items ADD COLUMN image_search_query TEXT", "image_selection_score":"ALTER TABLE news_items ADD COLUMN image_selection_score INTEGER", "image_local_path":"ALTER TABLE news_items ADD COLUMN image_local_path TEXT", "image_width":"ALTER TABLE news_items ADD COLUMN image_width INTEGER", "image_height":"ALTER TABLE news_items ADD COLUMN image_height INTEGER", "image_selected_at":"ALTER TABLE news_items ADD COLUMN image_selected_at TEXT",
+ "view_count":"ALTER TABLE news_items ADD COLUMN view_count INTEGER NOT NULL DEFAULT 0",
+ "last_viewed_at":"ALTER TABLE news_items ADD COLUMN last_viewed_at TEXT",
 }
 DEFAULT_SETTINGS={"instagram_enabled":"true","instagram_daily_limit":"5","instagram_selection_mode":"auto","instagram_interval_minutes":"0","website_enabled":"true","instagram_paused":"false","instagram_priority_id":""}
 
@@ -154,6 +157,16 @@ class NewsDatabase:
  def instagram_last_published_at(self):
   row=self.conn.execute("SELECT instagram_published_at FROM news_items WHERE instagram_status='published' AND instagram_published_at IS NOT NULL ORDER BY instagram_published_at DESC LIMIT 1").fetchone(); return (row["instagram_published_at"] if self._postgres else row[0]) if row else None
  def close(self):self.conn.close()
+ def increment_view(self,item_id:int,at_iso=None):
+  at_iso=at_iso or NewsItem.now_iso()
+  ph="%s" if self._postgres else "?"
+  self.conn.execute(f"UPDATE news_items SET view_count=COALESCE(view_count,0)+1,last_viewed_at={ph} WHERE id = {ph} AND status='published'",(at_iso,item_id))
+  if not self._postgres:self.conn.commit()
+ def trending(self,limit=10):
+  try:limit=max(1,min(int(limit),50))
+  except (TypeError,ValueError):limit=10
+  ph="%s" if self._postgres else "?"
+  return self.conn.execute(f"SELECT * FROM news_items WHERE status='published' ORDER BY COALESCE(view_count,0) DESC, COALESCE(published_at_site,published_at) DESC LIMIT {ph}",(limit,)).fetchall()
  def insert(self,item:NewsItem)->bool:
   normalized_url=normalize_url(item.url); url_hash,title_hash=fingerprint(normalized_url,item.title); params=(item.source_name,item.source_type,item.title.strip(),item.url,normalized_url,item.published_at,item.summary,item.external_id,url_hash,title_hash,NewsItem.now_iso(),item.category or "general",item.image_url,1 if item.public_source else 0); sql="INSERT INTO news_items (source_name,source_type,title,url,normalized_url,published_at,summary,external_id,url_hash,title_hash,collected_at,category,image_url,public_source) VALUES ({p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p})"
   if self._postgres:return self.conn.execute(sql.format(p="%s")+" ON CONFLICT DO NOTHING",params).rowcount==1
