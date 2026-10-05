@@ -1,5 +1,28 @@
 {
-  "rss": [
+  "newsapi": [
+    {
+      "name": "NewsAPI India",
+      "country": "in",
+      "category": "general",
+      "q": "India OR Indian",
+      "page_size": 100,
+      "enabled": true,
+      "public_source": true
+    }
+  ],
+  "newsdata": [
+    {
+      "name": "NewsData.io India",
+      "country": "in",
+      "language": "en",
+      "category": "politics",
+      "q": "India",
+      "size": 10,
+      "enabled": true,
+      "public_source": true
+    }
+  ],
+
     {
       "name": "PIB Press Releases",
       "url": "https://pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=1",
