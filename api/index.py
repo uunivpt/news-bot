@@ -431,7 +431,7 @@ def health():
 def news():
  if not _public_rate_allowed():return jsonify({"error":"rate limit exceeded"}),429
  category=request.args.get("category","all").lower().strip(); status=request.args.get("status","published"); review=request.args.get("review_status","all"); ig=request.args.get("instagram_status","all"); search=request.args.get("search"); compact=request.args.get("compact","0")=="1"
- if category!="all" and category not in {"general","india","world","politics","business","technology","sports","entertainment","science","health"}:return jsonify({"error":"invalid category"}),400
+ if category!="all" and category not in {"general","india","world","politics","business","technology","sports","entertainment","science","health","hindi"}:return jsonify({"error":"invalid category"}),400
  if search is not None: search=str(search).strip()[:120]
  try:limit=min(max(int(request.args.get("limit","100")),1),100)
  except ValueError:limit=100
