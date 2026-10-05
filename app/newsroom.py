@@ -382,7 +382,7 @@ def make_headline(title,source_text):
     if items:
         clause=_headline_from_sentence(items[0])
         return clause[:140].rstrip(" .:-")
-    return value[:140].rstrip(" .:-") or "Latest news update"
+    return value.rstrip(" .:-") or "Latest news update"
 
 def _norm_words(text):
     return set(_words(re.sub(r"[^A-Za-z0-9' -]"," ",text or "")))
@@ -440,8 +440,8 @@ def quality_headline(title, source_text=""):
         return value[:140].rstrip(" .:-")
     candidate=make_headline("", source_text or value)
     if 5 <= len(candidate.split()) <= 18 and len(candidate)>=28:
-        return candidate[:140].rstrip(" .:-")
-    return value[:140].rstrip(" .:-") or "Latest news update"
+        return candidate.rstrip(" .:-")
+    return value.rstrip(" .:-") or "Latest news update"
 
 def editorial_context(title, source_text, category="general"):
     """Create a short, original newsroom note without inventing facts."""
@@ -456,7 +456,7 @@ def editorial_context(title, source_text, category="general"):
         "science":"The development is relevant because the reported findings or decision may affect how a scientific issue is understood.",
     }.get(cat,"The development is relevant to readers because it concerns a current public-affairs event.")
     source_note="The available source material is attributed to the originating publisher; claims remain attributed unless independently verified."
-    return f"{focus} {source_note}"
+    return ""
 
 def process_news(title,source_text,category="general"):
     material=clean_text(source_text)
