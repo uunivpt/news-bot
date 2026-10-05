@@ -11,7 +11,7 @@ from app.article_fetcher import enrich_source_text
 from app.database import NewsDatabase
 from app.models import NewsItem
 from app.factcheck import run_cross_source_check
-from app.newsroom import process_news, story_score, is_breaking, dedupe_story_rows
+from app.newsroom import process_news, story_score, is_breaking, dedupe_story_rows, quality_headline, is_telegram_image, editorial_context
 from app.worker import dispatch_worker
 from app.phase_system import analytics as phase_analytics, cluster_stories, cluster_summary, train as train_agent
 from app.reporting import operations_pdf
@@ -161,7 +161,10 @@ def _publicize(row):
    try:
     dt=datetime.fromisoformat(str(raw).replace("Z","+00:00")); dt=dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc); r["published_at"]=dt.astimezone(ZoneInfo("Asia/Kolkata")).strftime("%d %b %Y · %H:%M")
    except ValueError:pass
-  r["title"]=_strip_promo_nav(r.get("title")); r["summary"]=_strip_promo_nav(dict(row).get("bot_summary") or dict(row).get("summary") or ""); r["article"]=_strip_promo_nav(dict(row).get("bot_article") or dict(row).get("bot_summary") or dict(row).get("summary") or "")
+  source_text=_strip_promo_nav(dict(row).get("bot_article") or dict(row).get("bot_summary") or dict(row).get("summary") or "")
+  r["title"]=quality_headline(r.get("title"),source_text); r["summary"]=_strip_promo_nav(dict(row).get("bot_summary") or dict(row).get("summary") or ""); r["article"]=_strip_promo_nav(source_text)
+  if r.get("image_url") and is_telegram_image(r.get("image_url")): r["image_url"]=None
+  r["editorial_context"]=editorial_context(r["title"],source_text,r.get("category") or "general")
  score=story_score(r.get("title",""),r.get("summary",""),r.get("category") or "general",r.get("source_name") or "")
  r["news_score"]=score; r["is_breaking"]=is_breaking(r.get("title",""),r.get("summary",""),score)
  return r
@@ -819,7 +822,9 @@ def process_item(item_id):
   source=enrich_source_text(row.get("title") or "",row.get("summary") or ""); material=source.get("text") or row.get("summary") or row.get("title") or ""; result=process_news(row["title"],material,row.get("category") or "general")
   if not result:return jsonify({"error":"bot could not produce complete content from available material"}),422
   fields={"title":result["headline"],"summary":result["summary"],"bot_summary":result["summary"],"bot_article":result["article"]}
-  if source.get("image_url") and not row.get("image_url"):fields["image_url"]=source["image_url"]
+  # Never persist Telegram CDN images as site assets. A branded OG image is generated server-side.
+  if source.get("image_url") and not is_telegram_image(source.get("image_url")) and not row.get("image_url"):fields["image_url"]=source["image_url"]
+  elif row.get("image_url") and is_telegram_image(row.get("image_url")):fields["image_url"]=None
   database.update(item_id,**fields); log_admin(database,"news.process",item_id,"deterministic_bot"); return jsonify({"ok":True,"mode":"deterministic_bot","headline":result["headline"],"summary":result["summary"],"article":result["article"]})
  finally:database.close()
 
