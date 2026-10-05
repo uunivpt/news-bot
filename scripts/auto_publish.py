@@ -93,16 +93,18 @@ def _process_content(db,row):
  except Exception as exc:print(f"Bot processing failed for item {row.get('id')}: {exc}"); return False
 
 def _direct_fallback_content(row):
- # Very short alerts cannot be expanded safely by the newsroom processor.
- # Publish the source wording directly after removing source-name fragments and emoji.
+ # Do not turn captions, emoji-only posts or one-line fragments into thin
+ # website articles. They stay unprocessed until usable source material exists.
  title=clean_instagram_text(row.get("title") or "",row.get("source_name") or "")
  raw=row.get("summary") or row.get("title") or ""
  summary=clean_instagram_text(raw,row.get("source_name") or "")
- if not summary:
-  summary=title
- if not title and not summary:return False
+ if not title or not summary:return False
+ title_words=[w for w in re.findall(r"[A-Za-z0-9][A-Za-z0-9'-]*",title) if w]
+ summary_words=[w for w in re.findall(r"[A-Za-z0-9][A-Za-z0-9'-]*",summary) if w]
+ if len(title_words)<4 or len(summary_words)<18 or len(summary)<100:
+  return False
  article=summary
- return {"title":title or "Latest news update","summary":summary,"bot_summary":summary,"bot_article":article}
+ return {"title":title,"summary":summary,"bot_summary":summary,"bot_article":article}
 
 def prepare_content(db,row):
  fields=_process_content(db,row)
