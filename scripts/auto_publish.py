@@ -19,6 +19,7 @@ from app.image_acquisition import prepare_story_image
 from app.media_storage import download_to, public_video_url
 from app.meta_instagram import publish_reel, InstagramRateLimitError
 from app.newsroom import process_news
+from app.phi4 import available as phi4_available, reel_script as phi4_reel_script
 from app.publish_policy import risk_flags
 from app.phase_system import ensure_schema, run as agent_run, start as agent_start, finish as agent_finish, quality_gate, manager_route
 from app.advanced_ops import LAYOUTS, reserve_layout, layout_by_id, audit_stage, state_transition, visual_qa_card, record_verification, find_duplicate_story
@@ -145,6 +146,23 @@ def _recover_stale_processing(db,now):
    attempts=int(row.get("instagram_attempts") or 0); db.update(int(row["id"]),instagram_status="failed",instagram_error="Recovered stale Instagram processing job",instagram_next_retry_at=_next_retry(max(attempts,1))); recovered+=1
  return recovered
 
+def _generate_reel_script(row):
+    """Generate Reel copy with Phi-4 when configured; keep deterministic fallback."""
+    title=str(row.get("title") or "Latest news update").strip()
+    article=str(row.get("bot_article") or row.get("bot_summary") or row.get("summary") or "").strip()
+    if not article:
+        return ""
+    if not phi4_available():
+        return str(row.get("bot_summary") or row.get("summary") or "").strip()
+    try:
+        script=phi4_reel_script(title,article).strip()
+        if script:
+            print(f"Phi-4 Reel script generated for item {row.get('id')}")
+            return script
+    except Exception as exc:
+        print(f"Phi-4 Reel script failed for item {row.get('id')}; using deterministic summary: {exc}")
+    return str(row.get("bot_summary") or row.get("summary") or "").strip()
+
 def _process_instagram_untracked(db,row,music):
  item_id=int(row["id"]); attempts=int(row.get("instagram_attempts") or 0)
  if attempts>=MAX_INSTAGRAM_ATTEMPTS:return False
@@ -179,13 +197,14 @@ def _process_instagram_untracked(db,row,music):
   state_transition(db,item_id,"INSTAGRAM_QUEUE")
   audit_stage(db,item_id,"TEMPLATE_SELECTED","completed",layout)
   video=OUT/f"{item_id}.mp4"
+  reel_script_text=_generate_reel_script(row)
   reel_data={
    "headline":row.get("title") or "Latest news update",
    "category":row.get("category") or "News",
    "date":row.get("published_at") or row.get("date") or datetime.now(timezone.utc).strftime("%d %b %Y"),
    "location":row.get("location") or "",
    "source":row.get("source_name") or "",
-   "summary":row.get("bot_summary") or row.get("summary") or "",
+   "summary":reel_script_text or row.get("bot_summary") or row.get("summary") or "",
    "image_url":row.get("image_local_path") or row.get("image_url"),
    "cta":"Follow for daily politics & world updates",
   }
