@@ -208,18 +208,18 @@ def _process_instagram_untracked(db,row,music):
    "image_url":row.get("image_local_path") or row.get("image_url"),
    "cta":"Follow for daily politics & world updates",
   }
-  # Production path: the 18s PoliticsHub HTML motion template is mandatory.
+  # Production path: the 16s PoliticsHub HTML motion template is mandatory.
   # Do not fall back to the legacy card/slideshow renderer, otherwise an
   # HTML-rendering failure could silently publish the old template.
   build_html_reel(reel_data,str(video),audio_path=music)
-  print(f"HTML 18s motion Reel rendered for item {item_id}")
+  print(f"HTML 16s motion Reel rendered for item {item_id}")
   preview=OUT/"reel_previews"/f"{item_id}.jpg"; preview.parent.mkdir(parents=True,exist_ok=True)
   subprocess.run(["ffmpeg","-y","-ss","9","-i",str(video),"-frames:v","1","-vf","scale=1080:1920",str(preview)],check=True,capture_output=True,text=True)
   preview_path=str(preview)
   qa_card=visual_qa_card(preview)
   if not qa_card.get("passed"): raise RuntimeError(f"Visual QA failed: {qa_card.get('errors')}")
   state_transition(db,item_id,"REEL_CREATED")
-  audit_stage(db,item_id,"REEL_QA","completed",{"renderer":"politicshub_html_18s","layout":layout["id"],"preview":preview_path})
+  audit_stage(db,item_id,"REEL_QA","completed",{"renderer":"politicshub_html_16s","layout":layout["id"],"preview":preview_path})
   record_preview(db,item_id,str(video),preview_path,qa_card,layout["id"])
   render_id=uuid.uuid4().hex[:12]
   public_id=f"politicshub/reels/item-{item_id}-render-{render_id}"
