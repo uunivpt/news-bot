@@ -12,7 +12,7 @@ from app.article_fetcher import enrich_source_text
 from app.database import NewsDatabase
 from app.models import NewsItem
 from app.factcheck import run_cross_source_check
-from app.newsroom import process_news, story_score, is_breaking, dedupe_story_rows, quality_headline, is_telegram_image, editorial_context
+from app.newsroom import process_news, story_score, is_breaking, dedupe_story_rows, quality_headline, is_telegram_image
 from app.worker import dispatch_worker
 from app.phase_system import analytics as phase_analytics, cluster_stories, cluster_summary, train as train_agent
 from app.reporting import operations_pdf
@@ -163,9 +163,11 @@ def _publicize(row):
     dt=datetime.fromisoformat(str(raw).replace("Z","+00:00")); dt=dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc); r["published_at"]=dt.astimezone(ZoneInfo("Asia/Kolkata")).strftime("%d %b %Y · %H:%M")
    except ValueError:pass
   source_text=_strip_promo_nav(dict(row).get("bot_article") or dict(row).get("bot_summary") or dict(row).get("summary") or "")
-  r["title"]=quality_headline(r.get("title"),source_text); r["summary"]=_strip_promo_nav(dict(row).get("bot_summary") or dict(row).get("summary") or ""); r["article"]=_strip_promo_nav(source_text)
-  if r.get("image_url") and is_telegram_image(r.get("image_url")): r["image_url"]=None
-  r["editorial_context"]=editorial_context(r["title"],source_text,r.get("category") or "general")
+  r["title"]=quality_headline(r.get("title"),source_text)
+  r["summary"]=_strip_promo_nav(dict(row).get("bot_summary") or dict(row).get("summary") or "")
+  r["article"]=_strip_promo_nav(source_text)
+  if r.get("image_url"): r["image_url"]=None
+  r.pop("editorial_context",None)
  score=story_score(r.get("title",""),r.get("summary",""),r.get("category") or "general",r.get("source_name") or "")
  r["news_score"]=score; r["is_breaking"]=is_breaking(r.get("title",""),r.get("summary",""),score)
  return r
@@ -213,7 +215,7 @@ def _article_html(row):
  pub_iso=str(published or datetime.now(timezone.utc).isoformat())
  if pub_iso and not re.search(r"[+-]\d\d:\d\d|Z$",pub_iso): pub_iso=pub_iso+"Z"
  data={
-  "@context":"https://schema.org","@type":"NewsArticle","headline":title[:110],
+  "@context":"https://schema.org","@type":"NewsArticle","headline":title,
   "description":summary,"image":[image],"datePublished":pub_iso,"dateModified":str(modified or pub_iso),
   "author":[{"@type":"Organization","name":EDITORIAL_DESK,"url":SITE_ORIGIN+"/author/politicshub-news-desk"}],
   "publisher":{"@type":"Organization","name":"PoliticsHub.in","url":SITE_ORIGIN},
@@ -371,7 +373,7 @@ def canonical_host():
 
 @app.get("/robots.txt")
 def robots():
- return app.response_class("User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /admin\nDisallow: /admin.html\nSitemap: https://www.politicshub.in/sitemap.xml\nSitemap: https://www.politicshub.in/news-sitemap.xml\n",mimetype="text/plain")
+ return app.response_class("User-agent: *\nAllow: /\nAllow: /api/\nAllow: /api/news\nAllow: /ads.txt\nDisallow: /admin/\nDisallow: /admin.html\nDisallow: /admin.js\nDisallow: /newsroom-console-8x4m7k2q.html\nSitemap: https://www.politicshub.in/sitemap.xml\nSitemap: https://www.politicshub.in/news-sitemap.xml\n",mimetype="text/plain")
 
 @app.get("/sitemap.xml")
 def sitemap():
@@ -398,7 +400,7 @@ def news_sitemap():
   raw=row.get("published_at_site") or row.get("published_at")
   try: dt=datetime.fromisoformat(str(raw).replace("Z","+00:00")); dt=dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc); pub=dt.astimezone(timezone.utc).isoformat().replace("+00:00","Z")
   except Exception: continue
-  title=html.escape(str(row.get("title") or "")[:110]); loc=html.escape(SITE_ORIGIN+article_path(row))
+  title=html.escape(str(row.get("title") or "")); loc=html.escape(SITE_ORIGIN+article_path(row))
   body+=f"<url><loc>{loc}</loc><news:news><news:publication><news:name>PoliticsHub.in</news:name><news:language>en</news:language></news:publication><news:publication_date>{html.escape(pub)}</news:publication_date><news:title>{title}</news:title></news:news></url>\n"
  body+="</urlset>"; return app.response_class(body,mimetype="application/xml")
 @app.get("/api/og-home")
