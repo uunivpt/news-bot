@@ -103,7 +103,7 @@ def _rank_public(rows):
   item["news_score"]=story_score(item.get("title",""),item.get("bot_summary") or item.get("summary") or "",item.get("category") or "general",item.get("source_name") or "")
   item["is_breaking"]=is_breaking(item.get("title",""),item.get("bot_summary") or item.get("summary") or "",item["news_score"])
  return dedupe_story_rows(items)
-def _public_rows_for_section(category="all",limit=40):
+def _public_rows_for_section(category="all",limit=200):
  try:
   database=db()
   try:return [dict(x) for x in database.latest(limit,category,"published")]
@@ -117,7 +117,7 @@ def _public_rows_for_section(category="all",limit=40):
   except Exception as exc: print(f"SSR section proxy failed: {exc}"); return []
 
 def _section_html(category="all"):
- rows=_public_rows_for_section(category,40)
+ rows=_public_rows_for_section(category,200)
  label="Latest news" if category=="all" else str(category).title()+" news"
  links=[]
  for row in rows:
@@ -185,9 +185,8 @@ def _public_row_by_id(item_id):
  try:
   database=db()
   try:
-   rows=database.latest(1000,"all","published")
-   for row in rows:
-    if int(row["id"])==int(item_id): return _publicize(row)
+   row=database.get_by_id(int(item_id),"published")
+   if row:return _publicize(row)
   finally: database.close()
  except RuntimeError:
   try:
@@ -468,7 +467,7 @@ def news():
  category=request.args.get("category","all").lower().strip(); status=request.args.get("status","published"); review=request.args.get("review_status","all"); ig=request.args.get("instagram_status","all"); search=request.args.get("search"); compact=request.args.get("compact","0")=="1"
  if category!="all" and category not in {"general","india","world","politics","business","technology","sports","entertainment","science","health","hindi"}:return jsonify({"error":"invalid category"}),400
  if search is not None: search=str(search).strip()[:120]
- try:limit=min(max(int(request.args.get("limit","100")),1),100)
+ try:limit=min(max(int(request.args.get("limit","200")),1),200)
  except ValueError:limit=100
  if not admin_ok():status,review,ig="published","all","all"
  try:database=db()
@@ -526,7 +525,7 @@ def article_view(item_id):
  try:database=db()
  except RuntimeError:return jsonify({"ok":False,"tracked":False}),200
  try:
-  row=next((dict(r) for r in database.latest(1000,"all","published") if int(r["id"])==item_id),None)
+  row=database.get_by_id(item_id,"published")
   if not row:return jsonify({"error":"not found"}),404
   database.increment_view(item_id); return jsonify({"ok":True,"tracked":True})
  finally:database.close()
@@ -538,7 +537,7 @@ def article(item_id):
   proxied=_proxy_public("/api/news/"+str(item_id))
   return proxied or (jsonify({"error":"news backend unavailable"}),503)
  try:
-  row=next((dict(r) for r in database.latest(1000,status="all") if int(r["id"])==item_id),None)
+  row=database.get_by_id(item_id,"all")
   if not row or (row["status"]!="published" and not admin_ok()):return jsonify({"error":"not found"}),404
   return jsonify(_publicize(row))
  finally:database.close()
