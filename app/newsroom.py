@@ -534,7 +534,7 @@ def process_news(title,source_text,category="general",source_materials=None):
     article=make_article(headline,material)
     value=build_editorial_value(headline,source_materials or [])
     if article and value["eligible"]:
-        article=article+"\\n\\nEditorial source comparison: "+value["text"]
+        article=article+"\n\nEditorial source comparison: "+value["text"]
     result={
         "headline":headline,
         "summary":summary,
