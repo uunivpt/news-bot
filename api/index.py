@@ -165,7 +165,9 @@ def _publicize(row):
   source_text=_strip_promo_nav(dict(row).get("bot_article") or dict(row).get("bot_summary") or dict(row).get("summary") or "")
   r["title"]=quality_headline(r.get("title"),source_text)
   r["summary"]=_strip_promo_nav(dict(row).get("bot_summary") or dict(row).get("summary") or "")
-  r["article"]=_strip_promo_nav(source_text)
+  article_text=_strip_promo_nav(source_text)
+  article_text=re.sub(r"\n\s*Why it matters:\s*$","",article_text,flags=re.I).strip()
+  r["article"]=article_text
   if r.get("image_url"): r["image_url"]=None
   r.pop("editorial_context",None)
  score=story_score(r.get("title",""),r.get("summary",""),r.get("category") or "general",r.get("source_name") or "")
@@ -245,6 +247,7 @@ def _article_html(row):
 <div class="src">Source: {html.escape(source)}. {"<a href='"+html.escape(str(row.get("url")))+"' rel='nofollow noopener' target='_blank'>Read the original report</a>" if row.get("url") else ""}</div>
 <div class="article-share"><span>SHARE</span><a href="https://wa.me/?text={html.escape(title)}%20{html.escape(canonical)}">WhatsApp</a><a href="https://t.me/share/url?url={html.escape(canonical)}&text={html.escape(title)}">Telegram</a><a href="https://www.facebook.com/sharer/sharer.php?u={html.escape(canonical)}">Facebook</a><a href="https://twitter.com/intent/tweet?text={html.escape(title)}&url={html.escape(canonical)}">X</a></div>
 </article></main>
+<footer><div class="wrap"><div><img src="/brand.svg?v=phlogo1" alt="PoliticsHub.in"><p class="ser">Source-based news. Clearly.</p></div><div><h4>Navigate</h4><ul><li><a href="/">Home</a></li><li><a href="/about.html">About</a></li><li><a href="/editorial-policy.html">Editorial Policy</a></li><li><a href="/corrections.html">Corrections</a></li><li><a href="/contact.html">Contact</a></li><li><a href="/disclaimer.html">Disclaimer</a></li><li><a href="/privacy.html">Privacy</a></li><li><a href="/cookies.html">Cookies</a></li><li><a href="/terms.html">Terms</a></li><li><a href="/newsletter.html">Newsletter</a></li><li><a href="/settings.html">Settings</a></li><li><a href="/debug.html">System Status</a></li></ul></div><div><h4>Contact</h4><ul><li><a href="mailto:news@politicshub.in">news@politicshub.in</a></li></ul></div></div></footer>
 <script src="/assets/site.js?v=phui8"></script>
 </body></html>"""
 
@@ -270,8 +273,9 @@ def _og_image(item_id):
  out=io.BytesIO();image.save(out,format="PNG",optimize=True);return out.getvalue()
 
 def _editorial_page(title,lead,kind="page"):
- links=["Home","About","Editorial Policy","Corrections","Contact"]
- nav="<ul>"+"".join("<li>"+html.escape(x)+"</li>" for x in links)+"</ul>"
+ links=["Home","About","Editorial Policy","Corrections","Contact","Disclaimer","Privacy","Cookies","Terms","Newsletter","Settings","System Status"]
+ hrefs={"Home":"/","About":"/about.html","Editorial Policy":"/editorial-policy.html","Corrections":"/corrections.html","Contact":"/contact.html","Disclaimer":"/disclaimer.html","Privacy":"/privacy.html","Cookies":"/cookies.html","Terms":"/terms.html","Newsletter":"/newsletter.html","Settings":"/settings.html","System Status":"/debug.html"}
+ nav="<ul>"+"".join("<li><a href=\""+hrefs[x]+"\">"+html.escape(x)+"</a></li>" for x in links)+"</ul>"
  body="<p>PoliticsHub.in is an independent digital newsroom focused on politics, public affairs, India and the world.</p>" if kind=="author" else ""
  page='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(title)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(lead[:160])+'"><link rel="canonical" href="'+SITE_ORIGIN+request.path+'"><link rel="icon" href="/brand.svg?v=phlogo1"><link rel="stylesheet" href="/assets/site.css?v=phui8"></head><body><header id="hd"><div class="top"><a class="logo" href="/"><img id="lg" src="/brand.svg?v=phlogo1" alt="PoliticsHub.in"></a></div></header><main class="wrap"><article class="art"><div class="ah"><span class="lbl red">PoliticsHub.in</span><h1>'+html.escape(title)+'</h1><p class="dek">'+html.escape(lead)+'</p></div><div class="body">'+body+'</div></article></main><footer><div class="wrap"><div><img src="/brand.svg?v=phlogo1" alt="PoliticsHub.in"><p class="ser">What matters, clearly.</p></div><div><h4>Navigate</h4>'+nav+'</div></div></footer></body></html>'
  return Response(page,mimetype="text/html")
@@ -309,7 +313,7 @@ def security_headers(response):
  response.headers["Referrer-Policy"]="strict-origin-when-cross-origin"
  response.headers["Permissions-Policy"]="camera=(), microphone=(), geolocation=(), payment=(), usb=()"
  response.headers["Strict-Transport-Security"]="max-age=63072000; includeSubDomains; preload"
- response.headers["Content-Security-Policy"]="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://www.googletagmanager.com https://www.google-analytics.com https://pagead2.googlesyndication.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; media-src 'self' https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://www.google-analytics.com https://pagead2.googlesyndication.com https://googleads.g.doubleclick.net; frame-src https://googleads.g.doubleclick.net https://tpc.googlesyndication.com; worker-src 'self'; upgrade-insecure-requests"
+ response.headers["Content-Security-Policy"]="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; media-src 'self' https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-src 'self'; worker-src 'self'; upgrade-insecure-requests"
  response.headers["Cross-Origin-Opener-Policy"]="same-origin"
  response.headers["Cross-Origin-Resource-Policy"]="same-origin"
  response.headers["X-Permitted-Cross-Domain-Policies"]="none"

@@ -6,7 +6,10 @@ Allow: /api/news
 
 # Keep private/admin surfaces out of search indexing.
 Disallow: /admin/
+Disallow: /admin.html
 Disallow: /admin.js
 Disallow: /newsroom-console-8x4m7k2q.html
+Disallow: /debug.html
 
 Sitemap: https://www.politicshub.in/sitemap.xml
+Sitemap: https://www.politicshub.in/news-sitemap.xml

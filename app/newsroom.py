@@ -432,12 +432,13 @@ def is_telegram_image(url):
     return bool(TELEGRAM_IMAGE_RE.search(str(url or "")))
 
 def quality_headline(title, source_text=""):
-    """Return a complete public headline without deleting the underlying story."""
+    """Return a complete public headline without mid-word truncation or dangling fragments."""
     value=SPACE_RE.sub(" ", clean_text(title)).strip(" .:-")
     words=value.split()
-    suspicious=(len(words)<5 or len(value)<28 or BAD_HEADLINE_RE.search(value or "") is not None)
+    dangling=bool(re.search(r"(?:[,;:—–-]|\\b)(?:\\s*[A-Za-z]{1,2})$",value))
+    suspicious=(len(words)<5 or len(value)<28 or BAD_HEADLINE_RE.search(value or "") is not None or dangling)
     if not suspicious:
-        return value[:140].rstrip(" .:-")
+        return value.rstrip(" .:-")
     candidate=make_headline("", source_text or value)
     if 5 <= len(candidate.split()) <= 18 and len(candidate)>=28:
         return candidate.rstrip(" .:-")
