@@ -444,39 +444,108 @@ def quality_headline(title, source_text=""):
         return candidate.rstrip(" .:-")
     return value.rstrip(" .:-") or "Latest news update"
 
-def editorial_context(title, source_text, category="general"):
-    """Create a short, original newsroom note without inventing facts."""
-    cat=str(category or "general").lower()
-    focus={
-        "politics":"The development matters because political decisions can affect public policy, institutions and accountability.",
-        "india":"The development is relevant to readers because it concerns a public-affairs issue in India.",
-        "world":"The development is relevant because events in one country can have wider regional or international effects.",
-        "business":"The development may matter for businesses, markets, consumers or economic policy.",
-        "technology":"The development is relevant because technology decisions can affect products, services, security or access.",
-        "health":"The development is relevant because health information can affect public understanding and decisions.",
-        "science":"The development is relevant because the reported findings or decision may affect how a scientific issue is understood.",
-    }.get(cat,"The development is relevant to readers because it concerns a current public-affairs event.")
-    source_note="The available source material is attributed to the originating publisher; claims remain attributed unless independently verified."
-    return ""
+def build_editorial_value(title, source_materials):
+    """
+    Build factual editorial value from independently supplied source packets.
 
-def process_news(title,source_text,category="general"):
+    This is deliberately NOT generic "why it matters" filler. It only emits
+    value when at least two distinct sources are available. The value comes
+    from deterministic cross-source curation: agreement, distinct details and
+    attribution. It never invents facts or presents source claims as our own.
+    """
+    packets=[p for p in (source_materials or []) if isinstance(p,dict) and str(p.get("text") or "").strip()]
+    distinct={}
+    for packet in packets:
+        name=str(packet.get("source_name") or "Source").strip()
+        text=clean_text(packet.get("text") or "")
+        if not text: continue
+        distinct.setdefault(name,{"name":name,"url":str(packet.get("url") or "").strip(),"text":text})
+
+    if len(distinct)<2:
+        return {
+            "eligible":False,
+            "source_count":len(distinct),
+            "text":"",
+            "sources":[v for v in distinct.values()],
+        }
+
+    source_items=list(distinct.values())[:4]
+    sentence_maps=[]
+    for packet in source_items:
+        items=_unique_news_sentences(title,packet["text"],8)
+        sentence_maps.append((packet,items))
+
+    def key(value):
+        return re.sub(r"[^a-z0-9]+"," ",value.lower()).strip()
+
+    counts=Counter()
+    examples={}
+    for packet,items in sentence_maps:
+        local=set()
+        for item in items:
+            k=key(item)
+            if not k or k in local: continue
+            local.add(k); counts[k]+=1; examples.setdefault(k,item)
+
+    agreement=[examples[k] for k,n in counts.items() if n>=2][:3]
+
+    unique=[]
+    seen=set()
+    for packet,items in sentence_maps:
+        for item in items:
+            k=key(item)
+            if not k or k in seen or counts[k]>=2: continue
+            seen.add(k)
+            unique.append((packet["name"],item))
+            if len(unique)>=4: break
+        if len(unique)>=4: break
+
+    names=", ".join(p["name"] for p in source_items)
+    paragraphs=[f"Sources reviewed: {names}. This brief compares independently collected source material rather than presenting one source as original reporting."]
+
+    if agreement:
+        paragraphs.append("Cross-source agreement: "+ " ".join(agreement))
+
+    if unique:
+        details="; ".join(f"{name}: {item}" for name,item in unique[:3])
+        paragraphs.append("Source-specific details: "+details)
+
+    if len(paragraphs)==1:
+        return {
+            "eligible":False,
+            "source_count":len(distinct),
+            "text":"",
+            "sources":source_items,
+        }
+
+    return {
+        "eligible":True,
+        "source_count":len(distinct),
+        "text":"\n\n".join(paragraphs),
+        "sources":source_items,
+    }
+
+
+def process_news(title,source_text,category="general",source_materials=None):
     material=clean_text(source_text)
     if len(material)<80:return None
     headline=quality_headline(title,material)
     summary=make_summary(headline,material)
     article=make_article(headline,material)
-    context=editorial_context(headline,material,category)
-    if article:
-        article=article+"\\n\\nWhy it matters: "+context
+    value=build_editorial_value(headline,source_materials or [])
+    if article and value["eligible"]:
+        article=article+"\\n\\nEditorial source comparison: "+value["text"]
     result={
         "headline":headline,
         "summary":summary,
         "article":article,
-        "editorial_context":context,
+        "editorial_context":value["text"] if value["eligible"] else "",
+        "editorial_value":value["eligible"],
+        "source_count":value["source_count"],
+        "sources":value["sources"],
     }
     if len(result["summary"])<50 or len(result["article"])<120:return None
     return result
-
 
 BREAKING_WORDS=re.compile(r"(?i)\b(?:breaking|urgent|major|alert|live|just in|developing|emergency|attack|earthquake|resigns?|arrested|killed|dead|evacuated|war|crisis|verdict|explosion|shutdown)\b")
 def story_score(title, summary="", category="general", source=""):
