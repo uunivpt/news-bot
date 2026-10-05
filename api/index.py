@@ -11,7 +11,7 @@ from app.article_fetcher import enrich_source_text
 from app.database import NewsDatabase
 from app.models import NewsItem
 from app.factcheck import run_cross_source_check
-from app.newsroom import process_news
+from app.newsroom import process_news, story_score, is_breaking, dedupe_story_rows
 from app.worker import dispatch_worker
 from app.phase_system import analytics as phase_analytics, cluster_stories, cluster_summary, train as train_agent
 from app.reporting import operations_pdf
@@ -70,6 +70,38 @@ def _bootstrap_news_snapshot(database):
   print(f"News snapshot bootstrap skipped: {exc}")
   return 0
 
+
+PUBLIC_BACKEND_ORIGIN=os.getenv("PUBLIC_BACKEND_ORIGIN","https://politicshub.onrender.com").rstrip("/")
+_PUBLIC_API_TIMEOUT=8
+_PUBLIC_RATE={}
+
+def _public_rate_key():
+ return (request.remote_addr or "unknown")[:128]
+
+def _public_rate_allowed(limit=120,window=60):
+ key=_public_rate_key(); now=time.time(); bucket=_PUBLIC_RATE.get(key)
+ if not bucket or now-bucket[0]>=window:
+  _PUBLIC_RATE[key]=[now,1]; return True
+ if bucket[1]>=limit:return False
+ bucket[1]+=1; return True
+
+def _proxy_public(path):
+ try:
+  import requests
+  query=request.query_string.decode("utf-8")
+  url=PUBLIC_BACKEND_ORIGIN+path+(("?" + query) if query else "")
+  response=requests.get(url,timeout=_PUBLIC_API_TIMEOUT,headers={"Accept":"application/json","X-PoliticsHub-Proxy":"1"})
+  return app.response_class(response.content,status=response.status_code,content_type=response.headers.get("Content-Type","application/json"))
+ except Exception as exc:
+  print(f"Public backend proxy failed: {exc}")
+  return None
+
+def _rank_public(rows):
+ items=[dict(r) for r in rows]
+ for item in items:
+  item["news_score"]=story_score(item.get("title",""),item.get("bot_summary") or item.get("summary") or "",item.get("category") or "general",item.get("source_name") or "")
+  item["is_breaking"]=is_breaking(item.get("title",""),item.get("bot_summary") or item.get("summary") or "",item["news_score"])
+ return dedupe_story_rows(items)
 def db():
  database=NewsDatabase(); _ensure_admin_users(database); _bootstrap_news_snapshot(database); return database
 
@@ -100,6 +132,8 @@ def _publicize(row):
     dt=datetime.fromisoformat(str(raw).replace("Z","+00:00")); dt=dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc); r["published_at"]=dt.astimezone(ZoneInfo("Asia/Kolkata")).strftime("%d %b %Y · %H:%M")
    except ValueError:pass
   r["title"]=_strip_promo_nav(r.get("title")); r["summary"]=_strip_promo_nav(dict(row).get("bot_summary") or dict(row).get("summary") or ""); r["article"]=_strip_promo_nav(dict(row).get("bot_article") or dict(row).get("bot_summary") or dict(row).get("summary") or "")
+ score=story_score(r.get("title",""),r.get("summary",""),r.get("category") or "general",r.get("source_name") or "")
+ r["news_score"]=score; r["is_breaking"]=is_breaking(r.get("title",""),r.get("summary",""),score)
  return r
 
 def rows_json(rows,compact=False):
@@ -216,17 +250,79 @@ def health():
 
 @app.get("/api/news")
 def news():
- category=request.args.get("category","all"); status=request.args.get("status","published"); review=request.args.get("review_status","all"); ig=request.args.get("instagram_status","all"); search=request.args.get("search"); compact=request.args.get("compact","0")=="1"
+ if not _public_rate_allowed():return jsonify({"error":"rate limit exceeded"}),429
+ category=request.args.get("category","all").lower().strip(); status=request.args.get("status","published"); review=request.args.get("review_status","all"); ig=request.args.get("instagram_status","all"); search=request.args.get("search"); compact=request.args.get("compact","0")=="1"
+ if category!="all" and category not in {"general","india","world","politics","business","technology","sports","entertainment","science","health"}:return jsonify({"error":"invalid category"}),400
+ if search is not None: search=str(search).strip()[:120]
  try:limit=min(max(int(request.args.get("limit","100")),1),100)
  except ValueError:limit=100
  if not admin_ok():status,review,ig="published","all","all"
- database=db()
- try:return jsonify(rows_json(database.latest(limit,category,status,search,review,ig),compact=compact))
+ try:database=db()
+ except RuntimeError:
+  proxied=_proxy_public("/api/news")
+  return proxied or (jsonify({"error":"news backend unavailable"}),503)
+ try:
+  rows=_rank_public(database.latest(max(limit*3,limit),category,status,search,review,ig))
+  return jsonify(rows_json(rows[:limit],compact=compact))
+ finally:database.close()
+
+@app.get("/api/search")
+def public_search():
+ if not _public_rate_allowed():return jsonify({"error":"rate limit exceeded"}),429
+ q=str(request.args.get("q","")).strip()[:120]
+ if len(q)<2:return jsonify([])
+ try:limit=min(max(int(request.args.get("limit","30")),1),50)
+ except ValueError:limit=30
+ try:database=db()
+ except RuntimeError:
+  proxied=_proxy_public("/api/news")
+  return proxied or (jsonify({"error":"news backend unavailable"}),503)
+ try:
+  rows=_rank_public(database.latest(min(limit*4,200),"all","published",q))
+  return jsonify(rows_json(rows[:limit]))
+ finally:database.close()
+
+@app.get("/api/trending")
+def trending():
+ if not _public_rate_allowed():return jsonify({"error":"rate limit exceeded"}),429
+ try:limit=min(max(int(request.args.get("limit","10")),1),30)
+ except ValueError:limit=10
+ try:database=db()
+ except RuntimeError:
+  proxied=_proxy_public("/api/news")
+  return proxied or (jsonify({"error":"news backend unavailable"}),503)
+ try:return jsonify(rows_json(_rank_public(database.trending(limit*2))[:limit]))
+ finally:database.close()
+
+@app.get("/api/breaking")
+def breaking():
+ if not _public_rate_allowed():return jsonify({"error":"rate limit exceeded"}),429
+ try:database=db()
+ except RuntimeError:
+  proxied=_proxy_public("/api/news")
+  return proxied or (jsonify({"error":"news backend unavailable"}),503)
+ try:
+  rows=_rank_public(database.latest(100,"all","published"))
+  return jsonify(rows_json([r for r in rows if r.get("is_breaking")][:12]))
+ finally:database.close()
+
+@app.post("/api/news/<int:item_id>/view")
+def article_view(item_id):
+ if not _public_rate_allowed(60,60):return jsonify({"error":"rate limit exceeded"}),429
+ try:database=db()
+ except RuntimeError:return jsonify({"ok":False,"tracked":False}),200
+ try:
+  row=next((dict(r) for r in database.latest(1000,"all","published") if int(r["id"])==item_id),None)
+  if not row:return jsonify({"error":"not found"}),404
+  database.increment_view(item_id); return jsonify({"ok":True,"tracked":True})
  finally:database.close()
 
 @app.get("/api/news/<int:item_id>")
 def article(item_id):
- database=db()
+ try:database=db()
+ except RuntimeError:
+  proxied=_proxy_public("/api/news/"+str(item_id))
+  return proxied or (jsonify({"error":"news backend unavailable"}),503)
  try:
   row=next((dict(r) for r in database.latest(1000,status="all") if int(r["id"])==item_id),None)
   if not row or (row["status"]!="published" and not admin_ok()):return jsonify({"error":"not found"}),404
