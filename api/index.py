@@ -491,9 +491,21 @@ def news():
  except ValueError:limit=100
  if not admin_ok():status,review,ig="published","all","all"
  try:database=db()
- except RuntimeError:
-  proxied=_proxy_public("/api/news")
-  return proxied or (jsonify({"error":"news backend unavailable"}),503)
+ except Exception as exc:
+  print(f"News DB unavailable; serving snapshot: {exc}")
+  try:
+   path=Path(app.static_folder or "public") / "news-data.json"
+   payload=json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+   rows=[dict(x) for x in payload if isinstance(x,dict)]
+   if category!="all": rows=[x for x in rows if str(x.get("category") or "general").lower()==category]
+   if search:
+    q=search.lower()
+    rows=[x for x in rows if q in str(x.get("title") or "").lower() or q in str(x.get("summary") or x.get("bot_summary") or "").lower()]
+   rows=_rank_public(rows)
+   return jsonify(rows_json(rows[:limit],compact=compact))
+  except Exception as snapshot_exc:
+   print(f"News snapshot fallback failed: {snapshot_exc}")
+   return jsonify({"error":"news backend unavailable"}),503
  try:
   rows=_rank_public(database.latest(max(limit*3,limit),category,status,search,review,ig))
   return jsonify(rows_json(rows[:limit],compact=compact))
