@@ -42,7 +42,7 @@ function home(c){setActive(c);document.title=(c==='all'?'':CATS.find(x=>x[0]===c
  <div class="tile sc" style="--d:3"><span class="lbl">Jump to a desk</span><div class="pills">${pl}</div></div>
  <div class="tile lt" style="--d:4"><span class="lbl">Just in</span>${lt}</div></section>`;
  const bs=CATS.slice(1).map(([k,l])=>`<a data-k="${k}" href="${hl(k)}">${l}</a><i>✦</i>`).join(''),band=`<div class="band" aria-label="Browse sections"><div class="bt">${bs+bs+bs}</div></div>`;
- $('#app').innerHTML=hero+band+tabs+`<div class="sh"><h2>Latest stories</h2><span class="lbl">${list.length} stories</span></div><div class="grid">${rest.map(card).join('')||'<p class="msg" style="grid-column:1/-1">That is the only story in this section for now.</p>'}</div>`;fx()}
+ $('#app').innerHTML=hero+band+tabs+`<div class="sh"><h2>Latest stories</h2><span class="lbl">${list.length} stories</span></div><div class="grid">${rest.map(card).join('')||'<p class="msg" style="grid-column:1/-1">That is the only story in this section for now.</p>'}</div>`;fx();enhanceHome(c)}
 async function article(id){setActive('');$('#app').innerHTML='<div class="art"><div class="sk"></div></div>';
  let it=S.items.find(i=>i.id===id);
  if(!it||(!it.body&&S.mode==='api')){try{const r=await fetch(ENDPOINTS.api+'/'+encodeURIComponent(id),{cache:'no-store'});if(r.ok){const j=await r.json();const raw=j.article||j.data||j;it=norm({...raw,image:raw.image_url||raw.image,source:raw.source_name||raw.source,date:raw.published_at||raw.published_at_site,body:raw.article||raw.bot_article||raw.content,summary:raw.summary||raw.bot_summary});it.id=id}}catch(e){}}
@@ -115,4 +115,41 @@ addEventListener('hashchange',route);
 const qcat=new URLSearchParams(location.search).get('category');if(!location.hash&&qcat&&CATS.some(x=>x[0]===qcat))location.hash='#/c/'+qcat;
 const legacyId=new URLSearchParams(location.search).get('id');if(!location.hash&&/\/article\.html$/.test(location.pathname)&&legacyId)location.hash='#/article/'+encodeURIComponent(legacyId);
 $('#app').innerHTML='<div class="sk" style="margin:48px 0"></div><div class="sk" style="margin:24px 0;height:160px"></div>';setActive('all');
-load().then(()=>{ticker();route()});
+load().then(()=>{ticker();route()})
+if('serviceWorker' in navigator) addEventListener('load',()=>navigator.serviceWorker.register('/service-worker.js').catch(()=>{}));;
+
+async function enhanceHome(category){
+ const target=$('#app .grid'); if(!target)return;
+ try{
+  const r=await get('/api/trending?limit=5');
+  const filtered=r.filter(i=>inCat(i,category));
+  if(!filtered.length)return;
+  const section=document.createElement('section'); section.className='trend-section';
+  section.innerHTML='<div class="sh"><h2>Most read</h2><span class="lbl">Readers are here</span></div><div class="trend-list">'+filtered.map((i,n)=>'<a class="trend-item" href="#/article/'+encodeURIComponent(i.id)+'"><b>0'+(n+1)+'</b><span><strong>'+esc(i.title)+'</strong><small>'+esc(i.source)+' · '+Number(i.view_count||0).toLocaleString('en-IN')+' views</small></span></a>').join('')+'</div>';
+  target.parentNode.insertBefore(section,target.nextSibling);
+ }catch(e){}
+}
+function trackView(id){try{navigator.sendBeacon('/api/news/'+encodeURIComponent(id)+'/view',new Blob(['{}'],{type:'application/json'}))}catch(e){}}
+function ensureSearchFilters(){
+ const sb=$('.sb'); if(!sb||$('#searchFilters'))return;
+ const box=document.createElement('div'); box.id='searchFilters'; box.className='search-filters';
+ box.innerHTML='<button data-search-cat="all" class="on">All</button>'+CATS.slice(1).map(x=>'<button data-search-cat="'+x[0]+'">'+x[1]+'</button>').join('');
+ sb.insertBefore(box,$('#sc'));
+ box.onclick=e=>{const b=e.target.closest('[data-search-cat]');if(!b)return;window.searchCat=b.dataset.searchCat;$$('[data-search-cat]',box).forEach(x=>x.classList.toggle('on',x===b));doS()};
+}
+const __openS=openS; openS=function(){__openS();ensureSearchFilters()};
+const __doS=doS; doS=function(){
+ const q=$('#si')?.value.trim().toLowerCase()||'',cat=window.searchCat||'all';
+ if(!q){$('#sc').textContent='Type to search all stories';$('#sres').innerHTML='';return}
+ const r=S.items.filter(i=>(cat==='all'||inCat(i,cat))&&[i.title,i.summary,i.source,i.category].join(' ').toLowerCase().includes(q));
+ $('#sc').textContent=r.length?(r.length+' '+(r.length===1?'story':'stories')+' found'):'No stories match your search.';
+ $('#sres').innerHTML=r.slice(0,30).map(i=>'<a class="sr" href="#/article/'+encodeURIComponent(i.id)+'">'+(i.image?'<img src="'+esc(i.image)+'" alt="" loading="lazy" onerror="this.remove()">':'')+'<div><span class="lbl red">'+esc(i.category)+'</span><h3>'+esc(i.title)+'</h3><small>'+esc(i.source)+' '+ago(i.date)+'</small></div></a>').join('')
+};
+const __article=article; article=async function(id){await __article(id);trackView(id)};
+async function liveRefresh(){
+ if(document.visibilityState!=='visible'||location.hash.startsWith('#/article/')||location.hash.startsWith('#/settings'))return;
+ const old=S.items.map(i=>i.id).join(','); await load(); ticker();
+ const fresh=S.items.map(i=>i.id).join(','); if(old!==fresh||S.api==='ok')render();
+}
+setInterval(liveRefresh,60000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')liveRefresh()});
