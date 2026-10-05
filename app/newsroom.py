@@ -425,13 +425,53 @@ def make_article(title,source_text):
         if bucket:paragraphs.append(f"{label}: {' '.join(bucket)}")
     return "\n\n".join(paragraphs).strip()
 
+TELEGRAM_IMAGE_RE=re.compile(r"(?:https?://)?(?:cdn\\d+\\.)?telesco\\.pe/",re.I)
+BAD_HEADLINE_RE=re.compile(r"(?i)^(?:the wall street journal reported|according to|describing the project|sources? said|officials? said|breaking:?)$|\\b(?:reported|describing|according to|said)\\s*$")
+
+def is_telegram_image(url):
+    return bool(TELEGRAM_IMAGE_RE.search(str(url or "")))
+
+def quality_headline(title, source_text=""):
+    """Return a complete public headline without deleting the underlying story."""
+    value=SPACE_RE.sub(" ", clean_text(title)).strip(" .:-")
+    words=value.split()
+    suspicious=(len(words)<5 or len(value)<28 or BAD_HEADLINE_RE.search(value or "") is not None)
+    if not suspicious:
+        return value[:140].rstrip(" .:-")
+    candidate=make_headline("", source_text or value)
+    if 5 <= len(candidate.split()) <= 18 and len(candidate)>=28:
+        return candidate[:140].rstrip(" .:-")
+    return value[:140].rstrip(" .:-") or "Latest news update"
+
+def editorial_context(title, source_text, category="general"):
+    """Create a short, original newsroom note without inventing facts."""
+    cat=str(category or "general").lower()
+    focus={
+        "politics":"The development matters because political decisions can affect public policy, institutions and accountability.",
+        "india":"The development is relevant to readers because it concerns a public-affairs issue in India.",
+        "world":"The development is relevant because events in one country can have wider regional or international effects.",
+        "business":"The development may matter for businesses, markets, consumers or economic policy.",
+        "technology":"The development is relevant because technology decisions can affect products, services, security or access.",
+        "health":"The development is relevant because health information can affect public understanding and decisions.",
+        "science":"The development is relevant because the reported findings or decision may affect how a scientific issue is understood.",
+    }.get(cat,"The development is relevant to readers because it concerns a current public-affairs event.")
+    source_note="The available source material is attributed to the originating publisher; claims remain attributed unless independently verified."
+    return f"{focus} {source_note}"
+
 def process_news(title,source_text,category="general"):
     material=clean_text(source_text)
     if len(material)<80:return None
+    headline=quality_headline(title,material)
+    summary=make_summary(headline,material)
+    article=make_article(headline,material)
+    context=editorial_context(headline,material,category)
+    if article:
+        article=article+"\\n\\nWhy it matters: "+context
     result={
-        "headline":make_headline(title,material),
-        "summary":make_summary(title,material),
-        "article":make_article(title,material),
+        "headline":headline,
+        "summary":summary,
+        "article":article,
+        "editorial_context":context,
     }
     if len(result["summary"])<50 or len(result["article"])<120:return None
     return result
