@@ -1034,6 +1034,74 @@ def fact_check():
  finally:database.close()
 
 
+def _xml_escape(value):
+ return html.escape(str(value or ""),quote=True)
+
+
+def _sitemap_static_xml():
+ urls=["/","/about.html","/contact.html","/editorial-policy.html","/corrections.html","/privacy.html","/cookies.html","/terms.html","/disclaimer.html","/newsletter.html"]
+ body="".join("<url><loc>"+_xml_escape(SITE_ORIGIN+p)+"</loc></url>" for p in urls)
+ return "<?xml version=\"1.0\" encoding=\"UTF-8\"?><urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">"+body+"</urlset>"
+
+
+def _published_sitemap_rows():
+ database=db()
+ try:
+  rows=database.conn.execute("SELECT id,title,category,published_at_site,published_at FROM news_items WHERE status='published' ORDER BY COALESCE(published_at_site,published_at) DESC,id DESC").fetchall()
+  return [dict(r) for r in rows]
+ finally:
+  database.close()
+
+
+@app.get("/sitemap.xml")
+def sitemap_index():
+ try:
+  rows=_published_sitemap_rows()
+  chunk=45000
+  pages=max(1,(len(rows)+chunk-1)//chunk)
+  body='<sitemap><loc>'+_xml_escape(SITE_ORIGIN+'/static-sitemap.xml')+'</loc></sitemap>'
+  body+=''.join('<sitemap><loc>'+_xml_escape(SITE_ORIGIN+('/news-sitemap.xml' if i==1 else '/news-sitemap-'+str(i)+'.xml'))+'</loc></sitemap>' for i in range(1,pages+1))
+  xml='<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+body+'</sitemapindex>'
+  return Response(xml,mimetype="application/xml",headers={"Cache-Control":"public,max-age=300"})
+ except Exception as exc:
+  print(f"Sitemap index failed: {exc}")
+  return Response('<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><sitemap><loc>'+_xml_escape(SITE_ORIGIN+'/static-sitemap.xml')+'</loc></sitemap><sitemap><loc>'+_xml_escape(SITE_ORIGIN+'/news-sitemap.xml')+'</loc></sitemap></sitemapindex>',mimetype="application/xml",headers={"Cache-Control":"public,max-age=300"})
+
+
+@app.get("/static-sitemap.xml")
+def static_sitemap():
+ return Response(_sitemap_static_xml(),mimetype="application/xml",headers={"Cache-Control":"public,max-age=3600"})
+
+
+@app.get("/news-sitemap.xml")
+def news_sitemap_first():
+ return _news_sitemap_page(1)
+
+
+@app.get("/news-sitemap-<int:page>.xml")
+def news_sitemap_page(page):
+ return _news_sitemap_page(page)
+
+
+def _news_sitemap_page(page):
+ if page<1:return Response("Not found",status=404)
+ try:
+  rows=_published_sitemap_rows(); chunk=45000; start=(page-1)*chunk
+  if start>=len(rows):return Response("Not found",status=404)
+  selected=rows[start:start+chunk]; items=[]
+  for row in selected:
+   url=article_path(row)
+   stamp=row.get("published_at_site") or row.get("published_at")
+   item='<url><loc>'+_xml_escape(SITE_ORIGIN+url)+'</loc>'
+   if stamp:item+='<lastmod>'+_xml_escape(str(stamp))+'</lastmod>'
+   item+='</url>'; items.append(item)
+  xml='<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+''.join(items)+'</urlset>'
+  return Response(xml,mimetype="application/xml",headers={"Cache-Control":"public,max-age=300"})
+ except Exception as exc:
+  print(f"News sitemap failed: {exc}")
+  return Response("Sitemap unavailable",status=503)
+
+
 @app.get("/")
 def seo_home():
  category=request.args.get("category","").lower().strip()
