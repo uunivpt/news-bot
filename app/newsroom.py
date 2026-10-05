@@ -435,7 +435,7 @@ def quality_headline(title, source_text=""):
     """Return a complete public headline without mid-word truncation or dangling fragments."""
     value=SPACE_RE.sub(" ", clean_text(title)).strip(" .:-")
     words=value.split()
-    dangling=bool(re.search(r"(?:[,;:—–-]|\\b)(?:\\s*[A-Za-z]{1,2})$",value))
+    dangling=bool(re.search(r"(?:[,;:—–-]|\b)(?:\s*[A-Za-z]{1,2})$",value))
     suspicious=(len(words)<5 or len(value)<28 or BAD_HEADLINE_RE.search(value or "") is not None or dangling)
     if not suspicious:
         return value.rstrip(" .:-")

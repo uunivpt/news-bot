@@ -166,7 +166,7 @@ def _publicize(row):
   r["title"]=quality_headline(r.get("title"),source_text)
   r["summary"]=_strip_promo_nav(dict(row).get("bot_summary") or dict(row).get("summary") or "")
   article_text=_strip_promo_nav(source_text)
-  article_text=re.sub(r"\n\s*Why it matters:\s*$","",article_text,flags=re.I).strip()
+  article_text=re.sub(r"(?:\\n|\n|\s)*Why it matters:\s*$","",article_text,flags=re.I).strip()
   r["article"]=article_text
   if r.get("image_url"): r["image_url"]=None
   r.pop("editorial_context",None)
