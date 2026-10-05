@@ -93,6 +93,15 @@ jobs:
               rows = [dict(r) for r in db.latest(100, status="published")]
           finally:
               db.close()
+          # Keep the browser snapshot small, but generate the sitemap from the
+          # complete published archive so old stories remain discoverable.
+          sitemap_db = NewsDatabase()
+          try:
+              sitemap_rows = [dict(r) for r in sitemap_db.conn.execute(
+                  "SELECT id,title,category,published_at_site,published_at FROM news_items WHERE status='published' ORDER BY COALESCE(published_at_site,published_at) DESC,id DESC"
+              ).fetchall()]
+          finally:
+              sitemap_db.close()
           public = []
           for row in rows:
               if not row.get("bot_article"):
@@ -115,6 +124,27 @@ jobs:
           path = Path("public/news-data.json")
           path.parent.mkdir(parents=True, exist_ok=True)
           path.write_text(json.dumps(public, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+          import re
+          SITE = "https://www.politicshub.in"
+          def esc_xml(value):
+              return (str(value or "").replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace('"',"&quot;").replace("'","&apos;"))
+          def slug(value):
+              return re.sub(r"[^a-z0-9]+","-",str(value or "").lower()).strip("-")[:110] or "story"
+          def section(value):
+              value=str(value or "general").lower()
+              return "india" if value=="general" else (value if value in {"india","world","politics","business","technology","sports","entertainment","science","health","hindi"} else "india")
+          static_urls=["/","/about.html","/contact.html","/editorial-policy.html","/corrections.html","/privacy.html","/cookies.html","/terms.html","/disclaimer.html","/newsletter.html"]
+          Path("public/static-sitemap.xml").write_text(
+              '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+''.join("<url><loc>"+esc_xml(SITE+p)+"</loc></url>" for p in static_urls)+"</urlset>",encoding="utf-8")
+          sitemap_urls=[]
+          for row in sitemap_rows:
+              if not row.get("id") or not row.get("title"): continue
+              sitemap_urls.append("<url><loc>"+esc_xml(SITE+"/"+section(row.get("category"))+"/"+str(int(row["id"]))+"-"+slug(row.get("title")))+"</loc></url>")
+          Path("public/news-sitemap.xml").write_text(
+              '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+''.join(sitemap_urls)+"</urlset>",encoding="utf-8")
+          Path("public/sitemap.xml").write_text(
+              '<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><sitemap><loc>'+SITE+'/static-sitemap.xml</loc></sitemap><sitemap><loc>'+SITE+'/news-sitemap.xml</loc></sitemap></sitemapindex>',encoding="utf-8")
+          print(f"Published archive sitemap URLs: {len(sitemap_urls)}")
           print(f"Public snapshot rows: {len(public)}")
           PY
           git config user.name "github-actions[bot]"
