@@ -438,7 +438,11 @@ def quality_headline(title, source_text=""):
     dangling=bool(re.search(r"(?:[,;:—–-]|\b)(?:\s*[A-Za-z]{1,2})$",value))
     suspicious=(len(words)<5 or len(value)<28 or BAD_HEADLINE_RE.search(value or "") is not None or dangling)
     if not suspicious:
-        return value.rstrip(" .:-")
+        # Lowercase 1–3 character first tokens are a common signature of a
+        # front-cut source headline ("ws pumping...", "ween the sections", etc.).
+        first=words[0] if words else ""
+        if not (first and len(first)<=3 and first.islower() and len(words)>=4):
+            return value.rstrip(" .:-")
     candidate=make_headline("", source_text or value)
     if 5 <= len(candidate.split()) <= 18 and len(candidate)>=28:
         return candidate.rstrip(" .:-")
