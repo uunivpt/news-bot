@@ -151,6 +151,13 @@ def _strip_promo_nav(value):
  r=re.sub(r"\b(?:socials|donate|advertising)\b(?:\s*[|•·/,-]\s*\b(?:socials|donate|advertising)\b)*"," ",r,flags=re.I)
  return re.sub(r"\s{2,}"," ",r).strip(" |•·/-")
 
+def _public_title(title,source_text=""):
+ raw=SPACE_RE.sub(" ",str(title or "")).strip()
+ raw=re.sub(r"^[^\\w]+","",raw).strip()
+ raw=re.sub(r"\\s*[,;:]\\s*[A-Za-z]{1,2}$","",raw).strip(" .,:;-")
+ if len(raw.split())>18: raw=" ".join(raw.split()[:18]).rstrip(" .,:;-")
+ return raw or quality_headline(title,source_text)
+
 def _publicize(row):
  r=dict(row)
  if not admin_ok():
@@ -164,7 +171,7 @@ def _publicize(row):
     dt=datetime.fromisoformat(str(raw).replace("Z","+00:00")); dt=dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc); r["published_at"]=dt.astimezone(ZoneInfo("Asia/Kolkata")).strftime("%d %b %Y · %H:%M")
    except ValueError:pass
   source_text=_strip_promo_nav(dict(row).get("bot_article") or dict(row).get("bot_summary") or dict(row).get("summary") or "")
-  r["title"]=quality_headline(r.get("title"),source_text)
+  r["title"]=_public_title(r.get("title"),source_text)
   r["summary"]=_strip_promo_nav(dict(row).get("bot_summary") or dict(row).get("summary") or "")
   article_text=_strip_promo_nav(source_text)
   article_text=re.sub(r"(?:\\n|\n|\s)*Why it matters:\s*$","",article_text,flags=re.I).strip()
