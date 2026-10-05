@@ -73,6 +73,9 @@ jobs:
           PYTHONPATH: .
           DATABASE_URL: ''
           PGSSLMODE: ''
+          # Unit tests must be isolated from the live Phi-4 service.
+          # Production collection below still uses Phi-4 when configured.
+          PHI4_ENABLED: 'false'
         run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Verify production database configuration
         run: |
