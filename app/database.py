@@ -192,6 +192,12 @@ class NewsDatabase:
    if self.insert(item):added+=1
    else:skipped+=1
   return added,skipped
+ def get_by_id(self,item_id:int,status=None):
+  ph="%s" if self._postgres else "?"
+  if status and status!="all":
+   return self.conn.execute(f"SELECT * FROM news_items WHERE id = {ph} AND status = {ph} LIMIT 1",(int(item_id),status)).fetchone()
+  return self.conn.execute(f"SELECT * FROM news_items WHERE id = {ph} LIMIT 1",(int(item_id),)).fetchone()
+
  def count(self):return int(self.conn.execute("SELECT COUNT(*) AS count FROM news_items").fetchone()["count"] if self._postgres else self.conn.execute("SELECT COUNT(*) AS count FROM news_items").fetchone()[0])
  def latest(self,limit=20,category=None,status=None,search=None,review_status=None,instagram_status=None):
   clauses=[];params=[];ph="%s" if self._postgres else "?"
