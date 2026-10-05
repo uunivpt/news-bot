@@ -93,7 +93,7 @@ function doS(){const q=$('#si').value.trim().toLowerCase();if(!q){$('#sc').textC
  const r=S.items.filter(i=>[i.title,i.summary,i.source,i.category].join(' ').toLowerCase().includes(q));
  $('#sc').textContent=r.length?`${r.length} ${r.length===1?'story':'stories'} found`:'No stories match your search.';
  $('#sres').innerHTML=r.slice(0,30).map(i=>`<a class="sr" href="#/article/${encodeURIComponent(i.id)}">${i.image?`<img src="${esc(i.image)}" alt="" loading="lazy" onerror="this.remove()">`:''}<div><span class="lbl red">${esc(i.category)}</span><h3>${esc(i.title)}</h3><small>${esc(i.source)} ${ago(i.date)}</small></div></a>`).join('')}
-$('#bg').onclick=openD;$('#dx').onclick=closeD;$('#bd').onclick=closeD;$('#sbtn').onclick=openS;$('#sx').onclick=closeS;$('#si').oninput=doS;$('#sf').onsubmit=e=>e.preventDefault();
+$('#bg').onclick=openD;$('#dx').onclick=closeD;$('#bd').onclick=closeD;$('#sbtn').onclick=openS;$('#sx').onclick=closeS;$('#si').oninput=()=>doS();$('#sf').onsubmit=e=>e.preventDefault();
 $('#sres').onclick=e=>{if(e.target.closest('a'))closeS()};
 addEventListener('keydown',e=>{if(e.key==='Escape')closeAll();if(e.key==='/'&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)){e.preventDefault();openS()}});
 $('#pz').onclick=e=>{const p=$('#tk').classList.toggle('pz');e.currentTarget.setAttribute('aria-pressed',p);e.currentTarget.setAttribute('aria-label',p?'Play ticker':'Pause ticker')};
