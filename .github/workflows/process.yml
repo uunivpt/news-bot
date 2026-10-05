@@ -140,8 +140,23 @@ jobs:
           for row in sitemap_rows:
               if not row.get("id") or not row.get("title"): continue
               sitemap_urls.append("<url><loc>"+esc_xml(SITE+"/"+section(row.get("category"))+"/"+str(int(row["id"]))+"-"+slug(row.get("title")))+"</loc></url>")
-          Path("public/news-sitemap.xml").write_text(
-              '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+''.join(sitemap_urls)+"</urlset>",encoding="utf-8")
+          import glob
+          for old_sitemap in glob.glob("public/news-sitemap-*.xml"):
+              Path(old_sitemap).unlink()
+          chunk_size=45000
+          chunks=[sitemap_urls[i:i+chunk_size] for i in range(0,len(sitemap_urls),chunk_size)] or [[]]
+          if len(chunks)==1:
+              Path("public/news-sitemap.xml").write_text(
+                  '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+''.join(chunks[0])+"</urlset>",encoding="utf-8")
+          else:
+              refs=[]
+              for index,chunk in enumerate(chunks,1):
+                  filename=f"public/news-sitemap-{index}.xml"
+                  Path(filename).write_text(
+                      '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+''.join(chunk)+"</urlset>",encoding="utf-8")
+                  refs.append("<sitemap><loc>"+esc_xml(SITE+f"/news-sitemap-{index}.xml")+"</loc></sitemap>")
+              Path("public/news-sitemap.xml").write_text(
+                  '<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+''.join(refs)+"</sitemapindex>",encoding="utf-8")
           Path("public/sitemap.xml").write_text(
               '<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><sitemap><loc>'+SITE+'/static-sitemap.xml</loc></sitemap><sitemap><loc>'+SITE+'/news-sitemap.xml</loc></sitemap></sitemapindex>',encoding="utf-8")
           print(f"Published archive sitemap URLs: {len(sitemap_urls)}")
