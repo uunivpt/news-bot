@@ -123,6 +123,7 @@ def _section_html(category="all"):
  links=[]
  for row in rows:
   try:
+   row=_publicize(row)
    title=html.escape(str(row.get("title") or "Untitled"))
    href=article_path(row)
    date=html.escape(str(row.get("published_at_site") or row.get("published_at") or ""))
