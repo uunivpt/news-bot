@@ -968,6 +968,10 @@ def fact_check():
 
 @app.get("/")
 def seo_home():
+ category=request.args.get("category","").lower().strip()
+ if category:
+  category=CATEGORY_SLUGS.get(category,category)
+  if category in set(CATEGORY_SLUGS.values()): return redirect("/"+category+"/",code=301)
  return Response(_section_html("all"),mimetype="text/html")
 
 @app.get("/article.html")
