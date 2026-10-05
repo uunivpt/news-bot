@@ -27,7 +27,13 @@ function card(it,i){const has=it.image;const meta=`${esc(it.source)}${it.source&
 function build(){const n=$('#nav');n.insertAdjacentHTML('afterbegin',CATS.map(([k,l])=>`<a href="${hl(k)}" data-c="${k}" data-k="${k}">${l}</a>`).join(''));$('#dl').innerHTML=[CATS[0],CATS[2],CATS[1],...CATS.slice(3)].map(([k,l])=>`<a class="l" href="${hl(k)}" data-c="${k}" data-k="${k}">${l}</a>`).join('')}
 function setActive(c){document.body.dataset.k=c||'all';$$('[data-c]').forEach(a=>a.classList.toggle('on',a.dataset.c===c));$$('#nav a').forEach(a=>a.setAttribute('aria-current',a.dataset.c===c?'page':'false'));moveInd()}
 function moveInd(){const a=$('#nav a.on'),i=$('#ind');if(!a){i.style.width=0;return}i.style.left=a.offsetLeft+'px';i.style.width=a.offsetWidth+'px'}
-function ticker(){const t=$('#tick');if(!S.items.length||S.mode==='demo'){t.hidden=true;return}t.hidden=false;const h=S.items.slice(0,10).map(i=>`<a href="#/article/${encodeURIComponent(i.id)}">${esc(i.title)}</a>`).join('');$('#tk').innerHTML=`<div>${h}${h}</div>`}
+async function ticker(){
+ let source=S.items;
+ try{const breaking=await get('/api/breaking');if(breaking.length)source=breaking.concat(S.items.filter(x=>!breaking.some(b=>b.id===x.id))).slice(0,10)}catch(e){}
+ const t=$('#tick');if(!source.length){t.hidden=true;return}t.hidden=false;
+ const h=source.slice(0,10).map(i=>'<a href="#/article/'+encodeURIComponent(i.id)+'">'+(i.is_breaking?'<b>BREAKING</b> ':'')+esc(i.title)+'</a>').join('');
+ $('#tk').innerHTML='<div>'+h+h+'</div>'
+}
 function home(c){setActive(c);document.title=(c==='all'?'':CATS.find(x=>x[0]===c)?.[1]+' — ')+'PoliticsHub.in';
  const list=S.items.filter(i=>inCat(i,c));const f=list.find(i=>i.image)||list[0];const rest=list.filter(i=>i!==f);
  const tabs=`<div class="tabs" role="tablist" aria-label="Categories">${TABS.map(([k,l])=>`<a role="tab" href="${hl(k)}" data-c="${k}" data-k="${k}" class="${k===c?'on':''}" aria-selected="${k===c}">${l}</a>`).join('')}</div>`;
