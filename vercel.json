@@ -40,23 +40,5 @@
         }
       ]
     }
-  ],
-  "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/:category/",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/:category/:item",
-      "destination": "/api/index"
-    }
   ]
 }
