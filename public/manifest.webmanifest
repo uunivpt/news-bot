@@ -7,5 +7,5 @@
   "background_color":"#f2f2f6",
   "theme_color":"#c8102e",
   "description":"Independent reporting on politics, power and the stories shaping India.",
-  "icons":[{"src":"/brand.svg?v=phlogo1","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+  "icons":[{"src":"/favicon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
 }
