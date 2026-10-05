@@ -22,6 +22,7 @@ app=Flask(__name__, static_folder="../public", static_url_path="")
 _secret=os.getenv("FLASK_SECRET_KEY") or os.getenv("ADMIN_TOKEN") or os.getenv("ADMIN_SETUP_KEY")
 if not _secret:_secret=secrets.token_urlsafe(32)
 app.secret_key=_secret
+app.config["MAX_CONTENT_LENGTH"]=1*1024*1024
 app.config.update(SESSION_COOKIE_NAME="__Host-politicshub_admin_session",SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SECURE=True,SESSION_COOKIE_SAMESITE="Strict",SESSION_COOKIE_PATH="/",SESSION_COOKIE_REFRESH_EACH_REQUEST=False)
 _LOGIN_WINDOW_SECONDS=300; _LOGIN_MAX_FAILURES=8; _SETUP_MAX_FAILURES=5; _login_failures={}
 
@@ -175,6 +176,7 @@ def security_headers(response):
  response.headers["Cross-Origin-Resource-Policy"]="same-origin"
  response.headers["X-Permitted-Cross-Domain-Policies"]="none"
  if request.path.startswith("/api/admin"):response.headers["Cache-Control"]="no-store, no-cache, must-revalidate, max-age=0"
+ elif request.method=="GET" and request.path.startswith("/api/"):response.headers["Cache-Control"]="public, max-age=30, s-maxage=30, stale-while-revalidate=60"
  return response
 
 @app.post("/api/admin/setup")
