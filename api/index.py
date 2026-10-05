@@ -1,11 +1,11 @@
 # Production deployment marker: deterministic newsroom + public source attribution.
 from __future__ import annotations
 
-import json, os, re, secrets, time
+import json, os, re, secrets, time, html, io
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
-from flask import Flask, jsonify, request, session, send_from_directory
+from flask import Flask, jsonify, request, session, send_from_directory, redirect, Response
 from werkzeug.security import check_password_hash, generate_password_hash
 from app.article_fetcher import enrich_source_text
 from app.database import NewsDatabase
@@ -103,6 +103,35 @@ def _rank_public(rows):
   item["news_score"]=story_score(item.get("title",""),item.get("bot_summary") or item.get("summary") or "",item.get("category") or "general",item.get("source_name") or "")
   item["is_breaking"]=is_breaking(item.get("title",""),item.get("bot_summary") or item.get("summary") or "",item["news_score"])
  return dedupe_story_rows(items)
+def _public_rows_for_section(category="all",limit=40):
+ try:
+  database=db()
+  try:return [dict(x) for x in database.latest(limit,category,"published")]
+  finally:database.close()
+ except RuntimeError:
+  try:
+   import requests
+   url=PUBLIC_BACKEND_ORIGIN+"/api/news?category="+requests.utils.quote(category)+"&limit="+str(limit)
+   response=requests.get(url,timeout=_PUBLIC_API_TIMEOUT,headers={"Accept":"application/json","X-PoliticsHub-Proxy":"1"})
+   return response.json() if response.ok and isinstance(response.json(),list) else []
+  except Exception as exc: print(f"SSR section proxy failed: {exc}"); return []
+
+def _section_html(category="all"):
+ rows=_public_rows_for_section(category,40)
+ label="Latest news" if category=="all" else str(category).title()+" news"
+ links=[]
+ for row in rows:
+  try:
+   title=html.escape(str(row.get("title") or "Untitled"))
+   href=article_path(row)
+   date=html.escape(str(row.get("published_at_site") or row.get("published_at") or ""))
+   summary=html.escape(str(row.get("bot_summary") or row.get("summary") or "")[:220])
+   links.append('<article><h2><a href="'+href+'">'+title+'</a></h2><p>'+summary+'</p><time>'+date+'</time></article>')
+  except Exception: pass
+ body="".join(links) or '<p>No stories are available in this section right now.</p>'
+ canonical=SITE_ORIGIN+"/" if category=="all" else SITE_ORIGIN+"/"+category+"/"
+ return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="Latest '+html.escape(label.lower())+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home"><link rel="icon" href="/brand.svg?v=phlogo1"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui8"></head><body><header id="hd"><div class="top"><a class="logo" href="/"><img id="lg" src="/brand.svg?v=phlogo1" alt="PoliticsHub.in"></a><div class="acts"><a class="ib" href="/search.html">Search</a></div></div></header><main class="wrap"><div class="art"><div class="ah"><span class="lbl red">PoliticsHub.in</span><h1>'+html.escape(label)+'</h1><p class="dek">What matters, clearly.</p></div><section class="body">'+body+'</section></div></main><script src="/assets/site.js?v=phui8"></script></body></html>'
+
 def db():
  database=NewsDatabase(); _ensure_admin_users(database); _bootstrap_news_snapshot(database); return database
 
@@ -125,7 +154,7 @@ def _publicize(row):
  if not admin_ok():
   # Public readers may see the originating source and its public article URL.
   # Internal moderation, Instagram state, hashes and processing fields stay private.
-  for key in ("normalized_url","external_id","url_hash","title_hash","collected_at","fact_check_status","fact_check_notes","approved_at","instagram_status","instagram_media_id","instagram_error","instagram_published_at","instagram_attempts","instagram_last_attempt_at","instagram_next_retry_at","instagram_scheduled_at","instagram_queue_order","instagram_container_id","reel_cloudinary_public_id","instagram_selected","ai_summary","ai_article","bot_summary","bot_article","published_at_site"):
+  for key in ("normalized_url","external_id","url_hash","title_hash","collected_at","fact_check_status","fact_check_notes","approved_at","instagram_status","instagram_media_id","instagram_error","instagram_published_at","instagram_attempts","instagram_last_attempt_at","instagram_next_retry_at","instagram_scheduled_at","instagram_queue_order","instagram_container_id","reel_cloudinary_public_id","instagram_selected","ai_summary","ai_article","published_at_site"):
    r.pop(key,None)
   raw=dict(row).get("published_at_site") or dict(row).get("published_at")
   if raw:
@@ -137,6 +166,110 @@ def _publicize(row):
  r["news_score"]=score; r["is_breaking"]=is_breaking(r.get("title",""),r.get("summary",""),score)
  return r
 
+
+SITE_ORIGIN="https://www.politicshub.in"
+EDITORIAL_DESK="PoliticsHub Editorial Desk"
+EDITORIAL_EMAIL="news@politicshub.in"
+CATEGORY_SLUGS={"general":"india","india":"india","world":"world","politics":"politics","business":"business","technology":"technology","sports":"sports","entertainment":"entertainment","science":"science","health":"health","hindi":"hindi"}
+
+def _slugify(value):
+ value=re.sub(r"[^a-z0-9]+","-",str(value or "").lower()).strip("-")
+ return value[:110] or "story"
+
+def article_path(row):
+ category=str(row.get("category") or "general").lower()
+ category=CATEGORY_SLUGS.get(category,"india")
+ return f"/{category}/{int(row['id'])}-{_slugify(row.get('title'))}"
+
+def _public_row_by_id(item_id):
+ try:
+  database=db()
+  try:
+   rows=database.latest(1000,"all","published")
+   for row in rows:
+    if int(row["id"])==int(item_id): return _publicize(row)
+  finally: database.close()
+ except RuntimeError:
+  try:
+   import requests
+   response=requests.get(PUBLIC_BACKEND_ORIGIN+"/api/news/"+str(int(item_id)),timeout=_PUBLIC_API_TIMEOUT,headers={"Accept":"application/json","X-PoliticsHub-Proxy":"1"})
+   if response.ok:
+    return response.json()
+  except Exception as exc: print(f"SSR article proxy failed: {exc}")
+ return None
+
+def _article_html(row):
+ row=dict(row); title=str(row.get("title") or "PoliticsHub.in"); category=str(row.get("category") or "India")
+ canonical=SITE_ORIGIN+article_path(row)
+ published=row.get("published_at") or row.get("published_at_site") or row.get("published_at")
+ modified=row.get("last_viewed_at") or published
+ summary=str(row.get("summary") or row.get("bot_summary") or "")[:300]
+ body=str(row.get("article") or row.get("bot_article") or row.get("body") or summary)
+ source=str(row.get("source_name") or "PoliticsHub.in")
+ image=SITE_ORIGIN+"/api/og/"+str(row.get("id"))
+ pub_iso=str(published or datetime.now(timezone.utc).isoformat())
+ if pub_iso and not re.search(r"[+-]\d\d:\d\d|Z$",pub_iso): pub_iso=pub_iso+"Z"
+ data={
+  "@context":"https://schema.org","@type":"NewsArticle","headline":title[:110],
+  "description":summary,"image":[image],"datePublished":pub_iso,"dateModified":str(modified or pub_iso),
+  "author":[{"@type":"Organization","name":EDITORIAL_DESK,"url":SITE_ORIGIN+"/author/politicshub-news-desk"}],
+  "publisher":{"@type":"Organization","name":"PoliticsHub.in","url":SITE_ORIGIN},
+  "mainEntityOfPage":{"@type":"WebPage","@id":canonical},"isAccessibleForFree":True
+ }
+ paras="".join(f"<p>{html.escape(p.strip())}</p>" for p in re.split(r"\n+",body) if p.strip())
+ return f"""<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{html.escape(title)} — PoliticsHub.in</title>
+<meta name="description" content="{html.escape(summary[:160])}">
+<link rel="canonical" href="{html.escape(canonical)}">
+<meta property="og:type" content="article"><meta property="og:site_name" content="PoliticsHub.in">
+<meta property="og:title" content="{html.escape(title)}"><meta property="og:description" content="{html.escape(summary[:200])}">
+<meta property="og:url" content="{html.escape(canonical)}"><meta property="og:image" content="{html.escape(image)}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="{html.escape(title)}"><meta name="twitter:description" content="{html.escape(summary[:200])}"><meta name="twitter:image" content="{html.escape(image)}">
+<meta property="article:section" content="{html.escape(category)}"><meta property="article:published_time" content="{html.escape(pub_iso)}">
+<link rel="icon" href="/brand.svg?v=phlogo1"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui8">
+<script type="application/ld+json">{json.dumps(data,ensure_ascii=False)}</script>
+</head><body>
+<header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/brand.svg?v=phlogo1" alt="PoliticsHub.in"></a><div class="acts"><a class="ib" href="/" aria-label="Home">⌂</a><a class="ib" href="/about.html" aria-label="About">i</a></div></div></header>
+<main class="wrap"><article class="art" data-k="{html.escape(category.lower())}">
+<div class="ah"><span class="chip">{html.escape(category)}</span><h1>{html.escape(title)}</h1><p class="dek">{html.escape(summary)}</p>
+<div class="by"><span>By <a href="/author/politicshub-news-desk">{EDITORIAL_DESK}</a></span><span>{html.escape(str(published or ""))}</span><span>{html.escape(source)}</span></div></div>
+{"<div class='ahero'><img src='"+html.escape(str(row.get("image_url") or image))+"' alt='"+html.escape(title)+"' loading='eager'></div>" if row.get("image_url") else ""}
+<div class="body">{paras}</div>
+<div class="src">Source: {html.escape(source)}. {"<a href='"+html.escape(str(row.get("url")))+"' rel='nofollow noopener' target='_blank'>Read the original report</a>" if row.get("url") else ""}</div>
+<div class="article-share"><span>SHARE</span><a href="https://wa.me/?text={html.escape(title)}%20{html.escape(canonical)}">WhatsApp</a><a href="https://t.me/share/url?url={html.escape(canonical)}&text={html.escape(title)}">Telegram</a><a href="https://www.facebook.com/sharer/sharer.php?u={html.escape(canonical)}">Facebook</a><a href="https://twitter.com/intent/tweet?text={html.escape(title)}&url={html.escape(canonical)}">X</a></div>
+</article></main>
+<script src="/assets/site.js?v=phui8"></script>
+</body></html>"""
+
+def _og_image(item_id):
+ row=_public_row_by_id(item_id)
+ if not row:return None
+ from PIL import Image, ImageDraw, ImageFont
+ image=Image.new("RGB",(1200,630),(245,245,242)); draw=ImageDraw.Draw(image)
+ try: font_big=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",54); font_small=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",24)
+ except Exception: font_big=ImageFont.load_default(); font_small=ImageFont.load_default()
+ draw.rectangle((0,0,1200,18),fill=(200,16,46)); draw.text((70,65),"PoliticsHub.in",font=font_small,fill=(60,60,60))
+ title=str(row.get("title") or "PoliticsHub.in")
+ words=title.split(); lines=[]; line=""
+ for word in words:
+  test=(line+" "+word).strip()
+  if draw.textlength(test,font=font_big)>1050 and line: lines.append(line);line=word
+  else:line=test
+ if line:lines.append(line)
+ y=170
+ for line in lines[:5]:
+  draw.text((70,y),line,font=font_big,fill=(15,15,18)); y+=64
+ draw.text((70,560),f"{str(row.get('category') or 'News')} · {EDITORIAL_DESK}",font=font_small,fill=(105,105,105))
+ out=io.BytesIO();image.save(out,format="PNG",optimize=True);return out.getvalue()
+
+def _editorial_page(title,lead,kind="page"):
+ links=["Home","About","Editorial Policy","Corrections","Contact"]
+ nav="<ul>"+"".join("<li>"+html.escape(x)+"</li>" for x in links)+"</ul>"
+ body="<p>PoliticsHub.in is an independent digital newsroom focused on politics, public affairs, India and the world.</p>" if kind=="author" else ""
+ page='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(title)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(lead[:160])+'"><link rel="canonical" href="'+SITE_ORIGIN+request.path+'"><link rel="icon" href="/brand.svg?v=phlogo1"><link rel="stylesheet" href="/assets/site.css?v=phui8"></head><body><header id="hd"><div class="top"><a class="logo" href="/"><img id="lg" src="/brand.svg?v=phlogo1" alt="PoliticsHub.in"></a></div></header><main class="wrap"><article class="art"><div class="ah"><span class="lbl red">PoliticsHub.in</span><h1>'+html.escape(title)+'</h1><p class="dek">'+html.escape(lead)+'</p></div><div class="body">'+body+'</div></article></main><footer><div class="wrap"><div><img src="/brand.svg?v=phlogo1" alt="PoliticsHub.in"><p class="ser">What matters, clearly.</p></div><div><h4>Navigate</h4>'+nav+'</div></div></footer></body></html>'
+ return Response(page,mimetype="text/html")
 def rows_json(rows,compact=False):
  out=[]
  for row in rows:
@@ -207,15 +340,94 @@ def login():
   valid=False; role=None; ph="%s" if database._postgres else "?"
   row=database.conn.execute("SELECT username,password_hash,role FROM admin_users WHERE username = "+ph,(username,)).fetchone(); valid=bool(row and check_password_hash(row["password_hash"] if database._postgres else row[1],password)); role=(row["role"] if database._postgres else row[2]) if row else None
   if not valid and username=="admin":
-   count=int(database.conn.execute("SELECT COUNT(*) AS count FROM admin_users").fetchone()["count"] if database._postgres else database.conn.execute("SELECT COUNT(*) AS count FROM admin_users").fetchone()[0]); bootstrap=os.getenv("ADMIN_SETUP_KEY","") or os.getenv("ADMIN_TOKEN","")
-   if count==0 and bootstrap and secrets.compare_digest(password,bootstrap):
-    now=datetime.now(timezone.utc).isoformat(); database.conn.execute(f"INSERT INTO admin_users (username,password_hash,role,created_at) VALUES ({ph},{ph},{ph},{ph})",("admin",generate_password_hash(password),"owner",now)); valid=True; role="owner"
-  if not valid:
-   record=users().get(username); valid=bool(record and check_password_hash(record,password)); role="owner" if valid else None
-  if not valid:
-   _auth_failed(database,attempt_key); _auth_failed(database,ip_attempt_key); return jsonify({"error":"invalid credentials"}),401
-  _auth_clear(database,attempt_key); _auth_clear(database,ip_attempt_key); session.clear(); session["admin_user"]=username; session["admin_role"]=role or "owner"; session["csrf_token"]=secrets.token_urlsafe(32); return jsonify({"ok":True,"username":username,"role":session["admin_role"],"csrf_token":session["csrf_token"]})
- finally:database.close()
+   count=int(database.conn.execute("SELECT COUNT(*) AS count FROM admin_users").fetchone()["count"] if database._postgres else database.conn.execute("SELECT COUNT(*) AS count FROM admin_users").fetchone()[0]); bootstrap=os.getenv("ADMIN_SETUP_KEY","") or os.getenv("ADMIN_SETUP_KEY","")@app.before_request
+def canonical_host():
+ host=(request.host or "").split(":")[0].lower()
+ if host=="politicshub.in": return redirect("https://www.politicshub.in"+request.full_path,code=301)
+
+@app.get("/robots.txt")
+def robots():
+ return app.response_class("User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /admin\nDisallow: /admin.html\nSitemap: https://www.politicshub.in/sitemap.xml\nSitemap: https://www.politicshub.in/news-sitemap.xml\n",mimetype="text/plain")
+
+@app.get("/sitemap.xml")
+def sitemap():
+ rows=_public_rows_for_section("all",50000)
+ urls=["https://www.politicshub.in/"]+[f"https://www.politicshub.in/{x}/" for x in sorted(set(CATEGORY_SLUGS.values()))]+["https://www.politicshub.in/about.html","https://www.politicshub.in/contact.html","https://www.politicshub.in/editorial-policy.html","https://www.politicshub.in/corrections.html","https://www.politicshub.in/terms.html","https://www.politicshub.in/disclaimer.html","https://www.politicshub.in/privacy.html","https://www.politicshub.in/cookies.html","https://www.politicshub.in/author/politicshub-news-desk"]
+ body="<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n"
+ body+="".join("<url><loc>"+html.escape(u)+"</loc></url>\n" for u in urls)
+ for row in rows:
+  try: body+="<url><loc>"+html.escape(SITE_ORIGIN+article_path(row))+"</loc></url>\n"
+  except Exception: pass
+ body+="</urlset>"; return app.response_class(body,mimetype="application/xml")
+
+@app.get("/news-sitemap.xml")
+def news_sitemap():
+ rows=_public_rows_for_section("all",5000); cutoff=datetime.now(timezone.utc)-timedelta(days=2); selected=[]
+ for row in rows:
+  raw=row.get("published_at_site") or row.get("published_at")
+  try: dt=datetime.fromisoformat(str(raw).replace("Z","+00:00")); dt=dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+  except Exception: continue
+  if dt>=cutoff: selected.append(row)
+  if len(selected)>=1000: break
+ body="<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\" xmlns:news=\"http://www.google.com/schemas/sitemap-news/0.9\">\n"
+ for row in selected:
+  raw=row.get("published_at_site") or row.get("published_at")
+  try: dt=datetime.fromisoformat(str(raw).replace("Z","+00:00")); dt=dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc); pub=dt.astimezone(timezone.utc).isoformat().replace("+00:00","Z")
+  except Exception: continue
+  title=html.escape(str(row.get("title") or "")[:110]); loc=html.escape(SITE_ORIGIN+article_path(row))
+  body+=f"<url><loc>{loc}</loc><news:news><news:publication><news:name>PoliticsHub.in</news:name><news:language>en</news:language></news:publication><news:publication_date>{html.escape(pub)}</news:publication_date><news:title>{title}</news:title></news:news></url>\n"
+ body+="</urlset>"; return app.response_class(body,mimetype="application/xml")
+@app.get("/api/og-home")
+def og_home():
+ from PIL import Image, ImageDraw, ImageFont
+ image=Image.new("RGB",(1200,630),(245,245,242));draw=ImageDraw.Draw(image)
+ try: font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",72); small=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",28)
+ except Exception: font=ImageFont.load_default();small=ImageFont.load_default()
+ draw.rectangle((0,0,1200,18),fill=(200,16,46));draw.text((70,70),"PoliticsHub.in",font=small,fill=(70,70,70));draw.text((70,190),"What matters, clearly.",font=font,fill=(15,15,18));draw.text((70,520),"Independent reporting · Politics · India · World",font=small,fill=(105,105,105))
+ out=io.BytesIO();image.save(out,format="PNG",optimize=True);return Response(out.getvalue(),mimetype="image/png",headers={"Cache-Control":"public, max-age=86400, s-maxage=86400"})
+
+@app.get("/api/og/<int:item_id>")
+def og_image(item_id):
+ payload=_og_image(item_id)
+ if not payload:return jsonify({"error":"not found"}),404
+ return Response(payload,mimetype="image/png",headers={"Cache-Control":"public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800"})
+
+@app.get("/api/newsletter")
+def newsletter_status(): return jsonify({"ok":True,"available":True})
+
+@app.post("/api/newsletter")
+def newsletter_subscribe():
+ if not _public_rate_allowed(20,3600):return jsonify({"error":"too many requests"}),429
+ body=request.get_json(silent=True) or request.form.to_dict() or {}; email=str(body.get("email","")).strip().lower()
+ if not re.fullmatch(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",email):return jsonify({"error":"Enter a valid email address"}),400
+ try:
+  database=db()
+  try: database.subscribe_newsletter(email); return jsonify({"ok":True,"message":"You are on the PoliticsHub newsletter list."})
+  finally: database.close()
+ except RuntimeError:
+  try:
+   import requests
+   response=requests.post(PUBLIC_BACKEND_ORIGIN+"/api/newsletter",json={"email":email},timeout=_PUBLIC_API_TIMEOUT,headers={"Accept":"application/json","X-PoliticsHub-Proxy":"1"})
+   return app.response_class(response.content,status=response.status_code,content_type=response.headers.get("Content-Type","application/json"))
+  except Exception: return jsonify({"error":"newsletter service unavailable"}),503
+
+@app.get("/<category>/")
+def seo_section(category):
+ category=category.lower().strip()
+ if category not in set(CATEGORY_SLUGS.values()): return jsonify({"error":"not found"}),404
+ return Response(_section_html(category if category!="india" or category in CATEGORY_SLUGS else "all"),mimetype="text/html")
+
+@app.get("/author/politicshub-news-desk")
+def author_page(): return _editorial_page("PoliticsHub News Desk","The PoliticsHub Editorial Desk publishes and edits newsroom stories, source links and public corrections.","author")
+
+@app.get("/<category>/<int:item_id>-<slug>")
+def seo_article(category,item_id,slug):
+ row=_public_row_by_id(item_id)
+ if not row:return jsonify({"error":"not found"}),404
+ canonical_path=article_path(row); requested=f"/{category}/{item_id}-{slug}"
+ if requested.rstrip("/")!=canonical_path.rstrip("/"):return redirect(SITE_ORIGIN+canonical_path,code=301)
+ return Response(_article_html(row),mimetype="text/html")
+tabase.close()
 
 @app.post("/api/admin/logout")
 def logout():
@@ -254,7 +466,7 @@ def health():
 def news():
  if not _public_rate_allowed():return jsonify({"error":"rate limit exceeded"}),429
  category=request.args.get("category","all").lower().strip(); status=request.args.get("status","published"); review=request.args.get("review_status","all"); ig=request.args.get("instagram_status","all"); search=request.args.get("search"); compact=request.args.get("compact","0")=="1"
- if category!="all" and category not in {"general","india","world","politics","business","technology","sports","entertainment","science","health"}:return jsonify({"error":"invalid category"}),400
+ if category!="all" and category not in {"general","india","world","politics","business","technology","sports","entertainment","science","health","hindi"}:return jsonify({"error":"invalid category"}),400
  if search is not None: search=str(search).strip()[:120]
  try:limit=min(max(int(request.args.get("limit","100")),1),100)
  except ValueError:limit=100
@@ -728,13 +940,25 @@ def fact_check():
  finally:database.close()
 
 
-# Render web-service compatibility: serve the existing public frontend from the same Flask app.
-@app.route("/", defaults={"path": ""})
+@app.get("/")
+def seo_home():
+ return Response(_section_html("all"),mimetype="text/html")
+
+@app.get("/article.html")
+def legacy_article():
+ raw=request.args.get("id","").strip()
+ if not raw.isdigit(): return redirect("/",code=301)
+ row=_public_row_by_id(int(raw))
+ if not row:return redirect("/",code=301)
+ return redirect(SITE_ORIGIN+article_path(row),code=301)
+
+@app.get("/home.html")
+def legacy_home():
+ return redirect("/",code=301)
+
+# Render web-service compatibility: serve remaining static assets/pages.
 @app.route("/<path:path>")
 def _render_public(path):
- if path.startswith("api/"):
-  return jsonify({"error":"not found"}),404
- target=path or "home.html"
- if target.endswith("/"):
-  target += "index.html"
- return send_from_directory(app.static_folder, target)
+ if path.startswith("api/"): return jsonify({"error":"not found"}),404
+ if path in {"politics","india","world","business","technology","sports","entertainment","hindi"}: return Response(_section_html(path),mimetype="text/html")
+ return send_from_directory(app.static_folder,path)

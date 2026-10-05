@@ -1,5 +1,5 @@
 
-const CATS=[['all','Home'],['india','India'],['politics','Politics'],['world','World'],['business','Business'],['technology','Technology'],['sports','Sports'],['entertainment','Entertainment']];
+const CATS=[['all','Home'],['india','India'],['politics','Politics'],['world','World'],['business','Business'],['technology','Technology'],['sports','Sports'],['entertainment','Entertainment'],['hindi','Hindi']];
 const TABS=[['all','All'],['politics','Politics'],['india','India'],...CATS.slice(3)];
 const ENDPOINTS={api:'/api/news',snap:'news-data.json'};
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
@@ -9,7 +9,7 @@ const S={items:[],mode:'loading',api:'unknown',snap:'unknown',tried:0};
 const fmt=d=>{const x=new Date(d);return isNaN(x)?'':x.toLocaleString('en-IN',{day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'})};
 const ago=d=>{const m=(Date.now()-new Date(d))/6e4;if(isNaN(m))return'';return m<60?Math.max(1,~~m)+'m ago':m<1440?~~(m/60)+'h ago':fmt(d).split(',')[0]};
 function norm(a,i){const id=a.id??a.slug??a._id??'n'+i;const img=a.image||a.image_url||a.imageUrl||a.urlToImage||a.thumbnail||a.img||'';
- return{id:String(id),title:a.title||a.headline||'Untitled',summary:a.summary||a.description||a.excerpt||'',body:a.content||a.body||a.text||'',image:typeof img==='string'?img:'',category:String(a.category||a.section||'General'),source:(a.source&&a.source.name)||a.source||a.publisher||'',date:a.published_at||a.publishedAt||a.pubDate||a.date||a.created_at||'',url:a.url||a.link||''}}
+ return{id:String(id),title:a.title||a.headline||'Untitled',summary:a.summary||a.description||a.excerpt||'',body:a.content||a.body||a.text||'',image:typeof img==='string'?img:'',category:String(a.category||a.section||'General'),source:(a.source&&a.source.name)||a.source||a.publisher||'',date:a.published_at||a.publishedAt||a.pubDate||a.date||a.created_at||'',url:a.url||a.link||'',author:a.author||a.author_name||'PoliticsHub Editorial Desk'}}
 const pick=j=>Array.isArray(j)?j:(j.articles||j.news||j.items||j.data||j.results||[]);
 async function get(u){const r=await fetch(u,{cache:'no-store'});if(!r.ok)throw 0;const rows=pick(await r.json());return rows.map((x,i)=>{const img=x.image_url||x.image||x.imageUrl||x.urlToImage||x.thumbnail||x.img||'';const source=x.source_name||(x.source&&x.source.name)||x.source||x.publisher||'PoliticsHub';const date=x.published_at||x.published_at_site||x.publishedAt||x.pubDate||x.date||x.created_at||'';const body=x.article||x.bot_article||x.content||x.body||x.text||'';const summary=x.summary||x.bot_summary||x.description||x.excerpt||'';return {...x,id:String(x.id??x.slug??x._id??'n'+i),image:typeof img==='string'?img:'',source:String(source),date,body:String(body),summary:String(summary)};})}
 async function load(){let a=null;
@@ -21,9 +21,11 @@ async function load(){let a=null;
 const inCat=(it,c)=>c==='all'||it.category.toLowerCase().includes(c);
 const img=(it,cls='')=>it.image?`<img ${cls} src="${esc(it.image)}" alt="" loading="lazy" decoding="async" onerror="this.closest('.im,.cover')&&(this.parentElement.dataset.bad=1);this.remove()">`:'';
 const ck=it=>{const l=it.category.toLowerCase();const m=CATS.find(c=>c[0]!=='all'&&l.includes(c[0]));return m?m[0]:'all'};
-const hl=c=>'#/c/'+c;
+const slugify=s=>String(s??'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,110)||'story';
+const hl=c=>c==='all'?'/':`/${c}/`;
+const articleHref=it=>`/${ck(it)}/${encodeURIComponent(it.id)}-${slugify(it.title)}`;
 function card(it,i){const has=it.image;const meta=`${esc(it.source)}${it.source&&it.date?' · ':''}${ago(it.date)}`;
- return`<a class="card rv ${has?'im':'tx'}" data-k="${ck(it)}" href="#/article/${encodeURIComponent(it.id)}" style="transition-delay:${(i%3)*60}ms">${has?img(it):''}<span class="wm" aria-hidden="true">${esc(it.category.charAt(0))}</span><span class="chip">${esc(it.category)}</span><span class="go" aria-hidden="true">↗</span><h3>${esc(it.title)}</h3>${it.summary?`<p>${esc(it.summary)}</p>`:''}<span class="m">${meta}</span></a>`}
+ return`<a class="card rv ${has?'im':'tx'}" data-k="${ck(it)}" href="${articleHref(it)}" style="transition-delay:${(i%3)*60}ms">${has?img(it):''}<span class="wm" aria-hidden="true">${esc(it.category.charAt(0))}</span><span class="chip">${esc(it.category)}</span><span class="go" aria-hidden="true">↗</span><h3>${esc(it.title)}</h3>${it.summary?`<p>${esc(it.summary)}</p>`:''}<span class="m">${meta}</span></a>`}
 function build(){const n=$('#nav');n.insertAdjacentHTML('afterbegin',CATS.map(([k,l])=>`<a href="${hl(k)}" data-c="${k}" data-k="${k}">${l}</a>`).join(''));$('#dl').innerHTML=[CATS[0],CATS[2],CATS[1],...CATS.slice(3)].map(([k,l])=>`<a class="l" href="${hl(k)}" data-c="${k}" data-k="${k}">${l}</a>`).join('')}
 function setActive(c){document.body.dataset.k=c||'all';$$('[data-c]').forEach(a=>a.classList.toggle('on',a.dataset.c===c));$$('#nav a').forEach(a=>a.setAttribute('aria-current',a.dataset.c===c?'page':'false'));moveInd()}
 function moveInd(){const a=$('#nav a.on'),i=$('#ind');if(!a){i.style.width=0;return}i.style.left=a.offsetLeft+'px';i.style.width=a.offsetWidth+'px'}
@@ -31,7 +33,7 @@ async function ticker(){
  let source=S.items;
  try{const breaking=await get('/api/breaking');if(breaking.length)source=breaking.concat(S.items.filter(x=>!breaking.some(b=>b.id===x.id))).slice(0,10)}catch(e){}
  const t=$('#tick');if(!source.length){t.hidden=true;return}t.hidden=false;
- const h=source.slice(0,10).map(i=>'<a href="#/article/'+encodeURIComponent(i.id)+'">'+(i.is_breaking?'<b>BREAKING</b> ':'')+esc(i.title)+'</a>').join('');
+ const h=source.slice(0,10).map(i=>'<a href="'+articleHref(i)+'">'+(i.is_breaking?'<b>BREAKING</b> ':'')+esc(i.title)+'</a>').join('');
  $('#tk').innerHTML='<div>'+h+h+'</div>'
 }
 function home(c){setActive(c);document.title=(c==='all'?'':CATS.find(x=>x[0]===c)?.[1]+' — ')+'PoliticsHub.in';
@@ -40,15 +42,15 @@ function home(c){setActive(c);document.title=(c==='all'?'':CATS.find(x=>x[0]===c
  if(!f){$('#app').innerHTML=tabs+`<div class="msg"><h3>No stories here yet</h3><p>Nothing in ${esc(c)} right now. Try another section or check back soon.</p></div>`;return}
  const ctn=CATS.find(x=>x[0]===c)[1],fk=ck(f),date=new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'});
  const words=f.title.split(' ').slice(0,18).map((w,i)=>`<span class="w"><span style="--i:${i}">${esc(w)}</span></span>`).join(' ');
- const lt=rest.slice(0,3).map(i=>`<a class="li" data-k="${ck(i)}" href="#/article/${encodeURIComponent(i.id)}"><span>${esc(i.title)}</span><small>${ago(i.date)}</small></a>`).join('')||'<p class="msg" style="padding:20px 0">No other stories yet.</p>';
+ const lt=rest.slice(0,3).map(i=>`<a class="li" data-k="${ck(i)}" href="${articleHref(i)}"><span>${esc(i.title)}</span><small>${ago(i.date)}</small></a>`).join('')||'<p class="msg" style="padding:20px 0">No other stories yet.</p>';
  const pl=CATS.slice(1).map(([k,l])=>`<a data-k="${k}" href="${hl(k)}">${l}<small>${S.items.filter(i=>inCat(i,k)).length}</small></a>`).join('');
- const hero=`<section class="bento"><div class="tile hl" data-k="${fk}"><span class="burst" aria-hidden="true">✺</span><span class="lbl"><i class="dot"></i>What matters, clearly. ${date}</span><h1>${words}</h1><p>${esc(f.summary)}</p><a class="btn" data-mag href="#/article/${encodeURIComponent(f.id)}">Read latest story <span aria-hidden="true">↗</span></a></div>
- <a class="tile cv ${f.image?'im':'tx'}" data-k="${fk}" style="--d:1" href="#/article/${encodeURIComponent(f.id)}" aria-label="${esc(f.title)}">${f.image?img(f):`<span class="big">${esc(f.category)}</span>`}<span class="chip stk">${esc(f.category)}</span><span class="cap">${esc(f.source)} ${ago(f.date)}</span></a>
+ const hero=`<section class="bento"><div class="tile hl" data-k="${fk}"><span class="burst" aria-hidden="true">✺</span><span class="lbl"><i class="dot"></i>What matters, clearly. ${date}</span><h1>${words}</h1><p>${esc(f.summary)}</p><a class="btn" data-mag href="${articleHref(f)}">Read latest story <span aria-hidden="true">↗</span></a></div>
+ <a class="tile cv ${f.image?'im':'tx'}" data-k="${fk}" style="--d:1" href="${articleHref(f)}" aria-label="${esc(f.title)}">${f.image?img(f):`<span class="big">${esc(f.category)}</span>`}<span class="chip stk">${esc(f.category)}</span><span class="cap">${esc(f.source)} ${ago(f.date)}</span></a>
  <div class="tile ct" style="--d:2"><span class="lbl">Today on PoliticsHub.in</span><b class="num" data-n="${list.length}">${list.length}</b><span>stories in ${esc(ctn)}</span></div>
  <div class="tile sc" style="--d:3"><span class="lbl">Jump to a desk</span><div class="pills">${pl}</div></div>
  <div class="tile lt" style="--d:4"><span class="lbl">Just in</span>${lt}</div></section>`;
  const bs=CATS.slice(1).map(([k,l])=>`<a data-k="${k}" href="${hl(k)}">${l}</a><i>✦</i>`).join(''),band=`<div class="band" aria-label="Browse sections"><div class="bt">${bs+bs+bs}</div></div>`;
- $('#app').innerHTML=hero+band+tabs+`<div class="sh"><h2>Latest stories</h2><span class="lbl">${list.length} stories</span></div><div class="grid">${rest.map(card).join('')||'<p class="msg" style="grid-column:1/-1">That is the only story in this section for now.</p>'}</div>`;fx();enhanceHome(c)}
+ $('#app').innerHTML=hero+band+tabs+`<div class="sh"><h2>Latest stories</h2><span class="lbl">${list.length} stories</span></div><div class="grid">${rest.map(card).join('')||'<p class="msg" style="grid-column:1/-1">That is the only story in this section for now.</p>'}</div><section class="newsletter-card"><span class="lbl red">PoliticsHub Brief</span><h2>Important stories. No noise.</h2><p>Get a concise newsroom update in your inbox.</p><form id="homeNl"><input type="email" required placeholder="you@example.com" aria-label="Email address"><button class="btn">Subscribe</button></form><small id="homeNlMsg"></small></section>`;fx();enhanceHome(c);bindNewsletter()}
 async function article(id){setActive('');$('#app').innerHTML='<div class="art"><div class="sk"></div></div>';
  let it=S.items.find(i=>i.id===id);
  if(!it||(!it.body&&S.mode==='api')){try{const r=await fetch(ENDPOINTS.api+'/'+encodeURIComponent(id),{cache:'no-store'});if(r.ok){const j=await r.json();const raw=j.article||j.data||j;it=norm({...raw,image:raw.image_url||raw.image,source:raw.source_name||raw.source,date:raw.published_at||raw.published_at_site,body:raw.article||raw.bot_article||raw.content,summary:raw.summary||raw.bot_summary});it.id=id}}catch(e){}}
@@ -56,7 +58,7 @@ async function article(id){setActive('');$('#app').innerHTML='<div class="art"><
  document.title=it.title+' — PoliticsHub.in';document.body.dataset.k=ck(it);
  const paras=(it.body||'').split(/\n+/).filter(Boolean).map(p=>`<p>${esc(p)}</p>`).join('')||(it.summary?`<p>${esc(it.summary)}</p>`:'');
  const rel=S.items.filter(i=>i.id!==it.id&&i.category===it.category).concat(S.items.filter(i=>i.id!==it.id&&i.category!==it.category)).slice(0,3);
- $('#app').innerHTML=`<article class="art" data-k="${ck(it)}"><div class="ah"><a class="chip" href="${hl(CATS.find(c=>it.category.toLowerCase().includes(c[0]))?.[0]||'all')}">${esc(it.category)}</a><h1>${esc(it.title)}</h1>${it.summary&&it.body?`<p class="dek">${esc(it.summary)}</p>`:''}<div class="by"><span>${esc(it.source)}</span><span>${fmt(it.date)}</span></div></div>${it.image?`<div class="ahero"><div class="im">${img(it)}</div></div>`:''}<div class="body">${paras}</div>${it.url?`<div class="src">Source: ${esc(it.source||'original report')}. <a href="${esc(it.url)}" target="_blank" rel="noopener noreferrer">Read the original report</a></div>`:''}<div class="article-share"><span>SHARE</span><a target="_blank" rel="noopener noreferrer" href="https://wa.me/?text=${encodeURIComponent(it.title+' '+location.href)}">WhatsApp</a><a target="_blank" rel="noopener noreferrer" href="https://t.me/share/url?url=${encodeURIComponent(location.href)}&text=${encodeURIComponent(it.title)}">Telegram</a><a target="_blank" rel="noopener noreferrer" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(location.href)}">Facebook</a><a target="_blank" rel="noopener noreferrer" href="https://twitter.com/intent/tweet?text=${encodeURIComponent(it.title)}&url=${encodeURIComponent(location.href)}">X</a></div></article><section class="rel"><div class="sh"><h2>Related stories</h2></div><div class="grid">${rel.map(card).join('')}</div></section>`;fx()}
+ $('#app').innerHTML=`<article class="art" data-k="${ck(it)}"><div class="ah"><a class="chip" href="${hl(CATS.find(c=>it.category.toLowerCase().includes(c[0]))?.[0]||'all')}">${esc(it.category)}</a><h1>${esc(it.title)}</h1>${it.summary&&it.body?`<p class="dek">${esc(it.summary)}</p>`:''}<div class="by"><span>By <a href="/author/politicshub-news-desk">PoliticsHub Editorial Desk</a></span><span>${fmt(it.date)}</span><span>${esc(it.source)}</span></div></div>${it.image?`<div class="ahero"><div class="im">${img(it)}</div></div>`:''}<div class="body">${paras}</div>${it.url?`<div class="src">Source: ${esc(it.source||'original report')}. <a href="${esc(it.url)}" target="_blank" rel="noopener noreferrer">Read the original report</a></div>`:''}<div class="article-share"><span>SHARE</span><a target="_blank" rel="noopener noreferrer" href="https://wa.me/?text=${encodeURIComponent(it.title+' '+location.href)}">WhatsApp</a><a target="_blank" rel="noopener noreferrer" href="https://t.me/share/url?url=${encodeURIComponent(location.href)}&text=${encodeURIComponent(it.title)}">Telegram</a><a target="_blank" rel="noopener noreferrer" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(location.href)}">Facebook</a><a target="_blank" rel="noopener noreferrer" href="https://twitter.com/intent/tweet?text=${encodeURIComponent(it.title)}&url=${encodeURIComponent(location.href)}">X</a></div></article><section class="rel"><div class="sh"><h2>Related stories</h2></div><div class="grid">${rel.map(card).join('')}</div></section>`;fx()}
 function settings(sub){setActive('');document.title='Settings — PoliticsHub.in';const th=document.documentElement.dataset.theme;
  const st=(v,t)=>`<span class="${v}">${t}</span>`;const last=S.items.find(i=>i.date)?.date;
  const s2=k=>ls.get(k)!=='0';
@@ -73,7 +75,8 @@ function settings(sub){setActive('');document.title='Settings — PoliticsHub.in
  <div class="row"><span>Frontend</span>${st('ok','Running')}</div>
  <div class="row"><span>Last update</span><span>${last?fmt(last):'Unknown'}</span></div></section></div>`;
  if(sub)$('#'+sub)?.scrollIntoView()}
-function render(){const p=location.hash.slice(1).split('/').filter(Boolean);closeAll();window.scrollTo(0,0);
+function render(){
+ const path=location.pathname.split('/').filter(Boolean); const hash=location.hash.slice(1).split('/').filter(Boolean); const p=path.length>=2&&/^\d+-/.test(path[1])?['article',path[1].split('-')[0]]:(path.length===1&&CATS.some(x=>x[0]===path[0])?['c',path[0]]:hash); closeAll();window.scrollTo(0,0);
  const m=$('#app');m.style.animation='none';void m.offsetWidth;m.style.animation='';
  if(p[0]==='article')article(decodeURIComponent(p[1]||''));else if(p[0]==='settings')settings(p[1]);
  else{const c=p[0]==='c'&&CATS.some(x=>x[0]===p[1])?p[1]:'all';home(c)}
@@ -98,7 +101,7 @@ function closeAll(){closeD();closeS()}
 function doS(){const q=$('#si').value.trim().toLowerCase();if(!q){$('#sc').textContent='Type to search all stories';$('#sres').innerHTML='';return}
  const r=S.items.filter(i=>[i.title,i.summary,i.source,i.category].join(' ').toLowerCase().includes(q));
  $('#sc').textContent=r.length?`${r.length} ${r.length===1?'story':'stories'} found`:'No stories match your search.';
- $('#sres').innerHTML=r.slice(0,30).map(i=>`<a class="sr" href="#/article/${encodeURIComponent(i.id)}">${i.image?`<img src="${esc(i.image)}" alt="" loading="lazy" onerror="this.remove()">`:''}<div><span class="lbl red">${esc(i.category)}</span><h3>${esc(i.title)}</h3><small>${esc(i.source)} ${ago(i.date)}</small></div></a>`).join('')}
+ $('#sres').innerHTML=r.slice(0,30).map(i=>`<a class="sr" href="${articleHref(i)}">${i.image?`<img src="${esc(i.image)}" alt="" loading="lazy" onerror="this.remove()">`:''}<div><span class="lbl red">${esc(i.category)}</span><h3>${esc(i.title)}</h3><small>${esc(i.source)} ${ago(i.date)}</small></div></a>`).join('')}
 $('#bg').onclick=openD;$('#dx').onclick=closeD;$('#bd').onclick=closeD;$('#sbtn').onclick=openS;$('#sx').onclick=closeS;$('#si').oninput=()=>doS();$('#sf').onsubmit=e=>e.preventDefault();
 $('#sres').onclick=e=>{if(e.target.closest('a'))closeS()};
 addEventListener('keydown',e=>{if(e.key==='Escape')closeAll();if(e.key==='/'&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)){e.preventDefault();openS()}});
@@ -119,7 +122,7 @@ $('#yr').textContent=new Date().getFullYear();build();
 document.fonts?.ready.then(moveInd);
 addEventListener('hashchange',route);
 const qcat=new URLSearchParams(location.search).get('category');if(!location.hash&&qcat&&CATS.some(x=>x[0]===qcat))location.hash='#/c/'+qcat;
-const legacyId=new URLSearchParams(location.search).get('id');if(!location.hash&&/\/article\.html$/.test(location.pathname)&&legacyId)location.hash='#/article/'+encodeURIComponent(legacyId);
+
 $('#app').innerHTML='<div class="sk" style="margin:48px 0"></div><div class="sk" style="margin:24px 0;height:160px"></div>';setActive('all');
 load().then(()=>{ticker();route()})
 if('serviceWorker' in navigator) addEventListener('load',()=>navigator.serviceWorker.register('/service-worker.js').catch(()=>{}));;
@@ -153,9 +156,11 @@ const __doS=doS; doS=function(){
 };
 const __article=article; article=async function(id){await __article(id);trackView(id)};
 async function liveRefresh(){
- if(document.visibilityState!=='visible'||location.hash.startsWith('#/article/')||location.hash.startsWith('#/settings'))return;
+ if(document.visibilityState!=='visible'||location.pathname.split('/').filter(Boolean).length>=2||location.hash.startsWith('#/article/')||location.hash.startsWith('#/settings'))return;
  const old=S.items.map(i=>i.id).join(','); await load(); ticker();
  const fresh=S.items.map(i=>i.id).join(','); if(old!==fresh||S.api==='ok')render();
 }
 setInterval(liveRefresh,60000);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')liveRefresh()});
+
+function bindNewsletter(){const f=$('#homeNl');if(!f)return;f.onsubmit=async e=>{e.preventDefault();const m=$('#homeNlMsg');try{const r=await fetch('/api/newsletter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:f.querySelector('input').value})});const j=await r.json();m.textContent=j.message||j.error||'Done';if(r.ok)f.reset()}catch(x){m.textContent='Could not subscribe right now.'}}}
