@@ -940,13 +940,25 @@ def fact_check():
  finally:database.close()
 
 
-# Render web-service compatibility: serve the existing public frontend from the same Flask app.
-@app.route("/", defaults={"path": ""})
+@app.get("/")
+def seo_home():
+ return Response(_section_html("all"),mimetype="text/html")
+
+@app.get("/article.html")
+def legacy_article():
+ raw=request.args.get("id","").strip()
+ if not raw.isdigit(): return redirect("/",code=301)
+ row=_public_row_by_id(int(raw))
+ if not row:return redirect("/",code=301)
+ return redirect(SITE_ORIGIN+article_path(row),code=301)
+
+@app.get("/home.html")
+def legacy_home():
+ return redirect("/",code=301)
+
+# Render web-service compatibility: serve remaining static assets/pages.
 @app.route("/<path:path>")
 def _render_public(path):
- if path.startswith("api/"):
-  return jsonify({"error":"not found"}),404
- target=path or "home.html"
- if target.endswith("/"):
-  target += "index.html"
- return send_from_directory(app.static_folder, target)
+ if path.startswith("api/"): return jsonify({"error":"not found"}),404
+ if path in {"politics","india","world","business","technology","sports","entertainment","hindi"}: return Response(_section_html(path),mimetype="text/html")
+ return send_from_directory(app.static_folder,path)
