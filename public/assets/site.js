@@ -1,5 +1,5 @@
 
-const CATS=[['all','Home'],['india','India'],['politics','Politics'],['world','World'],['business','Business'],['technology','Technology'],['sports','Sports'],['entertainment','Entertainment']];
+const CATS=[['all','Home'],['india','India'],['politics','Politics'],['world','World'],['business','Business'],['technology','Technology'],['sports','Sports'],['entertainment','Entertainment'],['hindi','Hindi']];
 const TABS=[['all','All'],['politics','Politics'],['india','India'],...CATS.slice(3)];
 const ENDPOINTS={api:'/api/news',snap:'news-data.json'};
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
@@ -21,9 +21,11 @@ async function load(){let a=null;
 const inCat=(it,c)=>c==='all'||it.category.toLowerCase().includes(c);
 const img=(it,cls='')=>it.image?`<img ${cls} src="${esc(it.image)}" alt="" loading="lazy" decoding="async" onerror="this.closest('.im,.cover')&&(this.parentElement.dataset.bad=1);this.remove()">`:'';
 const ck=it=>{const l=it.category.toLowerCase();const m=CATS.find(c=>c[0]!=='all'&&l.includes(c[0]));return m?m[0]:'all'};
-const hl=c=>'#/c/'+c;
+const slugify=s=>String(s??'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,110)||'story';
+const hl=c=>c==='all'?'/':`/${c}/`;
+const articleHref=it=>`/${ck(it)}/${encodeURIComponent(it.id)}-${slugify(it.title)}`;
 function card(it,i){const has=it.image;const meta=`${esc(it.source)}${it.source&&it.date?' · ':''}${ago(it.date)}`;
- return`<a class="card rv ${has?'im':'tx'}" data-k="${ck(it)}" href="#/article/${encodeURIComponent(it.id)}" style="transition-delay:${(i%3)*60}ms">${has?img(it):''}<span class="wm" aria-hidden="true">${esc(it.category.charAt(0))}</span><span class="chip">${esc(it.category)}</span><span class="go" aria-hidden="true">↗</span><h3>${esc(it.title)}</h3>${it.summary?`<p>${esc(it.summary)}</p>`:''}<span class="m">${meta}</span></a>`}
+ return`<a class="card rv ${has?'im':'tx'}" data-k="${ck(it)}" href="${articleHref(it)}" style="transition-delay:${(i%3)*60}ms">${has?img(it):''}<span class="wm" aria-hidden="true">${esc(it.category.charAt(0))}</span><span class="chip">${esc(it.category)}</span><span class="go" aria-hidden="true">↗</span><h3>${esc(it.title)}</h3>${it.summary?`<p>${esc(it.summary)}</p>`:''}<span class="m">${meta}</span></a>`}
 function build(){const n=$('#nav');n.insertAdjacentHTML('afterbegin',CATS.map(([k,l])=>`<a href="${hl(k)}" data-c="${k}" data-k="${k}">${l}</a>`).join(''));$('#dl').innerHTML=[CATS[0],CATS[2],CATS[1],...CATS.slice(3)].map(([k,l])=>`<a class="l" href="${hl(k)}" data-c="${k}" data-k="${k}">${l}</a>`).join('')}
 function setActive(c){document.body.dataset.k=c||'all';$$('[data-c]').forEach(a=>a.classList.toggle('on',a.dataset.c===c));$$('#nav a').forEach(a=>a.setAttribute('aria-current',a.dataset.c===c?'page':'false'));moveInd()}
 function moveInd(){const a=$('#nav a.on'),i=$('#ind');if(!a){i.style.width=0;return}i.style.left=a.offsetLeft+'px';i.style.width=a.offsetWidth+'px'}
@@ -40,7 +42,7 @@ function home(c){setActive(c);document.title=(c==='all'?'':CATS.find(x=>x[0]===c
  if(!f){$('#app').innerHTML=tabs+`<div class="msg"><h3>No stories here yet</h3><p>Nothing in ${esc(c)} right now. Try another section or check back soon.</p></div>`;return}
  const ctn=CATS.find(x=>x[0]===c)[1],fk=ck(f),date=new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'});
  const words=f.title.split(' ').slice(0,18).map((w,i)=>`<span class="w"><span style="--i:${i}">${esc(w)}</span></span>`).join(' ');
- const lt=rest.slice(0,3).map(i=>`<a class="li" data-k="${ck(i)}" href="#/article/${encodeURIComponent(i.id)}"><span>${esc(i.title)}</span><small>${ago(i.date)}</small></a>`).join('')||'<p class="msg" style="padding:20px 0">No other stories yet.</p>';
+ const lt=rest.slice(0,3).map(i=>`<a class="li" data-k="${ck(i)}" href="${articleHref(i)}"><span>${esc(i.title)}</span><small>${ago(i.date)}</small></a>`).join('')||'<p class="msg" style="padding:20px 0">No other stories yet.</p>';
  const pl=CATS.slice(1).map(([k,l])=>`<a data-k="${k}" href="${hl(k)}">${l}<small>${S.items.filter(i=>inCat(i,k)).length}</small></a>`).join('');
  const hero=`<section class="bento"><div class="tile hl" data-k="${fk}"><span class="burst" aria-hidden="true">✺</span><span class="lbl"><i class="dot"></i>What matters, clearly. ${date}</span><h1>${words}</h1><p>${esc(f.summary)}</p><a class="btn" data-mag href="#/article/${encodeURIComponent(f.id)}">Read latest story <span aria-hidden="true">↗</span></a></div>
  <a class="tile cv ${f.image?'im':'tx'}" data-k="${fk}" style="--d:1" href="#/article/${encodeURIComponent(f.id)}" aria-label="${esc(f.title)}">${f.image?img(f):`<span class="big">${esc(f.category)}</span>`}<span class="chip stk">${esc(f.category)}</span><span class="cap">${esc(f.source)} ${ago(f.date)}</span></a>
@@ -48,7 +50,7 @@ function home(c){setActive(c);document.title=(c==='all'?'':CATS.find(x=>x[0]===c
  <div class="tile sc" style="--d:3"><span class="lbl">Jump to a desk</span><div class="pills">${pl}</div></div>
  <div class="tile lt" style="--d:4"><span class="lbl">Just in</span>${lt}</div></section>`;
  const bs=CATS.slice(1).map(([k,l])=>`<a data-k="${k}" href="${hl(k)}">${l}</a><i>✦</i>`).join(''),band=`<div class="band" aria-label="Browse sections"><div class="bt">${bs+bs+bs}</div></div>`;
- $('#app').innerHTML=hero+band+tabs+`<div class="sh"><h2>Latest stories</h2><span class="lbl">${list.length} stories</span></div><div class="grid">${rest.map(card).join('')||'<p class="msg" style="grid-column:1/-1">That is the only story in this section for now.</p>'}</div>`;fx();enhanceHome(c)}
+ $('#app').innerHTML=hero+band+tabs+`<div class="sh"><h2>Latest stories</h2><span class="lbl">${list.length} stories</span></div><div class="grid">${rest.map(card).join('')||'<p class="msg" style="grid-column:1/-1">That is the only story in this section for now.</p>'}</div><section class="newsletter-card"><span class="lbl red">PoliticsHub Brief</span><h2>Important stories. No noise.</h2><p>Get a concise newsroom update in your inbox.</p><form id="homeNl"><input type="email" required placeholder="you@example.com" aria-label="Email address"><button class="btn">Subscribe</button></form><small id="homeNlMsg"></small></section>`;fx();enhanceHome(c);bindNewsletter()}
 async function article(id){setActive('');$('#app').innerHTML='<div class="art"><div class="sk"></div></div>';
  let it=S.items.find(i=>i.id===id);
  if(!it||(!it.body&&S.mode==='api')){try{const r=await fetch(ENDPOINTS.api+'/'+encodeURIComponent(id),{cache:'no-store'});if(r.ok){const j=await r.json();const raw=j.article||j.data||j;it=norm({...raw,image:raw.image_url||raw.image,source:raw.source_name||raw.source,date:raw.published_at||raw.published_at_site,body:raw.article||raw.bot_article||raw.content,summary:raw.summary||raw.bot_summary});it.id=id}}catch(e){}}
@@ -73,7 +75,8 @@ function settings(sub){setActive('');document.title='Settings — PoliticsHub.in
  <div class="row"><span>Frontend</span>${st('ok','Running')}</div>
  <div class="row"><span>Last update</span><span>${last?fmt(last):'Unknown'}</span></div></section></div>`;
  if(sub)$('#'+sub)?.scrollIntoView()}
-function render(){const p=location.hash.slice(1).split('/').filter(Boolean);closeAll();window.scrollTo(0,0);
+function render(){
+ const path=location.pathname.split('/').filter(Boolean); const hash=location.hash.slice(1).split('/').filter(Boolean); const p=path.length>=2&&/^\\d+-/.test(path[1])?['article',path[1].split('-')[0]]:(path.length===1&&CATS.some(x=>x[0]===path[0])?['c',path[0]]:hash); closeAll();window.scrollTo(0,0);
  const m=$('#app');m.style.animation='none';void m.offsetWidth;m.style.animation='';
  if(p[0]==='article')article(decodeURIComponent(p[1]||''));else if(p[0]==='settings')settings(p[1]);
  else{const c=p[0]==='c'&&CATS.some(x=>x[0]===p[1])?p[1]:'all';home(c)}
@@ -153,9 +156,11 @@ const __doS=doS; doS=function(){
 };
 const __article=article; article=async function(id){await __article(id);trackView(id)};
 async function liveRefresh(){
- if(document.visibilityState!=='visible'||location.hash.startsWith('#/article/')||location.hash.startsWith('#/settings'))return;
+ if(document.visibilityState!=='visible'||location.pathname.split('/').filter(Boolean).length>=2||location.hash.startsWith('#/article/')||location.hash.startsWith('#/settings'))return;
  const old=S.items.map(i=>i.id).join(','); await load(); ticker();
  const fresh=S.items.map(i=>i.id).join(','); if(old!==fresh||S.api==='ok')render();
 }
 setInterval(liveRefresh,60000);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')liveRefresh()});
+
+function bindNewsletter(){const f=$('#homeNl');if(!f)return;f.onsubmit=async e=>{e.preventDefault();const m=$('#homeNlMsg');try{const r=await fetch('/api/newsletter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:f.querySelector('input').value})});const j=await r.json();m.textContent=j.message||j.error||'Done';if(r.ok)f.reset()}catch(x){m.textContent='Could not subscribe right now.'}}}
