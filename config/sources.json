@@ -22,7 +22,7 @@
       "public_source": true
     }
   ],
-
+  "rss": [
     {
       "name": "PIB Press Releases",
       "url": "https://pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=1",
