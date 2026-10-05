@@ -103,6 +103,35 @@ def _rank_public(rows):
   item["news_score"]=story_score(item.get("title",""),item.get("bot_summary") or item.get("summary") or "",item.get("category") or "general",item.get("source_name") or "")
   item["is_breaking"]=is_breaking(item.get("title",""),item.get("bot_summary") or item.get("summary") or "",item["news_score"])
  return dedupe_story_rows(items)
+def _public_rows_for_section(category="all",limit=40):
+ try:
+  database=db()
+  try:return [dict(x) for x in database.latest(limit,category,"published")]
+  finally:database.close()
+ except RuntimeError:
+  try:
+   import requests
+   url=PUBLIC_BACKEND_ORIGIN+"/api/news?category="+requests.utils.quote(category)+"&limit="+str(limit)
+   response=requests.get(url,timeout=_PUBLIC_API_TIMEOUT,headers={"Accept":"application/json","X-PoliticsHub-Proxy":"1"})
+   return response.json() if response.ok and isinstance(response.json(),list) else []
+  except Exception as exc: print(f"SSR section proxy failed: {exc}"); return []
+
+def _section_html(category="all"):
+ rows=_public_rows_for_section(category,40)
+ label="Latest news" if category=="all" else str(category).title()+" news"
+ links=[]
+ for row in rows:
+  try:
+   title=html.escape(str(row.get("title") or "Untitled"))
+   href=article_path(row)
+   date=html.escape(str(row.get("published_at_site") or row.get("published_at") or ""))
+   summary=html.escape(str(row.get("bot_summary") or row.get("summary") or "")[:220])
+   links.append('<article><h2><a href="'+href+'">'+title+'</a></h2><p>'+summary+'</p><time>'+date+'</time></article>')
+  except Exception: pass
+ body="".join(links) or '<p>No stories are available in this section right now.</p>'
+ canonical=SITE_ORIGIN+"/" if category=="all" else SITE_ORIGIN+"/"+category+"/"
+ return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="Latest '+html.escape(label.lower())+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home"><link rel="icon" href="/brand.svg?v=phlogo1"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui8"></head><body><header id="hd"><div class="top"><a class="logo" href="/"><img id="lg" src="/brand.svg?v=phlogo1" alt="PoliticsHub.in"></a><div class="acts"><a class="ib" href="/search.html">Search</a></div></div></header><main class="wrap"><div class="art"><div class="ah"><span class="lbl red">PoliticsHub.in</span><h1>'+html.escape(label)+'</h1><p class="dek">Independent reporting. Clearly.</p></div><section class="body">'+body+'</section></div></main><script src="/assets/site.js?v=phui8"></script></body></html>'
+
 def db():
  database=NewsDatabase(); _ensure_admin_users(database); _bootstrap_news_snapshot(database); return database
 
@@ -311,36 +340,7 @@ def login():
   valid=False; role=None; ph="%s" if database._postgres else "?"
   row=database.conn.execute("SELECT username,password_hash,role FROM admin_users WHERE username = "+ph,(username,)).fetchone(); valid=bool(row and check_password_hash(row["password_hash"] if database._postgres else row[1],password)); role=(row["role"] if database._postgres else row[2]) if row else None
   if not valid and username=="admin":
-   count=int(database.conn.execute("SELECT COUNT(*) AS count FROM admin_users").fetchone()["count"] if database._postgres else database.conn.execute("SELECT COUNT(*) AS count FROM admin_users").fetchone()[0]); bootstrap=os.getenv("ADMIN_SETUP_KEY","") or os.gedef _public_rows_for_section(category="all",limit=40):
- try:
-  database=db()
-  try:return [dict(x) for x in database.latest(limit,category,"published")]
-  finally:database.close()
- except RuntimeError:
-  try:
-   import requests
-   url=PUBLIC_BACKEND_ORIGIN+"/api/news?category="+requests.utils.quote(category)+"&limit="+str(limit)
-   response=requests.get(url,timeout=_PUBLIC_API_TIMEOUT,headers={"Accept":"application/json","X-PoliticsHub-Proxy":"1"})
-   return response.json() if response.ok and isinstance(response.json(),list) else []
-  except Exception as exc: print(f"SSR section proxy failed: {exc}"); return []
-
-def _section_html(category="all"):
- rows=_public_rows_for_section(category,40)
- label="Latest news" if category=="all" else str(category).title()+" news"
- links=[]
- for row in rows:
-  try:
-   title=html.escape(str(row.get("title") or "Untitled"))
-   href=article_path(row)
-   date=html.escape(str(row.get("published_at_site") or row.get("published_at") or ""))
-   summary=html.escape(str(row.get("bot_summary") or row.get("summary") or "")[:220])
-   links.append('<article><h2><a href="'+href+'">'+title+'</a></h2><p>'+summary+'</p><time>'+date+'</time></article>')
-  except Exception: pass
- body="".join(links) or '<p>No stories are available in this section right now.</p>'
- canonical=SITE_ORIGIN+"/" if category=="all" else SITE_ORIGIN+"/"+category+"/"
- return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="Latest '+html.escape(label.lower())+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home"><link rel="icon" href="/brand.svg?v=phlogo1"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui8"></head><body><header id="hd"><div class="top"><a class="logo" href="/"><img id="lg" src="/brand.svg?v=phlogo1" alt="PoliticsHub.in"></a><div class="acts"><a class="ib" href="/search.html">Search</a></div></div></header><main class="wrap"><div class="art"><div class="ah"><span class="lbl red">PoliticsHub.in</span><h1>'+html.escape(label)+'</h1><p class="dek">Independent reporting. Clearly.</p></div><section class="body">'+body+'</section></div></main><script src="/assets/site.js?v=phui8"></script></body></html>'
-
-@app.before_request
+   count=int(database.conn.execute("SELECT COUNT(*) AS count FROM admin_users").fetchone()["count"] if database._postgres else database.conn.execute("SELECT COUNT(*) AS count FROM admin_users").fetchone()[0]); bootstrap=os.getenv("ADMIN_SETUP_KEY","") or os.getenv("ADMIN_SETUP_KEY","")@app.before_request
 def canonical_host():
  host=(request.host or "").split(":")[0].lower()
  if host=="politicshub.in": return redirect("https://www.politicshub.in"+request.full_path,code=301)
