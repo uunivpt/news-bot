@@ -1,4 +1,27 @@
 {
+  "newsapi": [
+    {
+      "name": "NewsAPI India",
+      "country": "in",
+      "category": "general",
+      "q": "India OR Indian",
+      "page_size": 100,
+      "enabled": false,
+      "public_source": true
+    }
+  ],
+  "newsdata": [
+    {
+      "name": "NewsData.io India",
+      "country": "in",
+      "language": "en",
+      "category": "politics",
+      "q": "India",
+      "size": 10,
+      "enabled": false,
+      "public_source": true
+    }
+  ],
   "rss": [
     {
       "name": "Example Feed",
