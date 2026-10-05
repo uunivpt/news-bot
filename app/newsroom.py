@@ -435,3 +435,44 @@ def process_news(title,source_text,category="general"):
     }
     if len(result["summary"])<50 or len(result["article"])<120:return None
     return result
+
+
+BREAKING_WORDS=re.compile(r"(?i)\b(?:breaking|urgent|major|alert|live|just in|developing|emergency|attack|earthquake|resigns?|arrested|killed|dead|evacuated|war|crisis|verdict|explosion|shutdown)\b")
+def story_score(title, summary="", category="general", source=""):
+    """Deterministic newsroom priority score; no LLM/API dependency."""
+    text=f"{title} {summary}"
+    score=0
+    if BREAKING_WORDS.search(text): score += 45
+    if DATE_OR_NUMBER_RE.search(text): score += 10
+    if FACT_VERBS.search(text): score += 8
+    if CONSEQUENCE_WORDS.search(text): score += 7
+    if category in {"politics","india","world"}: score += 5
+    if source: score += 3
+    return max(0,min(100,int(score)))
+
+def is_breaking(title, summary="", score=None):
+    score=story_score(title,summary) if score is None else int(score)
+    return score>=45 or bool(re.search(r"(?i)\b(?:breaking|urgent|developing|live|alert)\b",f"{title} {summary}"))
+
+def dedupe_story_rows(rows, threshold=0.82):
+    """Collapse near-identical headlines while preserving the highest-scoring copy."""
+    kept=[]
+    for row in rows:
+        title=str(row.get("title") or "")
+        words=set(_words(title))
+        if not words:
+            continue
+        duplicate=False
+        for prior in kept:
+            other=set(_words(str(prior.get("title") or "")))
+            overlap=len(words & other)/max(1,len(words|other))
+            if overlap>=threshold:
+                duplicate=True
+                prior_score=int(prior.get("news_score") or 0)
+                row_score=int(row.get("news_score") or 0)
+                if row_score>prior_score:
+                    kept[kept.index(prior)]=row
+                break
+        if not duplicate:
+            kept.append(row)
+    return kept

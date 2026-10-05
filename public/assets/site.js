@@ -27,7 +27,13 @@ function card(it,i){const has=it.image;const meta=`${esc(it.source)}${it.source&
 function build(){const n=$('#nav');n.insertAdjacentHTML('afterbegin',CATS.map(([k,l])=>`<a href="${hl(k)}" data-c="${k}" data-k="${k}">${l}</a>`).join(''));$('#dl').innerHTML=[CATS[0],CATS[2],CATS[1],...CATS.slice(3)].map(([k,l])=>`<a class="l" href="${hl(k)}" data-c="${k}" data-k="${k}">${l}</a>`).join('')}
 function setActive(c){document.body.dataset.k=c||'all';$$('[data-c]').forEach(a=>a.classList.toggle('on',a.dataset.c===c));$$('#nav a').forEach(a=>a.setAttribute('aria-current',a.dataset.c===c?'page':'false'));moveInd()}
 function moveInd(){const a=$('#nav a.on'),i=$('#ind');if(!a){i.style.width=0;return}i.style.left=a.offsetLeft+'px';i.style.width=a.offsetWidth+'px'}
-function ticker(){const t=$('#tick');if(!S.items.length||S.mode==='demo'){t.hidden=true;return}t.hidden=false;const h=S.items.slice(0,10).map(i=>`<a href="#/article/${encodeURIComponent(i.id)}">${esc(i.title)}</a>`).join('');$('#tk').innerHTML=`<div>${h}${h}</div>`}
+async function ticker(){
+ let source=S.items;
+ try{const breaking=await get('/api/breaking');if(breaking.length)source=breaking.concat(S.items.filter(x=>!breaking.some(b=>b.id===x.id))).slice(0,10)}catch(e){}
+ const t=$('#tick');if(!source.length){t.hidden=true;return}t.hidden=false;
+ const h=source.slice(0,10).map(i=>'<a href="#/article/'+encodeURIComponent(i.id)+'">'+(i.is_breaking?'<b>BREAKING</b> ':'')+esc(i.title)+'</a>').join('');
+ $('#tk').innerHTML='<div>'+h+h+'</div>'
+}
 function home(c){setActive(c);document.title=(c==='all'?'':CATS.find(x=>x[0]===c)?.[1]+' — ')+'PoliticsHub.in';
  const list=S.items.filter(i=>inCat(i,c));const f=list.find(i=>i.image)||list[0];const rest=list.filter(i=>i!==f);
  const tabs=`<div class="tabs" role="tablist" aria-label="Categories">${TABS.map(([k,l])=>`<a role="tab" href="${hl(k)}" data-c="${k}" data-k="${k}" class="${k===c?'on':''}" aria-selected="${k===c}">${l}</a>`).join('')}</div>`;
@@ -42,7 +48,7 @@ function home(c){setActive(c);document.title=(c==='all'?'':CATS.find(x=>x[0]===c
  <div class="tile sc" style="--d:3"><span class="lbl">Jump to a desk</span><div class="pills">${pl}</div></div>
  <div class="tile lt" style="--d:4"><span class="lbl">Just in</span>${lt}</div></section>`;
  const bs=CATS.slice(1).map(([k,l])=>`<a data-k="${k}" href="${hl(k)}">${l}</a><i>✦</i>`).join(''),band=`<div class="band" aria-label="Browse sections"><div class="bt">${bs+bs+bs}</div></div>`;
- $('#app').innerHTML=hero+band+tabs+`<div class="sh"><h2>Latest stories</h2><span class="lbl">${list.length} stories</span></div><div class="grid">${rest.map(card).join('')||'<p class="msg" style="grid-column:1/-1">That is the only story in this section for now.</p>'}</div>`;fx()}
+ $('#app').innerHTML=hero+band+tabs+`<div class="sh"><h2>Latest stories</h2><span class="lbl">${list.length} stories</span></div><div class="grid">${rest.map(card).join('')||'<p class="msg" style="grid-column:1/-1">That is the only story in this section for now.</p>'}</div>`;fx();enhanceHome(c)}
 async function article(id){setActive('');$('#app').innerHTML='<div class="art"><div class="sk"></div></div>';
  let it=S.items.find(i=>i.id===id);
  if(!it||(!it.body&&S.mode==='api')){try{const r=await fetch(ENDPOINTS.api+'/'+encodeURIComponent(id),{cache:'no-store'});if(r.ok){const j=await r.json();const raw=j.article||j.data||j;it=norm({...raw,image:raw.image_url||raw.image,source:raw.source_name||raw.source,date:raw.published_at||raw.published_at_site,body:raw.article||raw.bot_article||raw.content,summary:raw.summary||raw.bot_summary});it.id=id}}catch(e){}}
@@ -93,7 +99,7 @@ function doS(){const q=$('#si').value.trim().toLowerCase();if(!q){$('#sc').textC
  const r=S.items.filter(i=>[i.title,i.summary,i.source,i.category].join(' ').toLowerCase().includes(q));
  $('#sc').textContent=r.length?`${r.length} ${r.length===1?'story':'stories'} found`:'No stories match your search.';
  $('#sres').innerHTML=r.slice(0,30).map(i=>`<a class="sr" href="#/article/${encodeURIComponent(i.id)}">${i.image?`<img src="${esc(i.image)}" alt="" loading="lazy" onerror="this.remove()">`:''}<div><span class="lbl red">${esc(i.category)}</span><h3>${esc(i.title)}</h3><small>${esc(i.source)} ${ago(i.date)}</small></div></a>`).join('')}
-$('#bg').onclick=openD;$('#dx').onclick=closeD;$('#bd').onclick=closeD;$('#sbtn').onclick=openS;$('#sx').onclick=closeS;$('#si').oninput=doS;$('#sf').onsubmit=e=>e.preventDefault();
+$('#bg').onclick=openD;$('#dx').onclick=closeD;$('#bd').onclick=closeD;$('#sbtn').onclick=openS;$('#sx').onclick=closeS;$('#si').oninput=()=>doS();$('#sf').onsubmit=e=>e.preventDefault();
 $('#sres').onclick=e=>{if(e.target.closest('a'))closeS()};
 addEventListener('keydown',e=>{if(e.key==='Escape')closeAll();if(e.key==='/'&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)){e.preventDefault();openS()}});
 $('#pz').onclick=e=>{const p=$('#tk').classList.toggle('pz');e.currentTarget.setAttribute('aria-pressed',p);e.currentTarget.setAttribute('aria-label',p?'Play ticker':'Pause ticker')};
@@ -115,4 +121,41 @@ addEventListener('hashchange',route);
 const qcat=new URLSearchParams(location.search).get('category');if(!location.hash&&qcat&&CATS.some(x=>x[0]===qcat))location.hash='#/c/'+qcat;
 const legacyId=new URLSearchParams(location.search).get('id');if(!location.hash&&/\/article\.html$/.test(location.pathname)&&legacyId)location.hash='#/article/'+encodeURIComponent(legacyId);
 $('#app').innerHTML='<div class="sk" style="margin:48px 0"></div><div class="sk" style="margin:24px 0;height:160px"></div>';setActive('all');
-load().then(()=>{ticker();route()});
+load().then(()=>{ticker();route()})
+if('serviceWorker' in navigator) addEventListener('load',()=>navigator.serviceWorker.register('/service-worker.js').catch(()=>{}));;
+
+async function enhanceHome(category){
+ const target=$('#app .grid'); if(!target)return;
+ try{
+  const r=await get('/api/trending?limit=5');
+  const filtered=r.filter(i=>inCat(i,category));
+  if(!filtered.length)return;
+  const section=document.createElement('section'); section.className='trend-section';
+  section.innerHTML='<div class="sh"><h2>Most read</h2><span class="lbl">Readers are here</span></div><div class="trend-list">'+filtered.map((i,n)=>'<a class="trend-item" href="#/article/'+encodeURIComponent(i.id)+'"><b>0'+(n+1)+'</b><span><strong>'+esc(i.title)+'</strong><small>'+esc(i.source)+' · '+Number(i.view_count||0).toLocaleString('en-IN')+' views</small></span></a>').join('')+'</div>';
+  target.parentNode.insertBefore(section,target.nextSibling);
+ }catch(e){}
+}
+function trackView(id){try{navigator.sendBeacon('/api/news/'+encodeURIComponent(id)+'/view',new Blob(['{}'],{type:'application/json'}))}catch(e){}}
+function ensureSearchFilters(){
+ const sb=$('.sb'); if(!sb||$('#searchFilters'))return;
+ const box=document.createElement('div'); box.id='searchFilters'; box.className='search-filters';
+ box.innerHTML='<button data-search-cat="all" class="on">All</button>'+CATS.slice(1).map(x=>'<button data-search-cat="'+x[0]+'">'+x[1]+'</button>').join('');
+ sb.insertBefore(box,$('#sc'));
+ box.onclick=e=>{const b=e.target.closest('[data-search-cat]');if(!b)return;window.searchCat=b.dataset.searchCat;$$('[data-search-cat]',box).forEach(x=>x.classList.toggle('on',x===b));doS()};
+}
+const __openS=openS; openS=function(){__openS();ensureSearchFilters()};
+const __doS=doS; doS=function(){
+ const q=$('#si')?.value.trim().toLowerCase()||'',cat=window.searchCat||'all';
+ if(!q){$('#sc').textContent='Type to search all stories';$('#sres').innerHTML='';return}
+ const r=S.items.filter(i=>(cat==='all'||inCat(i,cat))&&[i.title,i.summary,i.source,i.category].join(' ').toLowerCase().includes(q));
+ $('#sc').textContent=r.length?(r.length+' '+(r.length===1?'story':'stories')+' found'):'No stories match your search.';
+ $('#sres').innerHTML=r.slice(0,30).map(i=>'<a class="sr" href="#/article/'+encodeURIComponent(i.id)+'">'+(i.image?'<img src="'+esc(i.image)+'" alt="" loading="lazy" onerror="this.remove()">':'')+'<div><span class="lbl red">'+esc(i.category)+'</span><h3>'+esc(i.title)+'</h3><small>'+esc(i.source)+' '+ago(i.date)+'</small></div></a>').join('')
+};
+const __article=article; article=async function(id){await __article(id);trackView(id)};
+async function liveRefresh(){
+ if(document.visibilityState!=='visible'||location.hash.startsWith('#/article/')||location.hash.startsWith('#/settings'))return;
+ const old=S.items.map(i=>i.id).join(','); await load(); ticker();
+ const fresh=S.items.map(i=>i.id).join(','); if(old!==fresh||S.api==='ok')render();
+}
+setInterval(liveRefresh,60000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')liveRefresh()});
