@@ -12,30 +12,19 @@ function norm(a,i){const id=a.id??a.slug??a._id??'n'+i;const img=a.image||a.imag
  return{id:String(id),title:a.title||a.headline||'Untitled',summary:a.summary||a.description||a.excerpt||'',body:a.content||a.body||a.text||'',image:typeof img==='string'?img:'',category:String(a.category||a.section||'General'),source:(a.source&&a.source.name)||a.source||a.publisher||'',date:a.published_at||a.publishedAt||a.pubDate||a.date||a.created_at||'',url:a.url||a.link||'',author:a.author||a.author_name||'PoliticsHub Editorial Desk'}}
 const pick=j=>Array.isArray(j)?j:(j.articles||j.news||j.items||j.data||j.results||[]);
 async function get(u){const r=await fetch(u,{cache:'no-store'});if(!r.ok)throw 0;const rows=pick(await r.json());return rows.map((x,i)=>{const img=x.image_url||x.image||x.imageUrl||x.urlToImage||x.thumbnail||x.img||'';const source=x.source_name||(x.source&&x.source.name)||x.source||x.publisher||'PoliticsHub';const date=x.published_at||x.published_at_site||x.publishedAt||x.pubDate||x.date||x.created_at||'';const body=x.article||x.bot_article||x.content||x.body||x.text||'';const summary=x.summary||x.bot_summary||x.description||x.excerpt||'';return {...x,id:String(x.id??x.slug??x._id??'n'+i),image:typeof img==='string'?img:'',source:String(source),date,body:String(body),summary:String(summary)};})}
-async function load(){let a=null,b=null;
- const results=await Promise.allSettled([get(ENDPOINTS.api),get(ENDPOINTS.snap)]);
- if(results[0].status==='fulfilled'){a=results[0].value;S.api=a.length?'ok':'empty'}else S.api='bad';
- if(results[1].status==='fulfilled'){b=results[1].value;S.snap=b.length?'ok':'empty'}else S.snap='bad';
- const src=(a&&a.length)?a:(b&&b.length)?b:null;
- if(src){S.items=src.map(norm).sort((x,y)=>new Date(y.date)-new Date(x.date)||0);S.mode=(a&&a.length)?'api':'snapshot'}
- else{S.items=[];S.mode='empty'}}
-const inCat=(it,c)=>c==='all'||it.category.toLowerCase().includes(c);
-const img=(it,cls='')=>it.image?`<img ${cls} src="${esc(it.image)}" alt="" loading="lazy" decoding="async" onerror="this.closest('.im,.cover')&&(this.parentElement.dataset.bad=1);this.remove()">`:'';
-const ck=it=>{const l=it.category.toLowerCase();const m=CATS.find(c=>c[0]!=='all'&&l.includes(c[0]));return m?m[0]:'all'};
-const slugify=s=>String(s??'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,110)||'story';
-const hl=c=>c==='all'?'/':`/${c}/`;
-const articleHref=it=>`/${ck(it)}/${encodeURIComponent(it.id)}-${slugify(it.title)}`;
-function card(it,i){const has=it.image;const meta=`${esc(it.source)}${it.source&&it.date?' · ':''}${ago(it.date)}`;
- return`<a class="card rv ${has?'im':'tx'}" data-k="${ck(it)}" href="${articleHref(it)}" style="transition-delay:${(i%3)*60}ms">${has?img(it):''}<span class="wm" aria-hidden="true">${esc(it.category.charAt(0))}</span><span class="chip">${esc(it.category)}</span><span class="go" aria-hidden="true">↗</span><h3>${esc(it.title)}</h3>${it.summary?`<p>${esc(it.summary)}</p>`:''}<span class="m">${meta}</span></a>`}
-function build(){const n=$('#nav');n.insertAdjacentHTML('afterbegin',CATS.map(([k,l])=>`<a href="${hl(k)}" data-c="${k}" data-k="${k}">${l}</a>`).join(''));$('#dl').innerHTML=[CATS[0],CATS[2],CATS[1],...CATS.slice(3)].map(([k,l])=>`<a class="l" href="${hl(k)}" data-c="${k}" data-k="${k}">${l}</a>`).join('')}
-function setActive(c){document.body.dataset.k=c||'all';$$('[data-c]').forEach(a=>a.classList.toggle('on',a.dataset.c===c));$$('#nav a').forEach(a=>a.setAttribute('aria-current',a.dataset.c===c?'page':'false'));moveInd()}
-function moveInd(){const a=$('#nav a.on'),i=$('#ind');if(!a){i.style.width=0;return}i.style.left=a.offsetLeft+'px';i.style.width=a.offsetWidth+'px'}
-async function ticker(){
- let source=S.items;
- try{const breaking=await get('/api/breaking');if(breaking.length)source=breaking.concat(S.items.filter(x=>!breaking.some(b=>b.id===x.id))).slice(0,10)}catch(e){}
- const t=$('#tick');if(!source.length){t.hidden=true;return}t.hidden=false;
- const h=source.slice(0,10).map(i=>'<a href="'+articleHref(i)+'">'+(i.is_breaking?'<b>BREAKING</b> ':'')+esc(i.title)+'</a>').join('');
- $('#tk').innerHTML='<div>'+h+h+'</div>'
+async function load(){
+ let a=null;
+ try{
+  a=await get(ENDPOINTS.api);
+  if(a.length){S.api='ok';S.snap='deferred';S.items=a.map(norm).sort((x,y)=>new Date(y.date)-new Date(x.date)||0);S.mode='api';return}
+  S.api='empty';
+ }catch(e){S.api='bad'}
+ try{
+  const b=await get(ENDPOINTS.snap);
+  if(b.length){S.snap='ok';S.items=b.map(norm).sort((x,y)=>new Date(y.date)-new Date(x.date)||0);S.mode='snapshot';return}
+  S.snap='empty';
+ }catch(e){S.snap='bad'}
+ S.items=[];S.mode='empty'
 }
 function home(c){setActive(c);document.title=(c==='all'?'':CATS.find(x=>x[0]===c)?.[1]+' — ')+'PoliticsHub.in';
  const list=S.items.filter(i=>inCat(i,c));const f=list.find(i=>i.image)||list[0];const rest=list.filter(i=>i!==f);
@@ -124,8 +113,8 @@ document.fonts?.ready.then(moveInd);
 addEventListener('hashchange',route);
 const qcat=new URLSearchParams(location.search).get('category');if(!location.hash&&qcat&&CATS.some(x=>x[0]===qcat))location.hash='#/c/'+qcat;
 
-$('#app').innerHTML='<div class="sk" style="margin:48px 0"></div><div class="sk" style="margin:24px 0;height:160px"></div>';setActive('all');
-load().then(()=>{ticker();route()})
+setActive('all');
+load().then(()=>{ticker();render()})
 if('serviceWorker' in navigator) addEventListener('load',()=>navigator.serviceWorker.register('/service-worker.js').catch(()=>{}));;
 
 async function enhanceHome(category){
@@ -158,8 +147,10 @@ const __doS=doS; doS=function(){
 const __article=article; article=async function(id){await __article(id);trackView(id)};
 async function liveRefresh(){
  if(document.visibilityState!=='visible'||location.pathname.split('/').filter(Boolean).length>=2||location.hash.startsWith('#/article/')||location.hash.startsWith('#/settings'))return;
- const old=S.items.map(i=>i.id).join(','); await load(); ticker();
- const fresh=S.items.map(i=>i.id).join(','); if(old!==fresh||S.api==='ok')render();
+ const old=S.items.map(i=>i.id).join(',');
+ await load(); ticker();
+ const fresh=S.items.map(i=>i.id).join(',');
+ if(old!==fresh) render();
 }
 setInterval(liveRefresh,60000);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')liveRefresh()});
