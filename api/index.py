@@ -142,7 +142,7 @@ def rows_json(rows,compact=False):
   if not (admin_ok() or row.get("status")=="published"):continue
   item=_publicize(row)
   if compact and admin_ok():
-   item={k:item.get(k) for k in ("id","title","source_name","category","status","instagram_status","instagram_attempts","instagram_error","instagram_selected","instagram_scheduled_at","instagram_queue_order","fact_check_status","bot_summary")}
+   item={k:item.get(k) for k in ("id","title","source_name","category","status","instagram_status","instagram_attempts","instagram_error","instagram_selected","instagram_scheduled_at","instagram_queue_order","fact_check_status","bot_summary","news_score","is_breaking","view_count")}
   out.append(item)
  return out
 def users():
