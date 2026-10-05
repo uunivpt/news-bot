@@ -1,7 +1,7 @@
 
 const CATS=[['all','Home'],['india','India'],['politics','Politics'],['world','World'],['business','Business'],['technology','Technology'],['sports','Sports'],['entertainment','Entertainment'],['hindi','Hindi']];
 const TABS=[['all','All'],['politics','Politics'],['india','India'],...CATS.slice(3)];
-const ENDPOINTS={api:'/api/news',snap:'news-data.json'};
+const ENDPOINTS={api:'/api/news?category=all&limit=200',search:'/api/search',snap:'news-data.json'};
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ls={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}},del:k=>{try{localStorage.removeItem(k)}catch(e){}}};
@@ -98,10 +98,10 @@ function closeD(){if(!document.body.classList.contains('dro'))return;document.bo
 function openS(){$('#sp').classList.add('open');$('#sp').setAttribute('aria-hidden','false');setTimeout(()=>$('#si').focus(),50);doS()}
 function closeS(){$('#sp').classList.remove('open');$('#sp').setAttribute('aria-hidden','true')}
 function closeAll(){closeD();closeS()}
-function doS(){const q=$('#si').value.trim().toLowerCase();if(!q){$('#sc').textContent='Type to search all stories';$('#sres').innerHTML='';return}
- const r=S.items.filter(i=>[i.title,i.summary,i.source,i.category].join(' ').toLowerCase().includes(q));
- $('#sc').textContent=r.length?`${r.length} ${r.length===1?'story':'stories'} found`:'No stories match your search.';
- $('#sres').innerHTML=r.slice(0,30).map(i=>`<a class="sr" href="${articleHref(i)}">${i.image?`<img src="${esc(i.image)}" alt="" loading="lazy" onerror="this.remove()">`:''}<div><span class="lbl red">${esc(i.category)}</span><h3>${esc(i.title)}</h3><small>${esc(i.source)} ${ago(i.date)}</small></div></a>`).join('')}
+async function doS(){const q=$('#si').value.trim();if(!q){$('#sc').textContent='Type to search the full archive';$('#sres').innerHTML='';return}
+ let r=[];try{r=await get(ENDPOINTS.search+'?q='+encodeURIComponent(q)+'&limit=50')}catch(e){r=S.items.filter(i=>[i.title,i.summary,i.source,i.category].join(' ').toLowerCase().includes(q.toLowerCase())).slice(0,50)}
+ $('#sc').textContent=r.length?(r.length+' '+(r.length===1?'story':'stories')+' found in the archive'):'No stories match your search.';
+ $('#sres').innerHTML=r.slice(0,50).map(i=>`<a class="sr" href="${articleHref(i)}">${i.image?`<img src="${esc(i.image)}" alt="" loading="lazy" onerror="this.remove()">`:''}<div><span class="lbl red">${esc(i.category)}</span><h3>${esc(i.title)}</h3><small>${esc(i.source)} ${ago(i.date)}</small></div></a>`).join('')}
 $('#bg').onclick=openD;$('#dx').onclick=closeD;$('#bd').onclick=closeD;$('#sbtn').onclick=openS;$('#sx').onclick=closeS;$('#si').oninput=()=>doS();$('#sf').onsubmit=e=>e.preventDefault();
 $('#sres').onclick=e=>{if(e.target.closest('a'))closeS()};
 addEventListener('keydown',e=>{if(e.key==='Escape')closeAll();if(e.key==='/'&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)){e.preventDefault();openS()}});
