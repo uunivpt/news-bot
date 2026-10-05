@@ -351,9 +351,8 @@ def robots():
 
 @app.get("/sitemap.xml")
 def sitemap():
- database=db()
+ rows=_public_rows_for_section("all",50000)
  try:
-  rows=database.latest(50000,"all","published")
   urls=["https://www.politicshub.in/"]+[f"https://www.politicshub.in/{x}/" for x in sorted(set(CATEGORY_SLUGS.values()))]+["https://www.politicshub.in/about.html","https://www.politicshub.in/contact.html","https://www.politicshub.in/editorial-policy.html","https://www.politicshub.in/corrections.html","https://www.politicshub.in/terms.html","https://www.politicshub.in/disclaimer.html","https://www.politicshub.in/privacy.html","https://www.politicshub.in/cookies.html","https://www.politicshub.in/author/politicshub-news-desk"]
   body="<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n"
   body+="".join("<url><loc>"+html.escape(u)+"</loc></url>\n" for u in urls)
@@ -365,10 +364,10 @@ def sitemap():
 
 @app.get("/news-sitemap.xml")
 def news_sitemap():
- database=db()
+ rows=_public_rows_for_section("all",5000)
  try:
-  cutoff=datetime.now(timezone.utc)-timedelta(days=2); rows=[]
-  for row in database.latest(5000,"all","published"):
+  cutoff=datetime.now(timezone.utc)-timedelta(days=2); selected=[]
+  for row in rows:
    raw=row.get("published_at_site") or row.get("published_at")
    try: dt=datetime.fromisoformat(str(raw).replace("Z","+00:00")); dt=dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
    except Exception: continue
@@ -382,7 +381,7 @@ def news_sitemap():
    title=html.escape(str(row.get("title") or "")[:110]); loc=html.escape(SITE_ORIGIN+article_path(row))
    body+=f"<url><loc>{loc}</loc><news:news><news:publication><news:name>PoliticsHub.in</news:name><news:language>en</news:language></news:publication><news:publication_date>{html.escape(pub)}</news:publication_date><news:title>{title}</news:title></news:news></url>\n"
   body+="</urlset>"; return app.response_class(body,mimetype="application/xml")
- finally: database.close()
+
 
 @app.get("/api/og-home")
 def og_home():
@@ -407,9 +406,16 @@ def newsletter_subscribe():
  if not _public_rate_allowed(20,3600):return jsonify({"error":"too many requests"}),429
  body=request.get_json(silent=True) or request.form.to_dict() or {}; email=str(body.get("email","")).strip().lower()
  if not re.fullmatch(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",email):return jsonify({"error":"Enter a valid email address"}),400
- database=db()
- try: database.subscribe_newsletter(email); return jsonify({"ok":True,"message":"You are on the PoliticsHub newsletter list."})
- finally: database.close()
+ try:
+  database=db()
+  try: database.subscribe_newsletter(email); return jsonify({"ok":True,"message":"You are on the PoliticsHub newsletter list."})
+  finally: database.close()
+ except RuntimeError:
+  try:
+   import requests
+   response=requests.post(PUBLIC_BACKEND_ORIGIN+"/api/newsletter",json={"email":email},timeout=_PUBLIC_API_TIMEOUT,headers={"Accept":"application/json","X-PoliticsHub-Proxy":"1"})
+   return app.response_class(response.content,status=response.status_code,content_type=response.headers.get("Content-Type","application/json"))
+  except Exception: return jsonify({"error":"newsletter service unavailable"}),503
 
 @app.get("/<category>/")
 def seo_section(category):
