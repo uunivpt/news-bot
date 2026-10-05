@@ -76,7 +76,7 @@ function settings(sub){setActive('');document.title='Settings — PoliticsHub.in
  <div class="row"><span>Last update</span><span>${last?fmt(last):'Unknown'}</span></div></section></div>`;
  if(sub)$('#'+sub)?.scrollIntoView()}
 function render(){
- const path=location.pathname.split('/').filter(Boolean); const hash=location.hash.slice(1).split('/').filter(Boolean); const p=path.length>=2&&/^\\d+-/.test(path[1])?['article',path[1].split('-')[0]]:(path.length===1&&CATS.some(x=>x[0]===path[0])?['c',path[0]]:hash); closeAll();window.scrollTo(0,0);
+ const path=location.pathname.split('/').filter(Boolean); const hash=location.hash.slice(1).split('/').filter(Boolean); const p=path.length>=2&&/^\d+-/.test(path[1])?['article',path[1].split('-')[0]]:(path.length===1&&CATS.some(x=>x[0]===path[0])?['c',path[0]]:hash); closeAll();window.scrollTo(0,0);
  const m=$('#app');m.style.animation='none';void m.offsetWidth;m.style.animation='';
  if(p[0]==='article')article(decodeURIComponent(p[1]||''));else if(p[0]==='settings')settings(p[1]);
  else{const c=p[0]==='c'&&CATS.some(x=>x[0]===p[1])?p[1]:'all';home(c)}
