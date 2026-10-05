@@ -447,7 +447,6 @@ def seo_article(category,item_id,slug):
  canonical_path=article_path(row); requested=f"/{category}/{item_id}-{slug}"
  if requested.rstrip("/")!=canonical_path.rstrip("/"):return redirect(SITE_ORIGIN+canonical_path,code=301)
  return Response(_article_html(row),mimetype="text/html")
-tabase.close()
 
 @app.post("/api/admin/logout")
 def logout():
