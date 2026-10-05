@@ -3,7 +3,7 @@
 No LLM/API dependency. All decisions are rule/score/hash based and persisted.
 """
 from __future__ import annotations
-import hashlib, json, os, re, shutil
+import hashlib, json, re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -25,8 +25,6 @@ def val(row,key,default=None):
     except Exception:return default
 
 def ensure_schema(db):
-    serial="BIGSERIAL" if getattr(db,"_postgres",False) else "INTEGER"
-    auto="BIGSERIAL PRIMARY KEY" if getattr(db,"_postgres",False) else "INTEGER PRIMARY KEY AUTOINCREMENT"
     stmts=[
       f"""CREATE TABLE IF NOT EXISTS ph_news_scores(item_id BIGINT PRIMARY KEY, score REAL NOT NULL, freshness REAL, coverage REAL, importance REAL, duplicate_risk REAL, verification REAL, breaking INTEGER DEFAULT 0, reason TEXT, updated_at TEXT NOT NULL)""",
       """CREATE TABLE IF NOT EXISTS ph_source_reliability(source_name TEXT PRIMARY KEY, attempts INTEGER DEFAULT 0, successes INTEGER DEFAULT 0, broken_links INTEGER DEFAULT 0, corrections INTEGER DEFAULT 0, coverage_events INTEGER DEFAULT 0, last_seen_at TEXT, updated_at TEXT NOT NULL)""",
