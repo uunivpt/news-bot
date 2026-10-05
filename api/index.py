@@ -177,7 +177,9 @@ def _publicize(row):
   article_text=re.sub(r"(?:\\n|\n|\s)*Why it matters:\s*$","",article_text,flags=re.I).strip()
   r["article"]=article_text
   if r.get("image_url"): r["image_url"]=None
-  r.pop("editorial_context",None)\n  if "editorial_value" in r: r["editorial_value"]=bool(r.get("editorial_value"))\n  if "source_count" in r: r["source_count"]=int(r.get("source_count") or 0)
+  r.pop("editorial_context",None)
+  if "editorial_value" in r: r["editorial_value"]=bool(r.get("editorial_value"))
+  if "source_count" in r: r["source_count"]=int(r.get("source_count") or 0)
  score=story_score(r.get("title",""),r.get("summary",""),r.get("category") or "general",r.get("source_name") or "")
  r["news_score"]=score; r["is_breaking"]=is_breaking(r.get("title",""),r.get("summary",""),score)
  return r
@@ -796,7 +798,6 @@ def save_settings():
  dispatch=dispatch_worker() if any(k.startswith("instagram_") for k in values) else None; payload={"ok":True,"settings":settings_now}
  if dispatch is not None:payload.update({"worker_dispatched":dispatch.get("ok",False),"worker_dispatch":dispatch})
  return jsonify(payload)
-
 
 def change(item_id,status=None,**extra):
  err=require_admin()
