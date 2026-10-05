@@ -33,7 +33,7 @@ async function ticker(){
  let source=S.items;
  try{const breaking=await get('/api/breaking');if(breaking.length)source=breaking.concat(S.items.filter(x=>!breaking.some(b=>b.id===x.id))).slice(0,10)}catch(e){}
  const t=$('#tick');if(!source.length){t.hidden=true;return}t.hidden=false;
- const h=source.slice(0,10).map(i=>'<a href="#/article/'+encodeURIComponent(i.id)+'">'+(i.is_breaking?'<b>BREAKING</b> ':'')+esc(i.title)+'</a>').join('');
+ const h=source.slice(0,10).map(i=>'<a href="'+articleHref(i)+'">'+(i.is_breaking?'<b>BREAKING</b> ':'')+esc(i.title)+'</a>').join('');
  $('#tk').innerHTML='<div>'+h+h+'</div>'
 }
 function home(c){setActive(c);document.title=(c==='all'?'':CATS.find(x=>x[0]===c)?.[1]+' — ')+'PoliticsHub.in';
@@ -44,8 +44,8 @@ function home(c){setActive(c);document.title=(c==='all'?'':CATS.find(x=>x[0]===c
  const words=f.title.split(' ').slice(0,18).map((w,i)=>`<span class="w"><span style="--i:${i}">${esc(w)}</span></span>`).join(' ');
  const lt=rest.slice(0,3).map(i=>`<a class="li" data-k="${ck(i)}" href="${articleHref(i)}"><span>${esc(i.title)}</span><small>${ago(i.date)}</small></a>`).join('')||'<p class="msg" style="padding:20px 0">No other stories yet.</p>';
  const pl=CATS.slice(1).map(([k,l])=>`<a data-k="${k}" href="${hl(k)}">${l}<small>${S.items.filter(i=>inCat(i,k)).length}</small></a>`).join('');
- const hero=`<section class="bento"><div class="tile hl" data-k="${fk}"><span class="burst" aria-hidden="true">✺</span><span class="lbl"><i class="dot"></i>What matters, clearly. ${date}</span><h1>${words}</h1><p>${esc(f.summary)}</p><a class="btn" data-mag href="#/article/${encodeURIComponent(f.id)}">Read latest story <span aria-hidden="true">↗</span></a></div>
- <a class="tile cv ${f.image?'im':'tx'}" data-k="${fk}" style="--d:1" href="#/article/${encodeURIComponent(f.id)}" aria-label="${esc(f.title)}">${f.image?img(f):`<span class="big">${esc(f.category)}</span>`}<span class="chip stk">${esc(f.category)}</span><span class="cap">${esc(f.source)} ${ago(f.date)}</span></a>
+ const hero=`<section class="bento"><div class="tile hl" data-k="${fk}"><span class="burst" aria-hidden="true">✺</span><span class="lbl"><i class="dot"></i>What matters, clearly. ${date}</span><h1>${words}</h1><p>${esc(f.summary)}</p><a class="btn" data-mag href="${articleHref(f)}">Read latest story <span aria-hidden="true">↗</span></a></div>
+ <a class="tile cv ${f.image?'im':'tx'}" data-k="${fk}" style="--d:1" href="${articleHref(f)}" aria-label="${esc(f.title)}">${f.image?img(f):`<span class="big">${esc(f.category)}</span>`}<span class="chip stk">${esc(f.category)}</span><span class="cap">${esc(f.source)} ${ago(f.date)}</span></a>
  <div class="tile ct" style="--d:2"><span class="lbl">Today on PoliticsHub.in</span><b class="num" data-n="${list.length}">${list.length}</b><span>stories in ${esc(ctn)}</span></div>
  <div class="tile sc" style="--d:3"><span class="lbl">Jump to a desk</span><div class="pills">${pl}</div></div>
  <div class="tile lt" style="--d:4"><span class="lbl">Just in</span>${lt}</div></section>`;
@@ -122,7 +122,7 @@ $('#yr').textContent=new Date().getFullYear();build();
 document.fonts?.ready.then(moveInd);
 addEventListener('hashchange',route);
 const qcat=new URLSearchParams(location.search).get('category');if(!location.hash&&qcat&&CATS.some(x=>x[0]===qcat))location.hash='#/c/'+qcat;
-const legacyId=new URLSearchParams(location.search).get('id');if(!location.hash&&/\/article\.html$/.test(location.pathname)&&legacyId)location.hash='#/article/'+encodeURIComponent(legacyId);
+
 $('#app').innerHTML='<div class="sk" style="margin:48px 0"></div><div class="sk" style="margin:24px 0;height:160px"></div>';setActive('all');
 load().then(()=>{ticker();route()})
 if('serviceWorker' in navigator) addEventListener('load',()=>navigator.serviceWorker.register('/service-worker.js').catch(()=>{}));;
