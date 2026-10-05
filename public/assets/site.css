@@ -136,3 +136,5 @@ footer h4{font:600 11px var(--sans);letter-spacing:.14em;text-transform:uppercas
 .search-filters button.on{background:var(--k);border-color:var(--k);color:#fff}
 @media(max-width:900px){.trend-list{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:560px){.trend-section{padding:20px;border-radius:26px}.trend-list{grid-template-columns:1fr}.trend-item{padding:13px}.trend-item>b{font-size:22px}}
+
+.tk a b{font:800 10px var(--sans);letter-spacing:.08em;color:var(--k);margin-right:6px}
