@@ -5,6 +5,7 @@ from typing import Any, Callable
 
 from .database import NewsDatabase
 from .rss import collect_rss
+from .news_api import collect_newsapi, collect_newsdata
 from .telegram_public import collect_public_telegram
 from .website_monitor import collect_website
 from .phase_system import ensure_schema, run as agent_run, cluster_stories
@@ -15,6 +16,8 @@ COLLECTORS: dict[str, Callable[[dict[str, Any]], list]] = {
     "rss": collect_rss,
     "telegram": collect_public_telegram,
     "website": collect_website,
+    "newsapi": collect_newsapi,
+    "newsdata": collect_newsdata,
 }
 
 
