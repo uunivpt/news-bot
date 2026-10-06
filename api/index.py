@@ -234,7 +234,7 @@ def _publicize(row):
  return r
 
 
-SITE_ORIGIN="https://www.politicshub.in"
+SITE_ORIGIN="https://politicshub.in"
 EDITORIAL_DESK="PoliticsHub Editorial Desk"
 EDITORIAL_EMAIL="politicshub.in@gmail.com"
 CATEGORY_SLUGS={"general":"india","india":"india","world":"world","politics":"politics","business":"business","technology":"technology","sports":"sports","entertainment":"entertainment","science":"science","health":"health","hindi":"hindi"}
