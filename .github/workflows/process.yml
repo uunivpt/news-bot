@@ -85,6 +85,10 @@ jobs:
         env:
           BOT_REPAIR_BATCH: '5000'
         run: python scripts/repair_bot_content.py
+      - name: Repair legacy NewsData category routing
+        env:
+          PYTHONPATH: .
+        run: python scripts/repair_news_categories.py
       - name: Export public news snapshot for Render
         env:
           PYTHONPATH: .
