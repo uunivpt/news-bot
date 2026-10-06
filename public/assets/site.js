@@ -16,7 +16,7 @@ const CACHE_KEY='ph-news-cache-v2';
 function cacheSave(items){try{localStorage.setItem(CACHE_KEY,JSON.stringify({ts:Date.now(),items}));}catch(e){}}
 function cacheLoad(){try{const x=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');return x&&Array.isArray(x.items)?x:null}catch(e){return null}}
 function slugify(value){
- return String(value||'').toLowerCase().normalize('NFKD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,96)||'story';
+ return String(value||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,96)||'story';
 }
 function ck(item){
  const raw=typeof item==='string'?item:(item?.category||item?.section||'all');
@@ -35,31 +35,31 @@ function inCat(item,cat){return cat==='all'||ck(item)===cat}
 function hl(cat){return cat&&cat!=='all'?'/'+encodeURIComponent(cat)+'/':'/'}
 function articleHref(item){
  const id=String(item?.id??'').trim();
- if(!/^\\d+$/.test(id))return '#/article/'+encodeURIComponent(id);
+ if(!/^[0-9]+$/.test(id))return '#/article/'+encodeURIComponent(id);
  const category=ck(item);
  return '/'+(category==='all'?'india':category)+'/'+id+'-'+slugify(item?.title||'story');
 }
 function img(item){
  const src=String(item?.image||'').trim();
  if(!src)return'';
- const safe=/^(https?:)?\\/\\//i.test(src)||src.startsWith('/');
+ const safe=src.startsWith('/')||src.startsWith('http://')||src.startsWith('https://');
  if(!safe)return'';
  return '<img src="'+esc(src)+'" alt="" loading="lazy" decoding="async" onerror="this.remove()">';
 }
 function card(item){
  const k=ck(item),title=String(item?.title||'Untitled'),summary=String(item?.summary||'').trim();
  return '<a class="card '+(item?.image?'im':'tx')+' rv" data-k="'+k+'" href="'+esc(articleHref(item))+'" aria-label="'+esc(title)+'">'+
-   (item?.image?img(item):'<span class="wm" aria-hidden="true">'+esc((item?.category||k).slice(0,1).toUpperCase())+'</span>')+
-   '<span class="chip stk">'+esc(item?.category||k)+'</span>'+
-   '<span class="go" aria-hidden="true">↗</span>'+
-   '<h3>'+esc(title)+'</h3>'+
-   (summary?'<p>'+esc(summary)+'</p>':'')+
-   '<span class="m">'+esc(item?.source||'PoliticsHub')+' · '+esc(ago(item?.date))+'</span></a>';
+ (item?.image?img(item):'<span class="wm" aria-hidden="true">'+esc((item?.category||k).slice(0,1).toUpperCase())+'</span>')+
+ '<span class="chip stk">'+esc(item?.category||k)+'</span>'+
+ '<span class="go" aria-hidden="true">↗</span>'+
+ '<h3>'+esc(title)+'</h3>'+
+ (summary?'<p>'+esc(summary)+'</p>':'')+
+ '<span class="m">'+esc(item?.source||'PoliticsHub')+' · '+esc(ago(item?.date))+'</span></a>';
 }
 function setActive(cat){
  const key=cat||'all';
- $('nav.main a').forEach(a=>a.classList.toggle('on',a.dataset.k===key));
- $('#dl a.l').forEach(a=>a.classList.toggle('on',a.dataset.k===key));
+ $$('nav.main a').forEach(a=>a.classList.toggle('on',a.dataset.k===key));
+ $$('#dl a.l').forEach(a=>a.classList.toggle('on',a.dataset.k===key));
  moveInd();
 }
 function moveInd(){
@@ -74,12 +74,8 @@ function moveInd(){
 }
 function build(){
  const nav=$('nav.main'),drawer=$('#dl');
- if(nav){
-  nav.innerHTML='<span id="ind" aria-hidden="true"></span>'+CATS.map(([k,l])=>'<a href="'+hl(k)+'" data-k="'+k+'">'+l+'</a>').join('');
- }
- if(drawer){
-  drawer.innerHTML=CATS.map(([k,l])=>'<a class="l" href="'+hl(k)+'" data-k="'+k+'">'+l+'</a>').join('');
- }
+ if(nav)nav.innerHTML='<span id="ind" aria-hidden="true"></span>'+CATS.map(([k,l])=>'<a href="'+hl(k)+'" data-k="'+k+'">'+l+'</a>').join('');
+ if(drawer)drawer.innerHTML=CATS.map(([k,l])=>'<a class="l" href="'+hl(k)+'" data-k="'+k+'">'+l+'</a>').join('');
  const y=$('#yr');if(y)y.textContent=new Date().getFullYear();
 }
 function ticker(){
