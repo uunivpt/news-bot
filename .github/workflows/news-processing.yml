@@ -4,6 +4,9 @@ permissions:
   contents: write
 
 on:
+  push:
+    branches:
+      - main
   # Stagger away from the top of the hour so GitHub Actions scheduler load
   # does not keep the newsroom job waiting.
   schedule:
