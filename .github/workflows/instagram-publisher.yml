@@ -36,9 +36,11 @@ jobs:
           META_INSTAGRAM_ACCOUNT_ID: ${{ secrets.META_INSTAGRAM_ACCOUNT_ID }}
           CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
           CLOUDINARY_UPLOAD_PRESET: ${{ secrets.CLOUDINARY_UPLOAD_PRESET }}
+          META_API_VERSION: ${{ secrets.META_API_VERSION }}
+          META_API_BASE_URL: ${{ secrets.META_API_BASE_URL }}
         run: |
           missing=()
-          for name in DATABASE_URL META_ACCESS_TOKEN META_INSTAGRAM_ACCOUNT_ID CLOUDINARY_CLOUD_NAME CLOUDINARY_UPLOAD_PRESET; do
+          for name in DATABASE_URL META_ACCESS_TOKEN META_INSTAGRAM_ACCOUNT_ID CLOUDINARY_CLOUD_NAME CLOUDINARY_UPLOAD_PRESET META_API_VERSION META_API_BASE_URL; do
             if [ -z "${!name}" ]; then missing+=("$name"); fi
           done
           if [ ${#missing[@]} -gt 0 ]; then
