@@ -336,7 +336,7 @@ def security_headers(response):
  response.headers["Referrer-Policy"]="strict-origin-when-cross-origin"
  response.headers["Permissions-Policy"]="camera=(), microphone=(), geolocation=(), payment=(), usb=()"
  response.headers["Strict-Transport-Security"]="max-age=63072000; includeSubDomains; preload"
- response.headers["Content-Security-Policy"]="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; media-src 'self' https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-src 'self'; worker-src 'self'; upgrade-insecure-requests"
+ response.headers["Content-Security-Policy"]="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://pagead2.googlesyndication.com https://googleads.g.doubleclick.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; media-src 'self' https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://pagead2.googlesyndication.com https://googleads.g.doubleclick.net; frame-src 'self' https://googleads.g.doubleclick.net https://tpc.googlesyndication.com; worker-src 'self'; upgrade-insecure-requests"
  response.headers["Cross-Origin-Opener-Policy"]="same-origin"
  response.headers["Cross-Origin-Resource-Policy"]="same-origin"
  response.headers["X-Permitted-Cross-Domain-Policies"]="none"
@@ -402,34 +402,6 @@ def canonical_host():
 def robots():
  return app.response_class("User-agent: *\nAllow: /\nAllow: /api/\nAllow: /api/news\nAllow: /ads.txt\nDisallow: /admin/\nDisallow: /admin.html\nDisallow: /admin.js\nDisallow: /newsroom-console-8x4m7k2q.html\nSitemap: https://www.politicshub.in/sitemap.xml\nSitemap: https://www.politicshub.in/news-sitemap.xml\n",mimetype="text/plain")
 
-@app.get("/sitemap.xml")
-def sitemap():
- rows=_public_rows_for_section("all",50000)
- urls=["https://www.politicshub.in/"]+[f"https://www.politicshub.in/{x}/" for x in sorted(set(CATEGORY_SLUGS.values()))]+["https://www.politicshub.in/about.html","https://www.politicshub.in/contact.html","https://www.politicshub.in/editorial-policy.html","https://www.politicshub.in/corrections.html","https://www.politicshub.in/terms.html","https://www.politicshub.in/disclaimer.html","https://www.politicshub.in/privacy.html","https://www.politicshub.in/cookies.html","https://www.politicshub.in/author/politicshub-news-desk"]
- body="<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n"
- body+="".join("<url><loc>"+html.escape(u)+"</loc></url>\n" for u in urls)
- for row in rows:
-  try: body+="<url><loc>"+html.escape(SITE_ORIGIN+article_path(row))+"</loc></url>\n"
-  except Exception: pass
- body+="</urlset>"; return app.response_class(body,mimetype="application/xml")
-
-@app.get("/news-sitemap.xml")
-def news_sitemap():
- rows=_public_rows_for_section("all",5000); cutoff=datetime.now(timezone.utc)-timedelta(days=2); selected=[]
- for row in rows:
-  raw=row.get("published_at_site") or row.get("published_at")
-  try: dt=datetime.fromisoformat(str(raw).replace("Z","+00:00")); dt=dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
-  except Exception: continue
-  if dt>=cutoff: selected.append(row)
-  if len(selected)>=1000: break
- body="<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\" xmlns:news=\"http://www.google.com/schemas/sitemap-news/0.9\">\n"
- for row in selected:
-  raw=row.get("published_at_site") or row.get("published_at")
-  try: dt=datetime.fromisoformat(str(raw).replace("Z","+00:00")); dt=dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc); pub=dt.astimezone(timezone.utc).isoformat().replace("+00:00","Z")
-  except Exception: continue
-  title=html.escape(str(row.get("title") or "")); loc=html.escape(SITE_ORIGIN+article_path(row))
-  body+=f"<url><loc>{loc}</loc><news:news><news:publication><news:name>PoliticsHub.in</news:name><news:language>en</news:language></news:publication><news:publication_date>{html.escape(pub)}</news:publication_date><news:title>{title}</news:title></news:news></url>\n"
- body+="</urlset>"; return app.response_class(body,mimetype="application/xml")
 @app.get("/api/og-home")
 def og_home():
  from PIL import Image, ImageDraw, ImageFont
@@ -1123,75 +1095,6 @@ def legacy_home():
  return redirect("/",code=301)
 
 # Render web-service compatibility: serve remaining static assets/pages.
-
-@app.post("/api/ai/translate")
-def ai_translate():
-    err=require_admin()
-    if err:return err
-    err=require_csrf()
-    if err:return err
-    body=request.get_json(silent=True) or {}
-    text_value=str(body.get("text") or "").strip()
-    language=str(body.get("target_language") or "").strip()
-    if not text_value or language.lower() not in {"english","hindi","marathi"}:
-        return jsonify({"error":"text and target_language (English/Hindi/Marathi) are required"}),400
-    try:
-        from app.phi4 import translate
-        return jsonify({"ok":True,"provider":"microsoft_phi4","translation":translate(text_value,language)})
-    except Exception as exc:
-        return jsonify({"error":str(exc)[:500]}),503
-
-
-@app.post("/api/ai/neutrality")
-def ai_neutrality():
-    err=require_admin()
-    if err:return err
-    err=require_csrf()
-    if err:return err
-    body=request.get_json(silent=True) or {}
-    title=str(body.get("title") or "").strip()
-    article=str(body.get("article") or "").strip()
-    if not title or not article:return jsonify({"error":"title and article are required"}),400
-    try:
-        from app.phi4 import neutrality_check
-        result=neutrality_check(title,article)
-        return jsonify({"ok":True,"provider":"microsoft_phi4","result":result})
-    except Exception as exc:
-        return jsonify({"error":str(exc)[:500]}),503
-
-
-@app.post("/api/ai/reel-script")
-def ai_reel_script():
-    err=require_admin()
-    if err:return err
-    err=require_csrf()
-    if err:return err
-    body=request.get_json(silent=True) or {}
-    title=str(body.get("title") or "").strip()
-    article=str(body.get("article") or "").strip()
-    if not title or not article:return jsonify({"error":"title and article are required"}),400
-    try:
-        from app.phi4 import reel_script
-        return jsonify({"ok":True,"provider":"microsoft_phi4","script":reel_script(title,article)})
-    except Exception as exc:
-        return jsonify({"error":str(exc)[:500]}),503
-
-
-@app.post("/api/ai/assistant")
-def ai_assistant():
-    err=require_admin()
-    if err:return err
-    err=require_csrf()
-    if err:return err
-    body=request.get_json(silent=True) or {}
-    instruction=str(body.get("instruction") or "").strip()
-    context=str(body.get("context") or "").strip()
-    if not instruction:return jsonify({"error":"instruction is required"}),400
-    try:
-        from app.phi4 import newsroom_assistant
-        return jsonify({"ok":True,"provider":"microsoft_phi4","answer":newsroom_assistant(instruction,context)})
-    except Exception as exc:
-        return jsonify({"error":str(exc)[:500]}),503
 
 
 @app.route("/<path:path>")
