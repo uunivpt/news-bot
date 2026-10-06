@@ -89,18 +89,20 @@ function ticker(){
 }
 function hydrateCache(){const x=cacheLoad();if(!x||!x.items.length)return false;S.items=x.items.map(norm).sort((a,b)=>new Date(b.date)-new Date(a.date)||0);S.mode='cache';S.api='stale';return true}
 async function load(){
- let a=null;
- try{
-  a=await get(ENDPOINTS.api);
-  if(a.length){S.api='ok';S.snap='deferred';S.items=a.map(norm).sort((x,y)=>new Date(y.date)-new Date(x.date)||0);S.mode='api';cacheSave(S.items);return}
-  S.api='empty';
- }catch(e){S.api='bad'}
- try{
-  const b=await get(ENDPOINTS.snap);
-  if(b.length){S.snap='ok';S.items=b.map(norm).sort((x,y)=>new Date(y.date)-new Date(x.date)||0);S.mode='snapshot';cacheSave(S.items);return}
-  S.snap='empty';
- }catch(e){S.snap='bad'}
- if(!S.items.length)S.mode='empty'
+ let a=[],b=[];
+ try{a=await get(ENDPOINTS.api);S.api=a.length?'ok':'empty'}catch(e){S.api='bad'}
+ try{b=await get(ENDPOINTS.snap);S.snap=b.length?'ok':'empty'}catch(e){S.snap='bad'}
+ const all=[...(a||[]),...(b||[])].map(norm);
+ const seen=new Map();
+ for(const item of all){
+  const key=String(item.id||item.url||item.title).trim().toLowerCase();
+  if(!key)continue;
+  const prev=seen.get(key);
+  if(!prev||new Date(item.date)>new Date(prev.date)||(!prev.body&&item.body)||(!prev.image&&item.image))seen.set(key,item);
+ }
+ S.items=[...seen.values()].sort((x,y)=>new Date(y.date)-new Date(x.date)||0);
+ if(S.items.length){S.mode=a.length?'api+snapshot':'snapshot';cacheSave(S.items)}
+ else{S.mode='empty'}
 }
 function home(c){setActive(c);document.title=(c==='all'?'':CATS.find(x=>x[0]===c)?.[1]+' — ')+'PoliticsHub.in';
  const list=S.items.filter(i=>inCat(i,c));const f=list.find(i=>i.image)||list[0];const rest=list.filter(i=>i!==f);
