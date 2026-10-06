@@ -28,11 +28,6 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       PGSSLMODE: require
-      PHI4_ENABLED: ${{ secrets.PHI4_ENABLED || 'true' }}
-      PHI4_API_KEY: ${{ secrets.PHI4_API_KEY }}
-      PHI4_ENDPOINT: ${{ secrets.PHI4_ENDPOINT || 'https://api.aicredits.in/v1' }}
-      PHI4_MODEL: ${{ secrets.PHI4_MODEL || 'microsoft/phi-4' }}
-      PHI4_TIMEOUT_SECONDS: ${{ secrets.PHI4_TIMEOUT_SECONDS || '25' }}
       NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
       NEWSDATA_API_KEY: ${{ secrets.NEWSDATA_API_KEY }}
     steps:
@@ -48,33 +43,11 @@ jobs:
         env:
           PYTHONPATH: .
         run: python -m compileall -q app api scripts run.py
-      - name: Normalize Phi-4 configuration
-        shell: bash
-        run: |
-          enabled="$(printf '%s' "$PHI4_ENABLED" | tr '[:upper:]' '[:lower:]')"
-          if [[ "$enabled" != "true" ]]; then
-            echo "Phi-4 disabled; deterministic newsroom pipeline will be used."
-            echo "PHI4_ENABLED=false" >> "$GITHUB_ENV"
-            exit 0
-          fi
-          if [[ -z "$PHI4_API_KEY" ]]; then
-            echo "Phi-4 API key is not available to this workflow; using deterministic fallback."
-            echo "PHI4_ENABLED=false" >> "$GITHUB_ENV"
-            exit 0
-          fi
-          if [[ -z "$PHI4_ENDPOINT" || -z "$PHI4_MODEL" ]]; then
-            echo "Phi-4 endpoint/model configuration is incomplete; using deterministic fallback."
-            echo "PHI4_ENABLED=false" >> "$GITHUB_ENV"
-            exit 0
-          fi
-          echo "Phi-4 configuration detected; model=$PHI4_MODEL"
       - name: Test deterministic newsroom bot
         env:
           PYTHONPATH: .
           DATABASE_URL: ''
           PGSSLMODE: ''
-          # Unit tests must be isolated from the live Phi-4 service.
-          # Production collection below still uses Phi-4 when configured.
           PHI4_ENABLED: 'false'
         run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Verify production database configuration
