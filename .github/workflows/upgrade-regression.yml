@@ -24,11 +24,16 @@ jobs:
           from pathlib import Path
           import re
           html=Path("public/admin/index.html").read_text(encoding="utf-8")
-          scripts=re.findall(r"<script>(.*?)</script>",html,re.S)
+          scripts=re.findall(r'<script[^>]+src=["\']([^"\']+)["\']',html,re.I)
           if not scripts:
-              raise SystemExit("No inline admin script found")
-          Path("/tmp/admin.js").write_text("\n".join(scripts),encoding="utf-8")
+              raise SystemExit("No external admin script found")
+          admin=next((x for x in scripts if x.rstrip("/") == "/admin.js"), None)
+          if not admin:
+              raise SystemExit("Expected /admin.js entrypoint not found")
+          path=Path("public/admin.js")
+          if not path.exists():
+              raise SystemExit("public/admin.js is missing")
           PY
-          node --check /tmp/admin.js
+          node --check public/admin.js
       - name: Deterministic upgrade tests
         run: PYTHONPATH=. pytest -q tests/test_advanced_system.py
