@@ -60,8 +60,12 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!api(?:/|$)|assets(?:/|$)|coming-soon\\.html$|[^/]*\\.[^/]+$).*)",
-      "destination": "/coming-soon.html?v=phcover2"
+      "source": "/",
+      "destination": "/coming-soon.html?v=phcover3"
+    },
+    {
+      "source": "/((?!api(?:/|$)|assets(?:/|$)|coming-soon\\.html$|[^/]*\\.[^/]+$).+)",
+      "destination": "/coming-soon.html?v=phcover3"
     }
   ]
 }
