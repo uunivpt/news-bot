@@ -73,15 +73,11 @@ jobs:
         env:
           PYTHONPATH: .
         run: python scripts/export_public_snapshot.py
-      - name: Commit public data
+      - name: Keep public snapshot out of production branch
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git pull --rebase --autostash origin main
-          git add public/news-data.json public/static-sitemap.xml public/sitemap.xml public/news-sitemap*.xml
-          if git diff --cached --quiet; then
-            echo "Public data unchanged."
-            exit 0
-          fi
-          git commit -m "chore: refresh public news snapshot [skip ci]"
-          git push origin HEAD:main
+          # The live Vercel app reads the PostgreSQL-backed API directly.
+          # Snapshot files remain a local/exported fallback and must NOT be
+          # committed to main every 5 minutes, otherwise every scheduler run
+          # creates another Vercel deployment and exhausts the Hobby limit.
+          git restore -- public/news-data.json public/static-sitemap.xml public/sitemap.xml public/news-sitemap*.xml || true
+          echo "Public snapshot exported for this run; production branch unchanged."
