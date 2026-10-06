@@ -17,9 +17,20 @@ def model_name() -> str:
     return os.getenv("PHI4_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
 
 def endpoint() -> str:
+    """Normalize PHI4_ENDPOINT to one OpenAI-compatible chat endpoint.
+
+    Accepts a host, a /v1 base, or a full /chat/completions URL. In particular,
+    a value ending in /v1 must not become /v1/v1/chat/completions.
+    """
     raw = os.getenv("PHI4_ENDPOINT", DEFAULT_ENDPOINT).strip()
-    if raw.endswith("/chat/completions"): return raw
-    return raw.rstrip("/") + "/v1/chat/completions"
+    if not raw:
+        raw = DEFAULT_ENDPOINT
+    raw = raw.rstrip("/")
+    if raw.endswith("/chat/completions"):
+        return raw
+    if raw.endswith("/v1"):
+        return raw + "/chat/completions"
+    return raw + "/v1/chat/completions"
 
 def _chat(prompt: str, max_tokens: int = 900) -> str:
     if not enabled(): raise RuntimeError("Phi-4 is disabled (PHI4_ENABLED is not true)")
