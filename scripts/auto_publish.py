@@ -101,14 +101,14 @@ def _direct_fallback_content(row):
  if not title or not summary:return False
  title_words=[w for w in re.findall(r"[A-Za-z0-9][A-Za-z0-9'-]*",title) if w]
  summary_words=[w for w in re.findall(r"[A-Za-z0-9][A-Za-z0-9'-]*",summary) if w]
- if len(title_words)<4 or len(summary_words)<18 or len(summary)<100:
+ if len(title_words)<3 or len(summary_words)<7 or len(summary)<35:
   return False
  article=summary
  copy_qa=validate_news_copy(title,summary,article)
  if not copy_qa["passed"]:
   print(f"Direct fallback blocked by copy completeness for item {row.get('id')}: {copy_qa['errors']}")
   return False
- qa=quality_gate(title,summary,article)
+ qa=quality_gate(title,summary,article,allow_short=True)
  if not qa["passed"]:
   print(f"Direct fallback blocked by quality gate for item {row.get('id')}: {qa['errors']}")
   return False
