@@ -80,7 +80,7 @@ def _process_content(db,row):
   material=source.get("text") or row.get("summary") or row.get("title") or ""
   result=process_news(row.get("title") or "",material,row.get("category") or "general")
   if not result:return False
-  fields={"title":result["headline"],"summary":result["summary"],"bot_summary":result["summary"],"bot_article":result["article"]}
+  fields={"title":result["headline"],"summary":result["summary"],"bot_summary":result["summary"],"bot_article":result["article"],"ai_summary":result.get("ai_summary") or None,"ai_article":result.get("ai_article") or None}
   state_transition(db,int(row["id"]),"PROCESSING")
   qa=quality_gate(fields["title"],fields["summary"],fields["bot_article"])
   state_transition(db,int(row["id"]),"QUALITY_CHECK",";".join(qa["errors"]) if not qa["passed"] else None)
