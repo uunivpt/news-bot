@@ -43,68 +43,72 @@
   ],
   "rewrites": [
     {
+      "source": "/",
+      "destination": "/coming-soon.html"
+    },
+    {
       "source": "/india",
-      "destination": "/index.html"
+      "destination": "/coming-soon.html"
     },
     {
       "source": "/world",
-      "destination": "/index.html"
+      "destination": "/coming-soon.html"
     },
     {
       "source": "/politics",
-      "destination": "/index.html"
+      "destination": "/coming-soon.html"
     },
     {
       "source": "/business",
-      "destination": "/index.html"
+      "destination": "/coming-soon.html"
     },
     {
       "source": "/technology",
-      "destination": "/index.html"
+      "destination": "/coming-soon.html"
     },
     {
       "source": "/sports",
-      "destination": "/index.html"
+      "destination": "/coming-soon.html"
     },
     {
       "source": "/entertainment",
-      "destination": "/index.html"
+      "destination": "/coming-soon.html"
     },
     {
       "source": "/hindi",
-      "destination": "/index.html"
+      "destination": "/coming-soon.html"
     },
     {
       "source": "/india/:slug",
-      "destination": "/index.html"
+      "destination": "/coming-soon.html"
     },
     {
       "source": "/world/:slug",
-      "destination": "/index.html"
+      "destination": "/coming-soon.html"
     },
     {
       "source": "/politics/:slug",
-      "destination": "/index.html"
+      "destination": "/coming-soon.html"
     },
     {
       "source": "/business/:slug",
-      "destination": "/index.html"
+      "destination": "/coming-soon.html"
     },
     {
       "source": "/technology/:slug",
-      "destination": "/index.html"
+      "destination": "/coming-soon.html"
     },
     {
       "source": "/sports/:slug",
-      "destination": "/index.html"
+      "destination": "/coming-soon.html"
     },
     {
       "source": "/entertainment/:slug",
-      "destination": "/index.html"
+      "destination": "/coming-soon.html"
     },
     {
       "source": "/hindi/:slug",
-      "destination": "/index.html"
+      "destination": "/coming-soon.html"
     }
   ]
 }

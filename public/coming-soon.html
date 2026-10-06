@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>PoliticsHub.in — Coming Soon</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#fff}
+*{box-sizing:border-box}
+.cover{--accent:#5f7f9c;position:fixed;inset:0;overflow:hidden;background:
+radial-gradient(70% 60% at 82% 6%,rgba(143,169,194,.16),transparent 62%),
+radial-gradient(110% 80% at 70% 0%,#f1f3f6 0%,transparent 58%),
+radial-gradient(90% 70% at 0% 100%,#f5f6f8 0%,transparent 62%),
+linear-gradient(180deg,#fff,#fafbfc);color:#0b0d10;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+.cover:before{content:"";position:absolute;inset:-20%;background:linear-gradient(108deg,transparent 36%,rgba(143,169,194,.05) 47%,rgba(143,169,194,.12) 50%,rgba(143,169,194,.05) 53%,transparent 64%);animation:sweep 24s ease-in-out infinite alternate}
+.cover:after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 100% at 50% 40%,transparent 50%,rgba(40,52,70,.07) 100%);z-index:8}
+.brand{position:absolute;top:clamp(24px,5vh,48px);left:clamp(24px,7vw,120px);display:flex;align-items:center;gap:12px;font-size:12px;font-weight:600;letter-spacing:.34em;color:#2a2f36;z-index:5}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px rgba(95,127,156,.18);animation:pulse 4.5s infinite}
+.stage{position:absolute;inset:0;display:flex;align-items:center;padding:100px clamp(24px,7vw,120px);perspective:1400px;z-index:4}
+.copy{width:min(100%,900px);transform:translateZ(30px);animation:float 10s ease-in-out infinite alternate}
+.title{position:relative;font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;font-size:clamp(42px,min(8.8vw + 4px,15.5vh),124px);font-weight:700;line-height:1.02;letter-spacing:-.028em;color:#747b84;text-shadow:0 1px 0 #fff,0 18px 36px rgba(30,42,62,.14)}
+.title:after{content:attr(data-text);position:absolute;left:0;top:10px;z-index:-1;color:#18212c;opacity:.13;filter:blur(13px);transform:translateZ(-60px)}
+.rule{width:44px;height:1px;margin-top:clamp(22px,4.2vh,44px);background:linear-gradient(90deg,var(--accent),transparent)}
+.support{max-width:38ch;margin-top:clamp(16px,2.6vh,26px);font-size:clamp(15px,1.1vw + 11px,20px);line-height:1.65;color:#686f78}
+.scene{position:absolute;inset:0;pointer-events:none;z-index:2}
+.ring{position:absolute;right:-18vmin;top:-7vmin;width:clamp(300px,72vmin,840px);aspect-ratio:1;border-radius:50%;transform:perspective(1300px) rotateX(64deg) rotateY(-8deg);border:2px solid transparent;background:conic-gradient(from 0deg,transparent,#17202c88,transparent 18%,#5f7f9c88,transparent 56%,#17202c44,transparent);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;padding:2px;animation:spin 90s linear infinite}
+.pane{position:absolute;right:clamp(14px,8vw,150px);top:50%;width:clamp(130px,24vw,380px);height:min(66vh,600px);transform:translateY(-50%) perspective(1500px) rotateY(-22deg) rotateZ(2deg);border:1px solid #141c2818;border-radius:28px;background:linear-gradient(155deg,#fffffff2,#ecf0f58c 38%,#dee4ecc0);backdrop-filter:blur(20px) saturate(135%);box-shadow:inset 0 1px #fff,0 50px 90px -30px #1e2a3e52,0 18px 40px -18px #1e2a3e33;animation:drift 14s ease-in-out infinite alternate}
+.sphere{position:absolute;left:-8vmin;bottom:-10vmin;width:clamp(150px,30vmin,340px);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 32% 26%,#fff,#e3e7ec 34%,#b4bcc7 70%);filter:blur(7px);box-shadow:inset -12px -18px 40px #3c485c40,0 60px 110px #1e2a3e38;animation:bob 12s ease-in-out infinite alternate}
+.instagram{position:absolute;left:clamp(24px,7vw,120px);bottom:clamp(24px,5vh,48px);z-index:10;display:inline-flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid rgba(20,28,40,.1);border-radius:999px;background:rgba(255,255,255,.58);backdrop-filter:blur(14px);color:#242a31;text-decoration:none;font-size:13px;font-weight:600;letter-spacing:.02em;box-shadow:0 12px 30px rgba(30,42,62,.08)}
+.instagram svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8}
+.instagram .handle{opacity:.55;font-weight:500}
+@keyframes sweep{from{transform:translateX(-14%)}to{transform:translateX(14%)}}
+@keyframes spin{to{transform:perspective(1300px) rotateX(64deg) rotateY(-8deg) rotateZ(360deg)}}
+@keyframes float{to{transform:translate3d(0,-10px,30px)}}
+@keyframes drift{to{transform:translateY(calc(-50% - 14px)) perspective(1500px) rotateY(-17deg) rotateZ(1deg)}}
+@keyframes bob{to{transform:translateY(-16px)}}
+@keyframes pulse{50%{opacity:1}0%,100%{opacity:.5}}
+@media(max-width:700px){.title{font-size:clamp(38px,12vw,72px)}.pane{right:-18vw;width:34vw;opacity:.72}.ring{right:-45vmin}.instagram{bottom:20px;left:20px}.stage{padding:100px 24px 100px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important}}
+</style>
+</head>
+<body>
+<main class="cover" aria-label="PoliticsHub.in coming soon">
+  <div class="scene" aria-hidden="true"><div class="ring"></div><div class="pane"></div><div class="sphere"></div></div>
+  <div class="brand"><span class="dot"></span><span>POLITICSHUB.IN</span></div>
+  <section class="stage">
+    <div class="copy">
+      <h1 class="title" data-text="We’ll be live in a few months.">We’ll be live<br>in a few months.</h1>
+      <div class="rule"></div>
+      <p class="support">We’re working behind the scenes.<br>PoliticsHub.in will be live soon.</p>
+    </div>
+  </section>
+  <a class="instagram" href="https://www.instagram.com/politicshub.in/" target="_blank" rel="noopener noreferrer" aria-label="PoliticsHub.in on Instagram">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.4" cy="6.7" r="1"/></svg>
+    <span>We’re live on Instagram</span><span class="handle">@politicshub.in</span>
+  </a>
+</main>
+</body>
+</html>
