@@ -175,6 +175,24 @@ def _process_instagram_untracked(db,row,music):
   return True
  if not music:db.update(item_id,instagram_status="failed",instagram_error="News Pulse audio unavailable",instagram_next_retry_at=_next_retry(attempts)); return False
  try:
+  # If Meta already accepted the media container but the publish call hit a
+  # temporary limit, retry that same container instead of creating a duplicate Reel.
+  existing_container=str(row.get("instagram_container_id") or "").strip()
+  if existing_container:
+   from app.meta_instagram import publish_existing_container
+   try:
+    result=publish_existing_container(existing_container)
+    media_id=result.get("id") if isinstance(result,dict) else None
+    mark_published(db,item_id,"instagram",row.get("reel_cloudinary_url") or "")
+    db.update(item_id,instagram_status="published",instagram_media_id=media_id,instagram_container_id=existing_container,instagram_selected=0,instagram_published_at=datetime.now(timezone.utc).isoformat(),instagram_error=None,instagram_next_retry_at=None)
+    state_transition(db,item_id,"INSTAGRAM_PUBLISHED")
+    audit_stage(db,item_id,"INSTAGRAM","completed",{"media_id":media_id,"reused_container":True})
+    return True
+   except RuntimeError as container_exc:
+    if "container ERROR" not in str(container_exc) and "does not exist" not in str(container_exc).lower() and "invalid" not in str(container_exc).lower():
+     raise
+    print(f"Existing Instagram container {existing_container} is no longer usable; rebuilding Reel.")
+    db.update(item_id,instagram_container_id=None)
   # Ensure manually published stories are processed before any Instagram Reel is built.
   if not row.get("bot_article") or not row.get("bot_summary"):
    if not process_content(db,row):
@@ -242,8 +260,10 @@ def _process_instagram_untracked(db,row,music):
   return True
  except InstagramRateLimitError as exc:
   retry_at=(datetime.now(timezone.utc)+timedelta(minutes=30)).isoformat()
-  db.update(item_id,instagram_status="pending",instagram_error=str(exc)[:3000],instagram_next_retry_at=retry_at)
-  print(f"Instagram app rate limit reached; pausing this worker run for item {item_id}: {exc}")
+  updates={"instagram_status":"pending","instagram_error":str(exc)[:3000],"instagram_next_retry_at":retry_at}
+  if getattr(exc,"container_id",None): updates["instagram_container_id"]=exc.container_id
+  db.update(item_id,**updates)
+  print(f"Instagram app rate limit reached; preserving container for item {item_id}: {exc}")
   return "rate_limited"
  except Exception as exc:
   self_heal(db,"instagram","reel_publish",exc,item_id,attempts)
