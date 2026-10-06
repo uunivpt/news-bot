@@ -1222,6 +1222,22 @@ def ai_assistant():
         return jsonify({"error":str(exc)[:500]}),503
 
 
+@app.get("/<category>/<path:slug>")
+def seo_article(category, slug):
+ category=str(category or "").lower().strip()
+ if category not in set(CATEGORY_SLUGS.values()):
+  return _render_public(category+"/"+slug)
+ match=re.match(r"^(\d+)(?:-|$)",str(slug or ""))
+ if not match:
+  return _render_public(category+"/"+slug)
+ row=_public_row_by_id(int(match.group(1)))
+ if not row:
+  return Response("Not found",status=404)
+ expected=CATEGORY_SLUGS.get(str(row.get("category") or "general").lower(),"india")
+ if expected!=category:
+  return redirect(SITE_ORIGIN+article_path(row),code=301)
+ return Response(_article_html(row),mimetype="text/html")
+
 @app.route("/<path:path>")
 def _render_public(path):
  if path.startswith("api/"): return jsonify({"error":"not found"}),404
