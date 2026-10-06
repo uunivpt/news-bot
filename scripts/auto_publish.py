@@ -312,7 +312,7 @@ def _instagram_candidates(db,mode,limit,now):
  rows=[dict(r) for r in db.conn.execute(sql,params).fetchall()]
  # Scheduled/manual selection is filtered after the indexed SQL query; this keeps
  # old manually queued stories eligible instead of losing them behind a 100-row window.
- rows=[r for r in rows if _schedule_due(r,now)]
+ rows=[r for r in rows if _schedule_due(r,now) and _retry_due(r,now)]
  for r in rows:
   try:
    s=db.conn.execute("SELECT score,breaking FROM ph_news_scores WHERE item_id="+ph,(int(r["id"]),)).fetchone()
