@@ -358,7 +358,7 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
                 "-crf",
                 "16",
                 "-pix_fmt",
-                "yuv444p",
+                "yuv420p",
                 "-an",
                 str(silent),
             ],
@@ -437,8 +437,8 @@ def render_html_reel(news, output_path, audio_path=None, template_path=None):
             raise RuntimeError(
                 f"HTML Reel resolution is {video.get('width')}x{video.get('height')}, expected 1080x1920"
             )
-        if video.get("pix_fmt") not in {"yuv444p"}:
-            raise RuntimeError(f"HTML Reel pixel format is {video.get('pix_fmt')}, expected yuv444p")
+        if video.get("pix_fmt") not in {"yuv420p"}:
+            raise RuntimeError(f"HTML Reel pixel format is {video.get('pix_fmt')}, expected yuv420p")
 
         print(f"HTML Reel PASS: {duration:.3f}s, 1080x1920, {video.get('pix_fmt')}")
         return str(output)

@@ -4,6 +4,7 @@ No LLM/API dependency. All decisions are rule/score/hash based and persisted.
 """
 from __future__ import annotations
 import hashlib, json, re
+from email.utils import parsedate_to_datetime
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -52,14 +53,24 @@ def similarity(a,b):
     return len(x&y)/max(1,len(x|y)) if x and y else 0.0
 
 def _age_hours(row):
-    for k in ("published_at","created_at","published_at_site"):
+    # NewsDatabase stores collection time as collected_at; some RSS feeds use RFC-822 dates.
+    for k in ("published_at","published_at_site","collected_at"):
         raw=val(row,k)
-        if raw:
+        if not raw:
+            continue
+        text=str(raw).strip()
+        try:
+            d=datetime.fromisoformat(text.replace("Z","+00:00"))
+        except Exception:
             try:
-                d=datetime.fromisoformat(str(raw).replace("Z","+00:00"))
-                d=d if d.tzinfo else d.replace(tzinfo=timezone.utc)
-                return max(0,(datetime.now(timezone.utc)-d).total_seconds()/3600)
-            except Exception: pass
+                d=parsedate_to_datetime(text)
+            except Exception:
+                continue
+        try:
+            d=d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+            return max(0,(datetime.now(timezone.utc)-d.astimezone(timezone.utc)).total_seconds()/3600)
+        except Exception:
+            continue
     return 72.0
 
 def score_story(db,row,source_count=0,verification="UNVERIFIED",duplicate_risk=0.0):
