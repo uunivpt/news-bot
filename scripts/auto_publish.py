@@ -317,7 +317,7 @@ def main():
  except ValueError:env_daily=1000
  try:interval=max(0,int(os.getenv("INSTAGRAM_INTERVAL_MINUTES",settings.get("instagram_interval_minutes","0"))))
  except ValueError:interval=0
- daily_limit=min(admin_daily,env_daily) if env_daily else admin_daily; now=datetime.now(timezone.utc); music=audio_path() if publish_instagram else None; pending=[dict(r) for r in db.latest(max_items,status="pending",order="asc")] if publish_website else []
+ daily_limit=min(admin_daily,env_daily) if env_daily else admin_daily; now=datetime.now(timezone.utc); music=audio_path() if publish_instagram else None; pending=[dict(r) for r in db.conn.execute("SELECT * FROM news_items WHERE status='pending' ORDER BY COALESCE(published_at,collected_at) ASC,id ASC LIMIT "+str(max_items)).fetchall()] if publish_website else []
  published=held=0
  for row in pending:
   # Always regenerate pending content from the freshest source. If the newsroom
