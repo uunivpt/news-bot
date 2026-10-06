@@ -233,7 +233,7 @@ def _article_html(row):
  row=dict(row); title=str(row.get("title") or "PoliticsHub.in"); category=str(row.get("category") or "India")
  canonical=SITE_ORIGIN+article_path(row)
  published=row.get("published_at_iso") or row.get("published_at_site") or row.get("published_at")
- modified=row.get("updated_at") or row.get("published_at_iso") or row.get("published_at")
+ modified=row.get("published_at_iso") or row.get("published_at_site") or row.get("published_at")
  summary=str(row.get("summary") or row.get("bot_summary") or "")[:300]
  body=str(row.get("article") or row.get("bot_article") or row.get("body") or summary)
  source=str(row.get("source_name") or "PoliticsHub.in")
