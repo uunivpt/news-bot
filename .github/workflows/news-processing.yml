@@ -80,6 +80,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase --autostash origin main
           git add public/news-data.json public/static-sitemap.xml public/sitemap.xml public/news-sitemap*.xml
           if git diff --cached --quiet; then
             echo "Public data unchanged."
