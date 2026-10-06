@@ -32,7 +32,7 @@ class NewsroomBotTests(unittest.TestCase):
         self.assertTrue(result["headline"])
         self.assertTrue(result["summary"].endswith("."))
         self.assertTrue(result["article"].endswith("."))
-        self.assertIn("What happened:", result["article"])
+        self.assertIn("city administration", result["article"])
         self.assertNotIn("https://", result["article"])
 
     def test_incomplete_final_fragment_is_dropped(self):
