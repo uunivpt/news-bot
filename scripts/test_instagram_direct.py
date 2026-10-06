@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.instagram_reel import build_reel
+from app.instagram_reel import build_html_reel
 from app.cloudinary_storage import upload_video
 from app.meta_instagram import publish_reel
 
@@ -82,8 +82,8 @@ def inspect_video(path: Path) -> None:
         raise RuntimeError(f"Generated Reel has wrong dimensions: {video.get('width')}x{video.get('height')}")
     if video.get("pix_fmt") != "yuv420p":
         raise RuntimeError(f"Generated Reel has wrong pixel format: {video.get('pix_fmt')}")
-    if abs(duration - 18.0) > 0.15:
-        raise RuntimeError(f"Generated Reel is not 18 seconds: {duration}")
+    if abs(duration - 16.0) > 0.15:
+        raise RuntimeError(f"Generated production HTML Reel is not 16 seconds: {duration}")
     if audio and (audio.get("codec_name") != "aac" or str(audio.get("sample_rate")) != "48000"):
         raise RuntimeError("Generated Reel audio is not AAC 48 kHz.")
 
@@ -112,7 +112,7 @@ def main():
     img.save(image, quality=92)
 
     video = OUT / "test_reel.mp4"
-    build_reel([str(image)], str(video), audio_path=str(audio_path) if audio_path else None, duration_per_image=18)
+    build_html_reel({"headline":"NEWS REEL TEST","category":"Test","summary":"Instagram production pipeline compatibility test","image_url":str(image)}, str(video), audio_path=str(audio_path) if audio_path else None)
     print("18-second MP4 created successfully")
     inspect_video(video)
 
