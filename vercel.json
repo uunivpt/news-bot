@@ -60,71 +60,7 @@
   ],
   "rewrites": [
     {
-      "source": "/",
-      "destination": "/coming-soon.html?v=phcover2"
-    },
-    {
-      "source": "/india",
-      "destination": "/coming-soon.html?v=phcover2"
-    },
-    {
-      "source": "/world",
-      "destination": "/coming-soon.html?v=phcover2"
-    },
-    {
-      "source": "/politics",
-      "destination": "/coming-soon.html?v=phcover2"
-    },
-    {
-      "source": "/business",
-      "destination": "/coming-soon.html?v=phcover2"
-    },
-    {
-      "source": "/technology",
-      "destination": "/coming-soon.html?v=phcover2"
-    },
-    {
-      "source": "/sports",
-      "destination": "/coming-soon.html?v=phcover2"
-    },
-    {
-      "source": "/entertainment",
-      "destination": "/coming-soon.html?v=phcover2"
-    },
-    {
-      "source": "/hindi",
-      "destination": "/coming-soon.html?v=phcover2"
-    },
-    {
-      "source": "/india/:slug",
-      "destination": "/coming-soon.html?v=phcover2"
-    },
-    {
-      "source": "/world/:slug",
-      "destination": "/coming-soon.html?v=phcover2"
-    },
-    {
-      "source": "/politics/:slug",
-      "destination": "/coming-soon.html?v=phcover2"
-    },
-    {
-      "source": "/business/:slug",
-      "destination": "/coming-soon.html?v=phcover2"
-    },
-    {
-      "source": "/technology/:slug",
-      "destination": "/coming-soon.html?v=phcover2"
-    },
-    {
-      "source": "/sports/:slug",
-      "destination": "/coming-soon.html?v=phcover2"
-    },
-    {
-      "source": "/entertainment/:slug",
-      "destination": "/coming-soon.html?v=phcover2"
-    },
-    {
-      "source": "/hindi/:slug",
+      "source": "/((?!api(?:/|$)|assets(?:/|$)|coming-soon\\.html$|[^/]*\\.[^/]+$).*)",
       "destination": "/coming-soon.html?v=phcover2"
     }
   ]
