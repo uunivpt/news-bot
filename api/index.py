@@ -432,10 +432,9 @@ def login():
  finally:
   database.close()
 
-@app.before_request
-def canonical_host():
- host=(request.host or "").split(":")[0].lower()
- if host=="politicshub.in": return redirect("https://www.politicshub.in"+request.full_path,code=301)
+# Render manages the root/www canonical redirect for the custom domain.
+# Do not add an application-level host redirect here: Render already redirects
+# the configured canonical host, and a second opposite redirect creates a loop.
 
 @app.get("/robots.txt")
 def robots():
