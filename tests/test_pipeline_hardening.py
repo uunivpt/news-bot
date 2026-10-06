@@ -6,6 +6,7 @@ from pathlib import Path
 
 from app.collector import _safe_http_url
 from app.database import NewsDatabase
+from app.newsroom import process_news, quality_headline, validate_news_copy
 from scripts.auto_publish import _direct_fallback_content, _instagram_candidates
 
 
@@ -16,6 +17,30 @@ class PipelineHardeningTests(unittest.TestCase):
         self.assertFalse(_safe_http_url("javascript:alert(1)"))
         self.assertFalse(_safe_http_url("data:text/html,test"))
         self.assertFalse(_safe_http_url("/relative/path"))
+
+    def test_incomplete_headline_is_rejected_or_rebuilt_from_complete_source(self):
+        source = (
+            "The government announced a new transport plan on Tuesday. "
+            "Officials said the plan will add 120 buses across three districts. "
+            "The first phase will begin next month."
+        )
+        self.assertEqual(quality_headline("Government announces plan for", source), "The government announced a new transport plan on Tuesday")
+        self.assertFalse(validate_news_copy("Government announces plan for", "The government announced a new transport plan on Tuesday.", source)["passed"])
+
+    def test_process_news_never_returns_incomplete_copy(self):
+        source = (
+            "The government announced a new transport plan on Tuesday. "
+            "Officials said the plan will add 120 buses across three districts. "
+            "The first phase will begin next month."
+        )
+        result = process_news("Government announces plan for", source)
+        self.assertIsNotNone(result)
+        self.assertTrue(validate_news_copy(result["headline"], result["summary"], result["article"])["passed"])
+        self.assertNotIn("announces plan for", result["headline"].lower())
+
+    def test_process_news_fails_closed_when_source_has_only_fragments(self):
+        source = "Government announces a plan for. Officials said the move would."
+        self.assertIsNone(process_news("Government announces plan for", source))
 
     def test_direct_fallback_still_runs_quality_gate(self):
         row = {"id": 1, "title": "A complete headline with enough words", "summary": "Too short."}
