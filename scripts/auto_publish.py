@@ -289,6 +289,10 @@ def _instagram_candidates(db,mode,limit,now):
  conditions=[f"instagram_status={ph}", "status='published'"]
  if mode=="manual":
   conditions.append("instagram_selected=1")
+ else:
+  # Risk-flagged stories may remain visible on the website for post-publication
+  # review, but they must not be auto-distributed to Instagram.
+  conditions.append("(fact_check_status IS NULL OR fact_check_status <> 'needs_review')")
  sql="SELECT * FROM news_items WHERE "+" AND ".join(conditions)+" ORDER BY id ASC"
  rows=[dict(r) for r in db.conn.execute(sql,params).fetchall()]
  # Scheduled/manual selection is filtered after the indexed SQL query; this keeps
