@@ -1,248 +1,33 @@
 {
   "newsapi": [
-    {
-      "name": "NewsAPI India",
-      "country": "in",
-      "category": "general",
-      "q": "India OR Indian",
-      "page_size": 100,
-      "enabled": true,
-      "public_source": true
-    }
+    {"name":"NewsAPI India","country":"in","category":"general","q":"India OR Indian","page_size":100,"enabled":true,"public_source":true}
   ],
   "newsdata": [
-    {
-      "name": "NewsData.io India",
-      "country": "in",
-      "language": "en",
-      "category": "politics",
-      "q": "India",
-      "size": 10,
-      "enabled": true,
-      "public_source": true
-    }
+    {"name":"NewsData.io India","country":"in","language":"en","category":"india","q":"India","size":10,"enabled":true,"public_source":true}
   ],
   "rss": [
-    {
-      "name": "PIB Press Releases",
-      "url": "https://pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=1",
-      "source_class": "government",
-      "category": "india",
-      "enabled": true,
-      "public_source": true,
-      "timeout_seconds": 12,
-      "max_items": 50
-    },
-    {
-      "name": "PIB Media Invitations",
-      "url": "https://pib.gov.in/RssMain.aspx?ModId=10&Lang=1&Regid=1",
-      "source_class": "government",
-      "category": "india",
-      "enabled": true,
-      "public_source": true,
-      "timeout_seconds": 12,
-      "max_items": 50
-    },
-    {
-      "name": "GovInfo Presidential Documents",
-      "url": "https://www.govinfo.gov/rss/dcpd.xml",
-      "source_class": "government",
-      "category": "world",
-      "enabled": true,
-      "public_source": true,
-      "timeout_seconds": 12,
-      "max_items": 50
-    },
-    {
-      "name": "GovInfo Federal Register",
-      "url": "https://www.govinfo.gov/rss/fr.xml",
-      "source_class": "government",
-      "category": "world",
-      "enabled": true,
-      "public_source": true,
-      "timeout_seconds": 12,
-      "max_items": 50
-    },
-    {
-      "name": "GovInfo Code of Federal Regulations",
-      "url": "https://www.govinfo.gov/rss/cfr.xml",
-      "source_class": "government",
-      "category": "world",
-      "enabled": true,
-      "public_source": true,
-      "timeout_seconds": 12,
-      "max_items": 50
-    }
+    {"name":"PIB Press Releases","url":"https://pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=1","source_class":"government","category":"india","enabled":true,"public_source":true,"timeout_seconds":12,"max_items":50},
+    {"name":"PIB Media Invitations","url":"https://pib.gov.in/RssMain.aspx?ModId=10&Lang=1&Regid=1","source_class":"government","category":"india","enabled":true,"public_source":true,"timeout_seconds":12,"max_items":50},
+    {"name":"GovInfo Presidential Documents","url":"https://www.govinfo.gov/rss/dcpd.xml","source_class":"government","category":"world","enabled":true,"public_source":true,"timeout_seconds":12,"max_items":50},
+    {"name":"GovInfo Federal Register","url":"https://www.govinfo.gov/rss/fr.xml","source_class":"government","category":"world","enabled":true,"public_source":true,"timeout_seconds":12,"max_items":50},
+    {"name":"GovInfo Code of Federal Regulations","url":"https://www.govinfo.gov/rss/cfr.xml","source_class":"government","category":"world","enabled":true,"public_source":true,"timeout_seconds":12,"max_items":50}
   ],
   "telegram": [
-    {
-      "name": "Watcher Guru",
-      "username": "@WatcherGuru",
-      "category": "business",
-      "enabled": true,
-      "public_source": true
-    },
-    {
-      "name": "Middle East Spectator",
-      "username": "@Middle_East_Spectator",
-      "category": "world",
-      "enabled": true,
-      "public_source": true
-    },
-    {
-      "name": "Geopolitics Prime",
-      "username": "@geopolitics_prime",
-      "category": "politics",
-      "enabled": true,
-      "public_source": true
-    },
-    {
-      "name": "DD Geopolitics",
-      "username": "@DDGeopolitics",
-      "category": "world",
-      "enabled": true,
-      "public_source": true
-    }
+    {"name":"Watcher Guru","username":"@WatcherGuru","category":"business","enabled":true,"public_source":true},
+    {"name":"Middle East Spectator","username":"@Middle_East_Spectator","category":"world","enabled":true,"public_source":true},
+    {"name":"Geopolitics Prime","username":"@geopolitics_prime","category":"politics","enabled":true,"public_source":true},
+    {"name":"DD Geopolitics","username":"@DDGeopolitics","category":"world","enabled":true,"public_source":true}
   ],
   "website": [
-    {
-      "name": "Government of India - PIB",
-      "source_class": "government",
-      "source_type": "government",
-      "category": "india",
-      "enabled": true,
-      "collection_allowed": true,
-      "public_source": true,
-      "allowed_hosts": [
-        "pib.gov.in"
-      ],
-      "sections": [
-        "https://www.pib.gov.in/Allrel.aspx?lang=1&reg=1"
-      ],
-      "article_path_prefixes": [
-        "/PressReleasePage.aspx",
-        "/PressReleaseDetail.aspx",
-        "/Allrel.aspx",
-        "/newsite/PressReleaseDetail.aspx"
-      ],
-      "max_links": 20,
-      "check_every_minutes": 5
-    },
-    {
-      "name": "Ministry of Home Affairs - India",
-      "source_class": "government",
-      "source_type": "government",
-      "category": "india",
-      "enabled": true,
-      "collection_allowed": true,
-      "public_source": true,
-      "allowed_hosts": [
-        "mha.gov.in"
-      ],
-      "sections": [
-        "https://www.mha.gov.in/en/commoncontent/press-release-2026"
-      ],
-      "article_path_prefixes": [
-        "/en/commoncontent/",
-        "/en/press-releases/",
-        "/en/"
-      ],
-      "max_links": 20,
-      "check_every_minutes": 5
-    },
-    {
-      "name": "The White House",
-      "source_class": "government",
-      "source_type": "government",
-      "category": "world",
-      "enabled": true,
-      "collection_allowed": true,
-      "public_source": true,
-      "allowed_hosts": [
-        "whitehouse.gov"
-      ],
-      "sections": [
-        "https://www.whitehouse.gov/news/",
-        "https://www.whitehouse.gov/releases/",
-        "https://www.whitehouse.gov/presidential-actions/"
-      ],
-      "article_path_prefixes": [
-        "/news/",
-        "/releases/",
-        "/presidential-actions/"
-      ],
-      "max_links": 20,
-      "check_every_minutes": 5
-    },
-    {
-      "name": "Government of Russia",
-      "source_class": "government",
-      "source_type": "government",
-      "category": "world",
-      "enabled": true,
-      "collection_allowed": true,
-      "public_source": true,
-      "allowed_hosts": [
-        "government.ru"
-      ],
-      "sections": [
-        "https://government.ru/news/"
-      ],
-      "article_path_prefixes": [
-        "/news/",
-        "/docs/"
-      ],
-      "max_links": 20,
-      "check_every_minutes": 5
-    },
-    {
-      "name": "Prime Minister of India - PMO",
-      "source_class": "government",
-      "source_type": "government",
-      "category": "india",
-      "enabled": true,
-      "collection_allowed": true,
-      "public_source": true,
-      "allowed_hosts": [
-        "pmindia.gov.in"
-      ],
-      "sections": [
-        "https://www.pmindia.gov.in/en/news-updates/"
-      ],
-      "article_path_prefixes": [
-        "/en/news-updates/"
-      ],
-      "max_links": 20,
-      "check_every_minutes": 5
-    }
+    {"name":"Government of India - PIB","source_class":"government","source_type":"government","category":"india","enabled":true,"collection_allowed":true,"public_source":true,"allowed_hosts":["pib.gov.in"],"sections":["https://www.pib.gov.in/Allrel.aspx?lang=1&reg=1"],"article_path_prefixes":["/PressReleasePage.aspx","/PressReleaseDetail.aspx","/Allrel.aspx","/newsite/PressReleaseDetail.aspx"],"max_links":20,"check_every_minutes":5},
+    {"name":"Ministry of Home Affairs - India","source_class":"government","source_type":"government","category":"india","enabled":true,"collection_allowed":true,"public_source":true,"allowed_hosts":["mha.gov.in"],"sections":["https://www.mha.gov.in/en/commoncontent/press-release-2026"],"article_path_prefixes":["/en/commoncontent/","/en/press-releases/","/en/"],"max_links":20,"check_every_minutes":5},
+    {"name":"The White House","source_class":"government","source_type":"government","category":"world","enabled":true,"collection_allowed":true,"public_source":true,"allowed_hosts":["whitehouse.gov"],"sections":["https://www.whitehouse.gov/news/","https://www.whitehouse.gov/releases/","https://www.whitehouse.gov/presidential-actions/"],"article_path_prefixes":["/news/","/releases/","/presidential-actions/"],"max_links":20,"check_every_minutes":5},
+    {"name":"Government of Russia","source_class":"government","source_type":"government","category":"world","enabled":true,"collection_allowed":true,"public_source":true,"allowed_hosts":["government.ru"],"sections":["https://government.ru/news/"],"article_path_prefixes":["/news/","/docs/"],"max_links":20,"check_every_minutes":5},
+    {"name":"Prime Minister of India - PMO","source_class":"government","source_type":"government","category":"india","enabled":true,"collection_allowed":true,"public_source":true,"allowed_hosts":["pmindia.gov.in"],"sections":["https://www.pmindia.gov.in/en/news-updates/"],"article_path_prefixes":["/en/news-updates/"],"max_links":20,"check_every_minutes":5}
   ],
   "private_websites": [
-    {
-      "name": "Hindustan Times",
-      "domain": "hindustantimes.com",
-      "category": "india",
-      "enabled": false,
-      "collection_allowed": false,
-      "public_source": true,
-      "requires_permission": true
-    },
-    {
-      "name": "Times of India",
-      "domain": "timesofindia.indiatimes.com",
-      "category": "india",
-      "enabled": false,
-      "collection_allowed": false,
-      "public_source": true,
-      "requires_permission": true
-    },
-    {
-      "name": "Economic Times",
-      "domain": "economictimes.indiatimes.com",
-      "category": "business",
-      "enabled": false,
-      "collection_allowed": false,
-      "public_source": true,
-      "requires_permission": true
-    }
+    {"name":"Hindustan Times","domain":"hindustantimes.com","category":"india","enabled":false,"collection_allowed":false,"public_source":true,"requires_permission":true},
+    {"name":"Times of India","domain":"timesofindia.indiatimes.com","category":"india","enabled":false,"collection_allowed":false,"public_source":true,"requires_permission":true},
+    {"name":"Economic Times","domain":"economictimes.indiatimes.com","category":"business","enabled":false,"collection_allowed":false,"public_source":true,"requires_permission":true}
   ]
 }
