@@ -72,56 +72,6 @@
       "public_source": true,
       "timeout_seconds": 12,
       "max_items": 50
-    },
-    {
-      "name": "Google News India",
-      "url": "https://news.google.com/rss/search?q=India&hl=en-IN&gl=IN&ceid=IN:en",
-      "source_class": "news",
-      "category": "india",
-      "enabled": true,
-      "public_source": true,
-      "timeout_seconds": 12,
-      "max_items": 30
-    },
-    {
-      "name": "Google News India Politics",
-      "url": "https://news.google.com/rss/search?q=India%20politics&hl=en-IN&gl=IN&ceid=IN:en",
-      "source_class": "news",
-      "category": "politics",
-      "enabled": true,
-      "public_source": true,
-      "timeout_seconds": 12,
-      "max_items": 30
-    },
-    {
-      "name": "Google News World",
-      "url": "https://news.google.com/rss/search?q=world%20news&hl=en-IN&gl=IN&ceid=IN:en",
-      "source_class": "news",
-      "category": "world",
-      "enabled": true,
-      "public_source": true,
-      "timeout_seconds": 12,
-      "max_items": 30
-    },
-    {
-      "name": "Google News Business India",
-      "url": "https://news.google.com/rss/search?q=India%20business&hl=en-IN&gl=IN&ceid=IN:en",
-      "source_class": "news",
-      "category": "business",
-      "enabled": true,
-      "public_source": true,
-      "timeout_seconds": 12,
-      "max_items": 30
-    },
-    {
-      "name": "Google News Technology",
-      "url": "https://news.google.com/rss/search?q=technology&hl=en-IN&gl=IN&ceid=IN:en",
-      "source_class": "news",
-      "category": "technology",
-      "enabled": true,
-      "public_source": true,
-      "timeout_seconds": 12,
-      "max_items": 30
     }
   ],
   "telegram": [
@@ -129,28 +79,28 @@
       "name": "Watcher Guru",
       "username": "@WatcherGuru",
       "category": "business",
-      "enabled": false,
+      "enabled": true,
       "public_source": true
     },
     {
       "name": "Middle East Spectator",
       "username": "@Middle_East_Spectator",
       "category": "world",
-      "enabled": false,
+      "enabled": true,
       "public_source": true
     },
     {
       "name": "Geopolitics Prime",
       "username": "@geopolitics_prime",
       "category": "politics",
-      "enabled": false,
+      "enabled": true,
       "public_source": true
     },
     {
       "name": "DD Geopolitics",
       "username": "@DDGeopolitics",
       "category": "world",
-      "enabled": false,
+      "enabled": true,
       "public_source": true
     }
   ],
