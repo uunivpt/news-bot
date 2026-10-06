@@ -69,6 +69,30 @@ class PipelineHardeningTests(unittest.TestCase):
             finally:
                 db.close()
 
+
+    def test_pending_instagram_retry_backoff_is_honored(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = NewsDatabase(path=str(Path(tmp) / "news.db"))
+            try:
+                now = datetime.now(timezone.utc)
+                from datetime import timedelta
+                future = (now + timedelta(minutes=20)).isoformat()
+                db.conn.execute(
+                    "INSERT INTO news_items "
+                    "(id,source_name,source_type,title,url,normalized_url,url_hash,title_hash,collected_at,status,instagram_status,instagram_attempts,instagram_next_retry_at,fact_check_status) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        1, "Test", "rss", "Retry story", "https://example.com/retry",
+                        "https://example.com/retry", "retry-url", "retry-title",
+                        now.isoformat(), "published", "pending", 1, future, "pending",
+                    ),
+                )
+                db.conn.commit()
+                rows = _instagram_candidates(db, "auto", 10, now)
+                self.assertEqual(rows, [])
+            finally:
+                db.close()
+
     def test_instagram_candidates_only_use_published_stories_in_auto_mode(self):
         with tempfile.TemporaryDirectory() as tmp:
             db = NewsDatabase(path=str(Path(tmp) / "news.db"))
