@@ -12,7 +12,9 @@ def _safe_url(url):
     parts=urlsplit(url); return f"{parts.scheme}://{parts.netloc}{parts.path}"
 
 class InstagramRateLimitError(RuntimeError):
-    pass
+    def __init__(self, message: str, container_id: str | None = None):
+        super().__init__(message)
+        self.container_id = container_id
 
 def _raise_meta(r,action):
     if r.ok:return
@@ -103,7 +105,39 @@ def publish_reel(video_url,caption):
         if code=="ERROR" or status=="ERROR": raise RuntimeError(f"Instagram media container ERROR: container={container}; status={data}")
         time.sleep(min(15, 8 + attempt))
     else: raise TimeoutError(f"Instagram media container timeout: container={container}; last_status={last}")
-    p=requests.post(f"{base}/{account}/media_publish",data={"creation_id":container,"access_token":token},timeout=60); _raise_meta(p,"media publish")
-    result=p.json();
+    return _publish_existing_container(base, token, account, container)
+
+def _publish_existing_container(base, token, account, container):
+    """Publish an already-created container without rendering/uploading again."""
+    p=requests.post(
+        f"{base}/{account}/media_publish",
+        data={"creation_id":container,"access_token":token},
+        timeout=60,
+    )
+    try:
+        _raise_meta(p,"media publish")
+    except InstagramRateLimitError as exc:
+        raise InstagramRateLimitError(str(exc), container_id=container) from exc
+    result=p.json()
     if isinstance(result,dict): result["container_id"]=container
-    print(f"Instagram media published successfully: {result}"); return result
+    print(f"Instagram media published successfully: {result}")
+    return result
+
+def publish_existing_container(container):
+    """Retry media_publish for a finished container after a transient publish-limit error."""
+    token,configured_account,version,host=_cfg()
+    if not token: raise RuntimeError("Instagram is not configured. Add META_ACCESS_TOKEN.")
+    if not container: raise ValueError("Instagram container id is required")
+    base=f"{host}/{version}"
+    account=_resolve_instagram_user(base,token,configured_account)
+    last={}
+    for attempt in range(12):
+        data=_container_status(base,token,container); last=data
+        code=str(data.get("status_code") or "").upper(); status=str(data.get("status") or "").upper()
+        print(f"Instagram existing-container check {attempt+1}: status_code={code}, status={status}")
+        if code in {"FINISHED","PUBLISHED"} or status in {"FINISHED","PUBLISHED"}:
+            return _publish_existing_container(base,token,account,container)
+        if code=="ERROR" or status=="ERROR":
+            raise RuntimeError(f"Instagram media container ERROR: container={container}; status={data}")
+        time.sleep(min(15,8+attempt))
+    raise TimeoutError(f"Instagram existing container timeout: container={container}; last_status={last}")
