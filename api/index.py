@@ -1134,19 +1134,19 @@ def legacy_home():
 
 # Explicit static routes for files that must never be normalized with a
 # trailing slash by a proxy or catch-all route.
-@app.get("/favicon.svg")
+@app.get("/favicon.svg", strict_slashes=False)
 def favicon():
  return send_from_directory(app.static_folder,"favicon.svg",max_age=86400)
 
-@app.get("/manifest.webmanifest")
+@app.get("/manifest.webmanifest", strict_slashes=False)
 def manifest():
  return send_from_directory(app.static_folder,"manifest.webmanifest",max_age=300)
 
-@app.get("/service-worker.js")
+@app.get("/service-worker.js", strict_slashes=False)
 def service_worker():
  return send_from_directory(app.static_folder,"service-worker.js",max_age=0)
 
-@app.get("/brand.svg")
+@app.get("/brand.svg", strict_slashes=False)
 def brand():
  return send_from_directory(app.static_folder,"brand.svg",max_age=86400)
 
