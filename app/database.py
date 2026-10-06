@@ -80,6 +80,7 @@ MIGRATIONS = {
 DEFAULT_SETTINGS={"instagram_enabled":"true","instagram_daily_limit":"5","instagram_selection_mode":"auto","instagram_interval_minutes":"0","website_enabled":"true","instagram_paused":"false","instagram_priority_id":""}
 
 class NewsDatabase:
+ _schema_initialized=set()
  def __init__(self,path="data/news.db",database_url=None):
   self.database_url=database_url or os.getenv("DATABASE_URL"); self._postgres=bool(self.database_url)
   if self._postgres:
@@ -91,12 +92,12 @@ class NewsDatabase:
    # Mobile DNS/Wi-Fi can briefly lose the database hostname. Retry the initial
    # connection here so a transient network drop does not kill the whole worker.
    last_error = None
-   for attempt, delay in enumerate((0, 5, 15, 30), start=1):
+   for attempt, delay in enumerate((0, 1, 2), start=1):
     if delay:
      import time
      time.sleep(delay)
     try:
-     self.conn=psycopg.connect(self.database_url,row_factory=dict_row,connect_timeout=15)
+     self.conn=psycopg.connect(self.database_url,row_factory=dict_row,connect_timeout=5)
      break
     except psycopg.OperationalError as exc:
      last_error = exc
@@ -104,18 +105,23 @@ class NewsDatabase:
    else:
     raise last_error
    self.conn.autocommit=True
-   # PostgreSQL drivers execute one statement at a time; keep schema creation explicit.
-   for statement in (SCHEMA, ADMIN_SCHEMA, ACTIVITY_SCHEMA, NEWSLETTER_SCHEMA, AUTH_SCHEMA):
-    self.conn.execute(statement.strip())
-   self._migrate_postgres()
-   for statement in INDEXES.split(";"):
-    if statement.strip(): self.conn.execute(statement.strip())
+   schema_key="postgres:"+self.database_url
+   if schema_key not in self._schema_initialized:
+    for statement in (SCHEMA, ADMIN_SCHEMA, ACTIVITY_SCHEMA, NEWSLETTER_SCHEMA, AUTH_SCHEMA):
+     self.conn.execute(statement.strip())
+    self._migrate_postgres()
+    for statement in INDEXES.split(";"):
+     if statement.strip(): self.conn.execute(statement.strip())
+    self._schema_initialized.add(schema_key)
   else:
    # Vercel's filesystem is read-only. SQLite is only a local-development fallback.
    if os.getenv("VERCEL") and not self.database_url:
     raise RuntimeError("DATABASE_URL is required on Vercel; refusing to use local SQLite")
    self.path=Path(path); self.path.parent.mkdir(parents=True,exist_ok=True); self.conn=sqlite3.connect(self.path); self.conn.row_factory=sqlite3.Row
-   self.conn.executescript(SCHEMA.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")); self.conn.executescript(ADMIN_SCHEMA); self.conn.executescript(ACTIVITY_SCHEMA.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")); self.conn.executescript(NEWSLETTER_SCHEMA); self.conn.executescript(AUTH_SCHEMA.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")); self._migrate_sqlite(); self.conn.executescript(INDEXES); self.conn.commit()
+   schema_key="sqlite:"+str(self.path.resolve())
+   if schema_key not in self._schema_initialized:
+    self.conn.executescript(SCHEMA.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")); self.conn.executescript(ADMIN_SCHEMA); self.conn.executescript(ACTIVITY_SCHEMA.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")); self.conn.executescript(NEWSLETTER_SCHEMA); self.conn.executescript(AUTH_SCHEMA.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")); self._migrate_sqlite(); self.conn.executescript(INDEXES); self.conn.commit()
+    self._schema_initialized.add(schema_key)
   self._seed_settings()
  def _migrate_postgres(self):
   for sql in MIGRATIONS.values():
@@ -199,6 +205,14 @@ class NewsDatabase:
   return self.conn.execute(f"SELECT * FROM news_items WHERE id = {ph} LIMIT 1",(int(item_id),)).fetchone()
 
  def count(self):return int(self.conn.execute("SELECT COUNT(*) AS count FROM news_items").fetchone()["count"] if self._postgres else self.conn.execute("SELECT COUNT(*) AS count FROM news_items").fetchone()[0])
+ def count_status(self,status=None,review_status=None,instagram_status=None):
+  clauses=[];params=[];ph="%s" if self._postgres else "?"
+  if status and status!="all":clauses.append(f"status={ph}");params.append(status)
+  if review_status and review_status!="all":clauses.append(f"fact_check_status={ph}");params.append(review_status)
+  if instagram_status and instagram_status!="all":clauses.append(f"instagram_status={ph}");params.append(instagram_status)
+  where=(" WHERE "+" AND ".join(clauses)) if clauses else ""
+  row=self.conn.execute(f"SELECT COUNT(*) AS count FROM news_items{where}",params).fetchone()
+  return int(row["count"] if self._postgres else row[0])
  def latest(self,limit=20,category=None,status=None,search=None,review_status=None,instagram_status=None):
   clauses=[];params=[];ph="%s" if self._postgres else "?"
   for col,val in (("category",category),("status",status),("fact_check_status",review_status),("instagram_status",instagram_status)):
