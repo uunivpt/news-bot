@@ -35,5 +35,9 @@ jobs:
               raise SystemExit("public/admin.js is missing")
           PY
           node --check public/admin.js
-      - name: Deterministic upgrade tests
-        run: PYTHONPATH=. pytest -q tests/test_advanced_system.py
+      - name: Full deterministic test suite
+        env:
+          PYTHONPATH: .
+          DATABASE_URL: ""
+          PGSSLMODE: ""
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
