@@ -1238,5 +1238,5 @@ def ai_assistant():
 @app.route("/<path:path>")
 def _render_public(path):
  if path.startswith("api/"): return jsonify({"error":"not found"}),404
- if path in {"politics","india","world","business","technology","sports","entertainment","hindi"}: return Response(_section_html(path),mimetype="text/html")
+ if path in {"politics","india","world","business","technology","sports","entertainment","hindi"}: return redirect("/#/"+("c/"+path))
  return send_from_directory(app.static_folder,path)
