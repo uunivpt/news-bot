@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import subprocess
 import sys
-import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -13,15 +13,15 @@ if str(ROOT) not in sys.path:sys.path.insert(0,str(ROOT))
 from app.article_fetcher import enrich_source_text
 from app.cloudinary_storage import upload_video
 from app.database import NewsDatabase
-from app.instagram_graphic import clean_instagram_text, generate_reel_cards
-from app.instagram_reel import build_html_reel, build_reel
+from app.instagram_graphic import clean_instagram_text
+from app.instagram_reel import build_html_reel
 from app.image_acquisition import prepare_story_image
 from app.media_storage import download_to, public_video_url
 from app.meta_instagram import publish_reel, InstagramRateLimitError
 from app.newsroom import process_news
 from app.publish_policy import risk_flags
 from app.phase_system import ensure_schema, run as agent_run, start as agent_start, finish as agent_finish, quality_gate, manager_route
-from app.advanced_ops import LAYOUTS, reserve_layout, layout_by_id, audit_stage, state_transition, visual_qa_card, record_verification, find_duplicate_story
+from app.advanced_ops import audit_stage, state_transition, visual_qa_card, record_verification, find_duplicate_story
 from app.advanced_system import ensure_schema as ensure_upgrade_schema, score_story, select_layout, attach_event, self_heal, publish_lock, mark_published, is_published, record_preview, record_source
 OUT=Path(os.getenv("MEDIA_OUTPUT_DIR","data/media")); OUT.mkdir(parents=True,exist_ok=True)
 MAX_INSTAGRAM_ATTEMPTS=999999; STALE_PROCESSING_MINUTES=20
@@ -220,8 +220,8 @@ def _process_instagram_untracked(db,row,music):
   state_transition(db,item_id,"REEL_CREATED")
   audit_stage(db,item_id,"REEL_QA","completed",{"renderer":"politicshub_html_16s","layout":layout["id"],"preview":preview_path})
   record_preview(db,item_id,str(video),preview_path,qa_card,layout["id"])
-  render_id=uuid.uuid4().hex[:12]
-  public_id=f"politicshub/reels/item-{item_id}-render-{render_id}"
+  video_hash=hashlib.sha256(video.read_bytes()).hexdigest()[:16]
+  public_id=f"politicshub/reels/item-{item_id}-{video_hash}"
   url=upload_video(str(video),public_id=public_id) or public_video_url(str(video))
   if not url:raise RuntimeError("Public Reel video URL unavailable")
   db.update(item_id,reel_cloudinary_url=url,reel_cloudinary_public_id=public_id)
@@ -256,7 +256,14 @@ def repair_published_content(db,limit):
  if limit<=0:return 0
  rows=[dict(r) for r in db.latest(max(limit*12,limit),status="published") if _needs_content_repair(r)][:limit]; repaired=0
  for row in rows:
-  if process_content(db,row):repaired+=1
+  # Repair body fields only. Never silently rewrite an already-published title.
+  if str(row.get("fact_check_status") or "").lower() in {"reviewed","approved"}:
+   continue
+  fields=_process_content(db,row)
+  if fields:
+   fields.pop("title",None)
+   db.update(int(row["id"]),**fields)
+   repaired+=1
  return repaired
 
 def _schedule_due(row,now):
