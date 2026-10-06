@@ -19,7 +19,6 @@ from app.image_acquisition import prepare_story_image
 from app.media_storage import download_to, public_video_url
 from app.meta_instagram import publish_reel, InstagramRateLimitError
 from app.newsroom import process_news
-from app.phi4 import available as phi4_available, reel_script as phi4_reel_script
 from app.publish_policy import risk_flags
 from app.phase_system import ensure_schema, run as agent_run, start as agent_start, finish as agent_finish, quality_gate, manager_route
 from app.advanced_ops import LAYOUTS, reserve_layout, layout_by_id, audit_stage, state_transition, visual_qa_card, record_verification, find_duplicate_story
@@ -147,21 +146,13 @@ def _recover_stale_processing(db,now):
  return recovered
 
 def _generate_reel_script(row):
-    """Generate Reel copy with Phi-4 when configured; keep deterministic fallback."""
-    title=str(row.get("title") or "Latest news update").strip()
-    article=str(row.get("bot_article") or row.get("bot_summary") or row.get("summary") or "").strip()
-    if not article:
-        return ""
-    if not phi4_available():
-        return str(row.get("bot_summary") or row.get("summary") or "").strip()
-    try:
-        script=phi4_reel_script(title,article).strip()
-        if script:
-            print(f"Phi-4 Reel script generated for item {row.get('id')}")
-            return script
-    except Exception as exc:
-        print(f"Phi-4 Reel script failed for item {row.get('id')}; using deterministic summary: {exc}")
-    return str(row.get("bot_summary") or row.get("summary") or "").strip()
+    """Use the deterministic newsroom copy; never call an external LLM."""
+    return str(
+        row.get("bot_summary")
+        or row.get("summary")
+        or row.get("bot_article")
+        or ""
+    ).strip()
 
 def _process_instagram_untracked(db,row,music):
  item_id=int(row["id"]); attempts=int(row.get("instagram_attempts") or 0)
