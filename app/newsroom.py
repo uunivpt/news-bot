@@ -425,8 +425,8 @@ def make_article(title,source_text):
         if bucket:paragraphs.append(f"{label}: {' '.join(bucket)}")
     return "\n\n".join(paragraphs).strip()
 
-TELEGRAM_IMAGE_RE=re.compile(r"(?:https?://)?(?:cdn\\d+\\.)?telesco\\.pe/",re.I)
-BAD_HEADLINE_RE=re.compile(r"(?i)^(?:the wall street journal reported|according to|describing the project|sources? said|officials? said|breaking:?)$|\\b(?:reported|describing|according to|said)\\s*$")
+TELEGRAM_IMAGE_RE=re.compile(r"(?:https?://)?(?:cdn\d+\.)?telesco\.pe/",re.I)
+BAD_HEADLINE_RE=re.compile(r"(?i)^(?:the wall street journal reported|according to|describing the project|sources? said|officials? said|breaking:?)$|\b(?:reported|describing|according to|said)\s*$")
 
 def is_telegram_image(url):
     return bool(TELEGRAM_IMAGE_RE.search(str(url or "")))
@@ -435,7 +435,7 @@ def quality_headline(title, source_text=""):
     """Return a complete public headline without mid-word truncation or dangling fragments."""
     value=SPACE_RE.sub(" ", clean_text(title)).strip(" .:-")
     words=value.split()
-    dangling=bool(re.search(r"(?:[,;:—–-]|\b)(?:\s*[A-Za-z]{1,2})$",value))
+    dangling=bool(re.search(r"(?:[,;:—–-]\s*[A-Za-z]{1,2})$",value))
     suspicious=(len(words)<5 or len(value)<28 or BAD_HEADLINE_RE.search(value or "") is not None or dangling)
     if not suspicious:
         # Lowercase 1–3 character first tokens are a common signature of a
