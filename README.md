@@ -17,9 +17,7 @@ Configure permitted sources in `config/sources.json`. Do not copy full copyright
 - Public Reel storage: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_UPLOAD_PRESET`
 - Fixed music: `FIXED_AUDIO_PATH` on the worker. Only use music you have permission to publish.
 - India news APIs: `NEWSAPI_KEY`, `NEWSDATA_API_KEY`.
-- Phi-4 worker secrets: `PHI4_ENABLED`, `PHI4_API_KEY`, `PHI4_ENDPOINT`, `PHI4_MODEL`, `PHI4_TIMEOUT_SECONDS` in GitHub Actions; the same values may be configured in Vercel for API routes.
-
-Story processing is deterministic by default and can optionally use the server-side Microsoft Phi-4 layer when `PHI4_ENABLED` and its credentials are configured. Never expose `PHI4_API_KEY` to the browser.
+Story processing is deterministic-only: source text is cleaned, selected, and assembled without an external LLM/API.
 
 Generate admin hashes with `python scripts/hash_password.py`.
 
