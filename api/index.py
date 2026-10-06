@@ -73,7 +73,7 @@ def _bootstrap_news_snapshot(database):
   return 0
 
 
-PUBLIC_BACKEND_ORIGIN=os.getenv("PUBLIC_BACKEND_ORIGIN","https://politicshub.onrender.com").rstrip("/")
+PUBLIC_BACKEND_ORIGIN=os.getenv("PUBLIC_BACKEND_ORIGIN","").rstrip("/")
 _PUBLIC_API_TIMEOUT=8
 _PUBLIC_RATE={}
 
@@ -88,6 +88,7 @@ def _public_rate_allowed(limit=120,window=60):
  bucket[1]+=1; return True
 
 def _proxy_public(path):
+ if not PUBLIC_BACKEND_ORIGIN:return None
  try:
   import requests
   query=request.query_string.decode("utf-8")
@@ -97,6 +98,19 @@ def _proxy_public(path):
  except Exception as exc:
   print(f"Public backend proxy failed: {exc}")
   return None
+
+def _snapshot_rows(category="all", search=None):
+ path=Path(app.static_folder or "public") / "news-data.json"
+ if not path.exists():return []
+ try:payload=json.loads(path.read_text(encoding="utf-8"))
+ except Exception:return []
+ rows=[dict(x) for x in payload if isinstance(x,dict) and x.get("title")]
+ if category and category!="all":rows=[x for x in rows if str(x.get("category") or "general").lower()==category]
+ if search:
+  q=str(search).strip().lower()
+  rows=[x for x in rows if q in str(x.get("title") or "").lower() or q in str(x.get("summary") or x.get("bot_summary") or "").lower() or q in str(x.get("source_name") or x.get("source") or "").lower()]
+ return rows
+
 
 def _rank_public(rows):
  items=[dict(r) for r in rows]
@@ -112,12 +126,7 @@ def _public_rows_for_section(category="all",limit=200):
    return dedupe_story_rows(rows,threshold=0.78)[:limit]
   finally:database.close()
  except RuntimeError:
-  try:
-   import requests
-   url=PUBLIC_BACKEND_ORIGIN+"/api/news?category="+requests.utils.quote(category)+"&limit="+str(limit)
-   response=requests.get(url,timeout=_PUBLIC_API_TIMEOUT,headers={"Accept":"application/json","X-PoliticsHub-Proxy":"1"})
-   return response.json() if response.ok and isinstance(response.json(),list) else []
-  except Exception as exc: print(f"SSR section proxy failed: {exc}"); return []
+  return _snapshot_rows(category)[:limit]
 
 def _section_html(category="all"):
  rows=_public_rows_for_section(category,40)
@@ -256,13 +265,11 @@ def _public_row_by_id(item_id):
    if row:return _publicize(row)
   finally: database.close()
  except RuntimeError:
-  try:
-   import requests
-   response=requests.get(PUBLIC_BACKEND_ORIGIN+"/api/news/"+str(int(item_id)),timeout=_PUBLIC_API_TIMEOUT,headers={"Accept":"application/json","X-PoliticsHub-Proxy":"1"})
-   if response.ok:
-    return response.json()
-  except Exception as exc: print(f"SSR article proxy failed: {exc}")
- return None
+  pass
+ for item in _snapshot_rows("all"):
+  if str(item.get("id"))==str(item_id):return _publicize(item)
+ proxied=_proxy_public("/api/news/"+str(int(item_id)))
+ return proxied.json() if proxied is not None and getattr(proxied,"status_code",500)<400 else None
 
 def _article_html(row):
  row=dict(row); title=str(row.get("title") or "PoliticsHub.in"); category=str(row.get("category") or "India")
@@ -438,7 +445,7 @@ def login():
 
 @app.get("/robots.txt")
 def robots():
- return app.response_class("User-agent: *\nAllow: /\nAllow: /api/\nAllow: /api/news\nAllow: /ads.txt\nDisallow: /admin/\nDisallow: /admin.html\nDisallow: /admin.js\nDisallow: /newsroom-console-8x4m7k2q.html\nSitemap: https://www.politicshub.in/sitemap.xml\nSitemap: https://www.politicshub.in/news-sitemap.xml\n",mimetype="text/plain")
+ return app.response_class("User-agent: *\nAllow: /\nAllow: /api/\nAllow: /api/news\nAllow: /ads.txt\nDisallow: /admin/\nDisallow: /admin.html\nDisallow: /admin.js\nDisallow: /newsroom-console-8x4m7k2q.html\nSitemap: https://politicshub.in/sitemap.xml\nSitemap: https://politicshub.in/news-sitemap.xml\n",mimetype="text/plain")
 
 @app.get("/api/og-home")
 def og_home():
@@ -539,6 +546,9 @@ def news():
    return jsonify({"error":"news backend unavailable"}),503
  try:
   rows=_rank_public(database.latest(max(limit*6,limit),category,status,search,review,ig))
+  if not admin_ok():
+   rows.extend(_snapshot_rows(category,search))
+  rows=_rank_public(rows)
   rows=dedupe_story_rows(rows,threshold=0.78)
   return jsonify(rows_json(rows[:limit],compact=compact))
  finally:database.close()
@@ -552,10 +562,11 @@ def public_search():
  except ValueError:limit=30
  try:database=db()
  except RuntimeError:
-  proxied=_proxy_public("/api/news")
-  return proxied or (jsonify({"error":"news backend unavailable"}),503)
+  return jsonify(rows_json(_rank_public(_snapshot_rows("all",q))[:limit]))
  try:
   rows=_rank_public(database.latest(min(limit*8,400),"all","published",q))
+  rows.extend(_snapshot_rows("all",q))
+  rows=_rank_public(rows)
   rows=dedupe_story_rows(rows,threshold=0.78)
   return jsonify(rows_json(rows[:limit]))
  finally:database.close()
@@ -603,8 +614,10 @@ def article(item_id):
   return proxied or (jsonify({"error":"news backend unavailable"}),503)
  try:
   row=database.get_by_id(item_id,"all")
-  if not row or (row["status"]!="published" and not admin_ok()):return jsonify({"error":"not found"}),404
-  return jsonify(_publicize(row))
+  if row and (row["status"]=="published" or admin_ok()):return jsonify(_publicize(row))
+  snapshot=next((x for x in _snapshot_rows("all") if str(x.get("id"))==str(item_id)),None)
+  if snapshot:return jsonify(_publicize(snapshot))
+  return jsonify({"error":"not found"}),404
  finally:database.close()
 
 @app.get("/api/stats")
