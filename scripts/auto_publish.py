@@ -104,6 +104,10 @@ def _direct_fallback_content(row):
  if len(title_words)<4 or len(summary_words)<18 or len(summary)<100:
   return False
  article=summary
+ qa=quality_gate(title,summary,article)
+ if not qa["passed"]:
+  print(f"Direct fallback blocked by quality gate for item {row.get('id')}: {qa['errors']}")
+  return False
  return {"title":title,"summary":summary,"bot_summary":summary,"bot_article":article}
 
 def prepare_content(db,row):
@@ -172,10 +176,14 @@ def _process_instagram_untracked(db,row,music):
   # license-aware searcher uses openly licensed candidates only.
   try:
    image_meta=prepare_story_image(row, output_dir=OUT/"news_images")
-   if image_meta:
+   if image_meta and image_meta.get("image_url"):
     db.update(item_id, **{k:v for k,v in image_meta.items() if k != "image_local_path"})
     row.update(image_meta)
     print(f"Image selected for item {item_id}: {image_meta.get('image_source')} / {image_meta.get('image_license')} / score={image_meta.get('image_selection_score')}")
+   elif image_meta:
+    # A failed/weak replacement search must never blank a previously stored image.
+    image_meta.pop("image_url",None)
+    image_meta.pop("image_local_path",None)
   except Exception as image_exc:
    print(f"Image acquisition failed for item {item_id}: {image_exc}")
    row["image_local_path"]=""
@@ -276,18 +284,23 @@ def _minutes_since_last(db,now):
 
 def _instagram_candidates(db,mode,limit,now):
  if limit<=0:return []
- # Phone/Instagram-only workers may intentionally leave website items in "pending".
- # Instagram should still be able to consume those queued stories.
- rows=[dict(r) for r in db.latest(max(limit*20,100),status="all",instagram_status="pending")]
- rows=[r for r in rows if r.get("status") in {"pending","published"} and _schedule_due(r,now)]
- if mode=="manual":rows=[r for r in rows if int(r.get("instagram_selected") or 0)==1]
+ ph="%"+"s" if db._postgres else "?"
+ params=["pending"]
+ conditions=[f"instagram_status={ph}", "status='published'"]
+ if mode=="manual":
+  conditions.append("instagram_selected=1")
+ sql="SELECT * FROM news_items WHERE "+" AND ".join(conditions)+" ORDER BY id ASC"
+ rows=[dict(r) for r in db.conn.execute(sql,params).fetchall()]
+ # Scheduled/manual selection is filtered after the indexed SQL query; this keeps
+ # old manually queued stories eligible instead of losing them behind a 100-row window.
+ rows=[r for r in rows if _schedule_due(r,now)]
  for r in rows:
   try:
-   s=db.conn.execute("SELECT score,breaking FROM ph_news_scores WHERE item_id="+("%s" if db._postgres else "?"),(int(r["id"]),)).fetchone()
+   s=db.conn.execute("SELECT score,breaking FROM ph_news_scores WHERE item_id="+ph,(int(r["id"]),)).fetchone()
    r["_upgrade_score"]=float(s["score"] if s else 0); r["_upgrade_breaking"]=bool(s["breaking"] if s else 0)
   except Exception:
    r["_upgrade_score"]=0; r["_upgrade_breaking"]=False
- rows.sort(key=lambda r:(0 if r.get("_upgrade_breaking") else 1,0 if r.get("instagram_scheduled_at") else 1,-float(r.get("_upgrade_score") or 0),int(r.get("instagram_queue_order") or 0) if int(r.get("instagram_queue_order") or 0)>0 else 10**9,-int(r.get("id") or 0)))
+ rows.sort(key=lambda r:(0 if r.get("_upgrade_breaking") else 1,0 if r.get("instagram_scheduled_at") else 1,-float(r.get("_upgrade_score") or 0),int(r.get("instagram_queue_order") or 0) if int(r.get("instagram_queue_order") or 0)>0 else 10**9,int(r.get("id") or 0)))
  return rows[:limit]
 
 def main():
@@ -304,7 +317,7 @@ def main():
  except ValueError:env_daily=1000
  try:interval=max(0,int(os.getenv("INSTAGRAM_INTERVAL_MINUTES",settings.get("instagram_interval_minutes","0"))))
  except ValueError:interval=0
- daily_limit=min(admin_daily,env_daily) if env_daily else admin_daily; now=datetime.now(timezone.utc); music=audio_path() if publish_instagram else None; pending=[dict(r) for r in db.latest(max_items,status="pending")] if publish_website else []
+ daily_limit=min(admin_daily,env_daily) if env_daily else admin_daily; now=datetime.now(timezone.utc); music=audio_path() if publish_instagram else None; pending=[dict(r) for r in db.latest(max_items,status="pending",order="asc")] if publish_website else []
  published=held=0
  for row in pending:
   # Always regenerate pending content from the freshest source. If the newsroom
