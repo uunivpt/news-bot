@@ -1,5 +1,6 @@
 import json
 import logging
+from urllib.parse import urlparse
 from pathlib import Path
 from typing import Any, Callable
 
@@ -11,6 +12,13 @@ from .website_monitor import collect_website
 from .phase_system import ensure_schema, run as agent_run, cluster_stories
 
 logger = logging.getLogger(__name__)
+
+def _safe_http_url(value: str) -> bool:
+    try:
+        parsed=urlparse(str(value or "").strip())
+        return parsed.scheme.lower() in {"http","https"} and bool(parsed.netloc)
+    except Exception:
+        return False
 
 COLLECTORS: dict[str, Callable[[dict[str, Any]], list]] = {
     "rss": collect_rss,
@@ -45,7 +53,16 @@ def collect_once(config: dict[str, Any], db: NewsDatabase) -> tuple[int, int]:
             try:
                 with agent_run(db, "trend", "collect_source", metadata={"source": source.get("name","unknown"), "type": source_type}):
                     items = collector(source)
-                    source_added, source_skipped = db.insert_many(items)
+                    safe_items=[]
+                    rejected_urls=0
+                    for item in items:
+                        if _safe_http_url(getattr(item,"url","")):
+                            safe_items.append(item)
+                        else:
+                            rejected_urls+=1
+                    if rejected_urls:
+                        logger.warning("%s/%s: rejected %d item(s) with non-http(s) URLs",source_type,source.get("name","unknown"),rejected_urls)
+                    source_added, source_skipped = db.insert_many(safe_items)
                 added += source_added
                 skipped += source_skipped
                 logger.info(
