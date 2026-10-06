@@ -330,8 +330,12 @@ def main():
   if duplicate:
    audit_stage(db,int(row["id"]),"DUPLICATE_CHECK","flagged",{"similarity":round(duplicate[0],3),"existing_id":duplicate[1].get("id")})
   p="%s" if db._postgres else "?"
-  vr=db.conn.execute("SELECT source_name FROM ph_cluster_items WHERE news_item_id="+p,(int(row["id"]),)).fetchall()
-  names=[str(x["source_name"]) for x in vr]
+  cluster_row=db.conn.execute("SELECT cluster_id FROM ph_cluster_items WHERE news_item_id="+p+" ORDER BY created_at DESC LIMIT 1",(int(row["id"]),)).fetchone()
+  if cluster_row:
+   vr=db.conn.execute("SELECT source_name FROM ph_cluster_items WHERE cluster_id="+p+" ORDER BY created_at ASC",(cluster_row["cluster_id"],)).fetchall()
+  else:
+   vr=[]
+  names=list(dict.fromkeys(str(x["source_name"]) for x in vr if str(x["source_name"] or "").strip()))
   classification=record_verification(db,int(row["id"]),len(names),names,[])
   event_id=attach_event(db,int(row["id"]),row.get("title") or "",row.get("category") or "general",row.get("source_name") or (names[0] if names else ""))
   score_story(db,row,len(names),classification,round(duplicate[0]*100,2) if duplicate else 0)
