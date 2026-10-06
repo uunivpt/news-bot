@@ -52,7 +52,7 @@ main{min-height:70vh;animation:enter .5s var(--e)}
 .lt{grid-column:span 4}.li{display:flex;justify-content:space-between;gap:14px;padding:14px 0;border-bottom:1px solid var(--line);font:700 17px/1.2 var(--display);letter-spacing:-.02em}.li:last-child{border:0}.li small{flex:none;font:500 12px var(--sans);color:var(--mut)}.li:hover{color:var(--k)}
 /* tape */
 .band{margin:56px -30px;rotate:-1.6deg;background:var(--ink);color:var(--bg);overflow:hidden;padding:16px 0}
-.bt{display:flex;align-items:center;gap:.5em;width:max-content;white-space:nowrap;font:800 clamp(32px,4.4vw,60px)/1 var(--display);letter-spacing:-.04em;will-change:transform}
+.bt-dup{display:contents}.bt{display:flex;align-items:center;gap:.5em;width:max-content;white-space:nowrap;font:800 clamp(32px,4.4vw,60px)/1 var(--display);letter-spacing:-.04em;will-change:transform}
 .bt a{color:var(--k);transition:color .25s}.bt a:hover{color:var(--bg)}.bt i{font-style:normal;color:var(--bg);opacity:.5;margin:0 .3em}
 .tabs{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:0 -14px 24px;padding:0 14px}.tabs::-webkit-scrollbar{display:none}
 .tabs a{flex:none;padding:11px 17px;border-radius:999px;background:var(--card);font:600 13px var(--sans);color:var(--mut);box-shadow:var(--sh);transition:.25s}.tabs a.on{background:var(--k);color:#fff}
