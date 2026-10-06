@@ -22,6 +22,10 @@ def run_cross_source_check(db: NewsDatabase, limit: int = 100) -> int:
       status = "cross_source" if len(sources) >= 2 else "needs_review"
       for row in rows_for_title:
        item_id = row["id"]
+       current = str(row["fact_check_status"] or "").strip().lower()
+       # Never overwrite a human-reviewed/approved decision with an automated precheck.
+       if current in {"reviewed", "approved"}:
+        continue
        db.update(item_id, fact_check_status=status, fact_check_notes=note)
        checked += 1
     return checked
