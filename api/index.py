@@ -123,18 +123,53 @@ def _section_html(category="all"):
  rows=_public_rows_for_section(category,40)
  label="Latest news" if category=="all" else str(category).title()+" news"
  canonical=SITE_ORIGIN+"/" if category=="all" else SITE_ORIGIN+"/"+category+"/"
- links=[]
+ cards=[]
  for row in rows:
   try:
    row=_publicize(row)
    title=html.escape(str(row.get("title") or "Untitled"))
    href=article_path(row)
    date=html.escape(str(row.get("published_at_site") or row.get("published_at") or ""))
-   summary=html.escape(str(row.get("bot_summary") or row.get("summary") or "")[:220])
-   links.append('<article><h2><a href="'+href+'">'+title+'</a></h2><p>'+summary+'</p><time>'+date+'</time></article>')
-  except Exception: pass
- body="".join(links) or '<p class="msg">No stories are available in this section right now.</p>'
- return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home"><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1752666987448533" crossorigin="anonymous"></script><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui9"></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app"><div class="art"><div class="ah"><span class="lbl red">PoliticsHub.in</span><h1>'+html.escape(label)+'</h1><p class="dek">What matters, clearly.</p></div><section class="body">'+body+'</section></div></div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="/settings.html">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=phui9"></script></body></html>'
+   summary=html.escape(str(row.get("bot_summary") or row.get("summary") or "")[:320])
+   source=html.escape(str(row.get("source_name") or "PoliticsHub"))
+   image=str(row.get("image_url") or "").strip()
+   media=""
+   if image.startswith(("http://","https://","/")):
+    media='<img src="'+html.escape(image,quote=True)+'" alt="" loading="lazy" decoding="async">'
+   card_class="card im" if media else "card tx"
+   fallback="" if media else '<span class="wm" aria-hidden="true">'+html.escape(str(row.get("category") or category or "N")[:1].upper())+"</span>"
+   cards.append('<a class="'+card_class+' rv" href="'+html.escape(href,quote=True)+'">'+media+fallback+'<span class="chip stk">'+html.escape(str(row.get("category") or category or "News"))+'</span><span class="go" aria-hidden="true">↗</span><h3>'+title+'</h3><p>'+summary+'</p><span class="m">'+source+" · "+date+"</span></a>")
+  except Exception:
+   pass
+ first=rows[0] if rows else {}
+ first_title=html.escape(str(first.get("title") or "Latest news"))
+ first_summary=html.escape(str(first.get("bot_summary") or first.get("summary") or "")[:420])
+ first_category=html.escape(str(first.get("category") or category or "News"))
+ first_source=html.escape(str(first.get("source_name") or "PoliticsHub"))
+ first_href=html.escape(article_path(first),quote=True) if first.get("id") else "#"
+ first_image=str(first.get("image_url") or "").strip()
+ first_media=""
+ if first_image.startswith(("http://","https://","/")):
+  first_media='<img src="'+html.escape(first_image,quote=True)+'" alt="" loading="eager" decoding="async">'
+ else:
+  first_media='<span class="big">'+first_category+"</span>"
+ jump=[]
+ for cat in ("india","politics","world","business","technology","sports","entertainment","hindi"):
+  jump.append('<a href="/'+cat+'/">'+cat.title()+'<small>'+str(sum(1 for r in rows if str(r.get("category") or "").lower()==cat))+'</small></a>')
+ just_in=[]
+ for row in rows[1:4]:
+  try:
+   just_in.append('<a class="li" href="'+html.escape(article_path(row),quote=True)+'"><span>'+html.escape(str(row.get("title") or "Untitled"))+'</span><small>'+html.escape(str(row.get("published_at_site") or row.get("published_at") or ""))+'</small></a>')
+  except Exception:
+   pass
+ body='<section class="bento">'
+ body+='<div class="tile hl"><span class="burst" aria-hidden="true">✺</span><span class="lbl"><i class="dot"></i>What matters, clearly.</span><h1>'+first_title+'</h1><p>'+first_summary+'</p><a class="btn" href="'+first_href+'">Read latest story <span aria-hidden="true">↗</span></a></div>'
+ body+='<a class="tile cv '+("im" if first_image.startswith(("http://","https://","/")) else "tx")+'" href="'+first_href+'" aria-label="'+first_title+'">'+first_media+'<span class="chip stk">'+first_category+'</span><span class="cap">'+first_source+'</span></a>'
+ body+='<div class="tile ct"><span class="lbl">Today on PoliticsHub.in</span><b class="num" data-n="'+str(len(rows))+'">'+str(len(rows))+'</b><span>stories in '+html.escape(label)+'</span></div>'
+ body+='<div class="tile sc"><span class="lbl">Jump to a desk</span><div class="pills">'+"".join(jump)+'</div></div>'
+ body+='<div class="tile lt"><span class="lbl">Just in</span>'+"".join(just_in)+'</div></section>'
+ body+='<div class="sh"><h2>Latest stories</h2><span class="lbl">'+str(len(rows))+' stories</span></div><div class="grid">'+"".join(cards)+'</div>'
+ return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home"><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1752666987448533" crossorigin="anonymous"></script><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui9"></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="/settings.html">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=phui9"></script></body></html>'
 
 def db():
  database=NewsDatabase(); _ensure_admin_users(database); _bootstrap_news_snapshot(database); return database
