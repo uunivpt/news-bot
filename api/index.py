@@ -1235,6 +1235,10 @@ def ai_assistant():
         return jsonify({"error":str(exc)[:500]}),503
 
 
+@app.get("/")
+def public_home():
+ return send_from_directory(app.static_folder,"index.html")
+
 @app.route("/<path:path>")
 def _render_public(path):
  if path.startswith("api/"): return jsonify({"error":"not found"}),404
