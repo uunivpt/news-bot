@@ -106,6 +106,24 @@ def collect_newsdata(source: dict[str, Any]) -> list[NewsItem]:
         external_id = str(article.get("article_id") or url)
         description = str(article.get("description") or article.get("content") or "").strip()
         image = article.get("image_url") or article.get("image")
+        # NewsData's article-level category is authoritative for topic routing.
+        # The source config only supplies the geographic fallback ("india").
+        raw_categories = article.get("category") or []
+        if isinstance(raw_categories, str):
+            raw_categories = [raw_categories]
+        normalized_categories = {str(value).strip().lower() for value in raw_categories if str(value).strip()}
+        category_map = {
+            "politics": "politics",
+            "business": "business",
+            "sports": "sports",
+            "technology": "technology",
+            "science": "science",
+            "health": "health",
+            "entertainment": "entertainment",
+            "world": "world",
+        }
+        category = next((category_map[value] for value in normalized_categories if value in category_map), "india")
+
         items.append(NewsItem(
             source_name=source_name,
             source_type="newsdata",
@@ -114,7 +132,7 @@ def collect_newsdata(source: dict[str, Any]) -> list[NewsItem]:
             published_at=published,
             summary=description,
             external_id=external_id,
-            category=source.get("category", "india"),
+            category=category,
             image_url=str(image).strip() if image else None,
             public_source=True,
         ))
