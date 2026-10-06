@@ -9,14 +9,14 @@
     {"name":"PIB Press Releases","url":"https://pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=1","source_class":"government","category":"india","enabled":true,"public_source":true,"timeout_seconds":12,"max_items":50},
     {"name":"PIB Media Invitations","url":"https://pib.gov.in/RssMain.aspx?ModId=10&Lang=1&Regid=1","source_class":"government","category":"india","enabled":true,"public_source":true,"timeout_seconds":12,"max_items":50},
     {"name":"GovInfo Presidential Documents","url":"https://www.govinfo.gov/rss/dcpd.xml","source_class":"government","category":"world","enabled":true,"public_source":true,"timeout_seconds":12,"max_items":50},
-    {"name":"GovInfo Federal Register","url":"https://www.govinfo.gov/rss/fr.xml","source_class":"government","category":"world","enabled":true,"public_source":true,"timeout_seconds":12,"max_items":50},
-    {"name":"GovInfo Code of Federal Regulations","url":"https://www.govinfo.gov/rss/cfr.xml","source_class":"government","category":"world","enabled":true,"public_source":true,"timeout_seconds":12,"max_items":50}
+    {"name":"GovInfo Federal Register","url":"https://www.govinfo.gov/rss/fr.xml","source_class":"government","category":"world","enabled":false,"public_source":true,"timeout_seconds":12,"max_items":50},
+    {"name":"GovInfo Code of Federal Regulations","url":"https://www.govinfo.gov/rss/cfr.xml","source_class":"government","category":"world","enabled":false,"public_source":true,"timeout_seconds":12,"max_items":50}
   ],
   "telegram": [
-    {"name":"Watcher Guru","username":"@WatcherGuru","category":"business","enabled":true,"public_source":true},
-    {"name":"Middle East Spectator","username":"@Middle_East_Spectator","category":"world","enabled":true,"public_source":true},
-    {"name":"Geopolitics Prime","username":"@geopolitics_prime","category":"politics","enabled":true,"public_source":true},
-    {"name":"DD Geopolitics","username":"@DDGeopolitics","category":"world","enabled":true,"public_source":true}
+    {"name":"Watcher Guru","username":"@WatcherGuru","category":"business","enabled":false,"public_source":true},
+    {"name":"Middle East Spectator","username":"@Middle_East_Spectator","category":"world","enabled":false,"public_source":true},
+    {"name":"Geopolitics Prime","username":"@geopolitics_prime","category":"politics","enabled":false,"public_source":true},
+    {"name":"DD Geopolitics","username":"@DDGeopolitics","category":"world","enabled":false,"public_source":true}
   ],
   "website": [
     {"name":"Government of India - PIB","source_class":"government","source_type":"government","category":"india","enabled":true,"collection_allowed":true,"public_source":true,"allowed_hosts":["pib.gov.in"],"sections":["https://www.pib.gov.in/Allrel.aspx?lang=1&reg=1"],"article_path_prefixes":["/PressReleasePage.aspx","/PressReleaseDetail.aspx","/Allrel.aspx","/newsite/PressReleaseDetail.aspx"],"max_links":20,"check_every_minutes":5},

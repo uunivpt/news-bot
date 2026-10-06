@@ -74,9 +74,14 @@ def sentences(text:str)->list[str]:
         item=part.strip(" \t-–—")
         if len(item)<20 or BAD_LINE_RE.search(item):
             continue
-        if index==len(parts)-1 and not re.search(r"[.!?][\"'’”)]*$",item):
-            continue
+        # A source may omit terminal punctuation, but it must still look like
+        # a complete sentence. Never publish a dangling final fragment.
         if TRAILING_FRAGMENT_RE.search(item):
+            continue
+        if index==len(parts)-1 and not re.search(r"[.!?][\"'’”)]*$",item):
+            if len(item.split())<8:
+                continue
+        if item.count("(")!=item.count(")") or item.count("[")!=item.count("]"):
             continue
         result.append(item.rstrip(".!?")+".")
     return result
@@ -359,6 +364,42 @@ def select_sentences(text,limit,title=""):
     chosen=set(chosen)
     return [item for i,item in enumerate(items) if i in chosen][:limit]
 
+def _headline_complete(value):
+    value=SPACE_RE.sub(" ",clean_text(value)).strip(" .:-")
+    if not value:return False
+    if "…" in value or value.endswith("..."):return False
+    if re.search(r"[,;:—–-]\\s*$",value):return False
+    if TRAILING_FRAGMENT_RE.search(value):return False
+    if value.count("(")!=value.count(")") or value.count("[")!=value.count("]"):return False
+    words=value.split()
+    if len(words)<3 or len(value)<18:return False
+    first=words[0]
+    if len(first)<=3 and first.islower() and len(words)>=4:return False
+    return True
+
+def _summary_complete(value):
+    items=sentences(value)
+    if not items:return False
+    return all(_headline_complete(x.rstrip(".")) and len(x.split())>=7 for x in items)
+
+def validate_news_copy(headline,summary,article):
+    errors=[]
+    if not _headline_complete(headline):
+        errors.append("incomplete_headline")
+    summary_sentences=sentences(summary)
+    if not summary_sentences:
+        errors.append("incomplete_summary")
+    elif any(len(x.split())<7 for x in summary_sentences):
+        errors.append("summary_contains_short_sentence")
+    elif not _summary_complete(summary):
+        errors.append("incomplete_summary")
+    article_sentences=sentences(article)
+    if not article_sentences:
+        errors.append("incomplete_article")
+    elif any(len(x.split())<7 for x in article_sentences):
+        errors.append("article_contains_short_sentence")
+    return {"passed":not errors,"errors":errors}
+
 def _first_complete_sentence(value):
     items=sentences(value)
     return items[0] if items else ""
@@ -425,28 +466,24 @@ def make_article(title,source_text):
         if bucket:paragraphs.append(f"{label}: {' '.join(bucket)}")
     return "\n\n".join(paragraphs).strip()
 
-TELEGRAM_IMAGE_RE=re.compile(r"(?:https?://)?(?:cdn\\d+\\.)?telesco\\.pe/",re.I)
-BAD_HEADLINE_RE=re.compile(r"(?i)^(?:the wall street journal reported|according to|describing the project|sources? said|officials? said|breaking:?)$|\\b(?:reported|describing|according to|said)\\s*$")
+TELEGRAM_IMAGE_RE=re.compile(r"(?:https?://)?(?:cdn\d+\.)?telesco\.pe/",re.I)
+BAD_HEADLINE_RE=re.compile(r"(?i)^(?:the wall street journal reported|according to|describing the project|sources? said|officials? said|breaking:?)$|\b(?:reported|describing|according to|said)\s*$")
 
 def is_telegram_image(url):
     return bool(TELEGRAM_IMAGE_RE.search(str(url or "")))
 
 def quality_headline(title, source_text=""):
-    """Return a complete public headline without mid-word truncation or dangling fragments."""
+    """Return a complete headline or an empty value; never silently keep a cut fragment."""
     value=SPACE_RE.sub(" ", clean_text(title)).strip(" .:-")
-    words=value.split()
-    dangling=bool(re.search(r"(?:[,;:—–-]|\b)(?:\s*[A-Za-z]{1,2})$",value))
-    suspicious=(len(words)<5 or len(value)<28 or BAD_HEADLINE_RE.search(value or "") is not None or dangling)
-    if not suspicious:
-        # Lowercase 1–3 character first tokens are a common signature of a
-        # front-cut source headline ("ws pumping...", "ween the sections", etc.).
-        first=words[0] if words else ""
-        if not (first and len(first)<=3 and first.islower() and len(words)>=4):
-            return value.rstrip(" .:-")
-    candidate=make_headline("", source_text or value)
-    if 5 <= len(candidate.split()) <= 18 and len(candidate)>=28:
-        return candidate.rstrip(" .:-")
-    return value.rstrip(" .:-") or "Latest news update"
+    if _headline_complete(value) and BAD_HEADLINE_RE.search(value or "") is None:
+        return value
+    for candidate in sentences(source_text):
+        candidate=_headline_from_sentence(candidate)
+        if 3 <= len(candidate.split()) <= 18 and _headline_complete(candidate):
+            return candidate
+    # If the source cannot provide a complete headline, fail closed. The
+    # publisher will keep the item pending instead of inventing/truncating copy.
+    return ""
 
 def build_editorial_value(title, source_materials):
     """
@@ -541,8 +578,14 @@ def process_news(title,source_text,category="general",source_materials=None):
         return None
 
     headline=quality_headline(title,material)
+    if not headline:
+        return None
     summary=make_summary(headline,material)
     article=make_article(headline,material)
+
+    copy_qa=validate_news_copy(headline,summary,article)
+    if not copy_qa["passed"]:
+        return None
 
     value=build_editorial_value(headline,source_materials or [])
     if article and value["eligible"]:

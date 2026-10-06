@@ -1,5 +1,7 @@
 import json
 import logging
+from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 from pathlib import Path
 from typing import Any, Callable
 
@@ -11,6 +13,31 @@ from .website_monitor import collect_website
 from .phase_system import ensure_schema, run as agent_run, cluster_stories
 
 logger = logging.getLogger(__name__)
+
+def _safe_http_url(value: str) -> bool:
+    try:
+        parsed=urlparse(str(value or "").strip())
+        return parsed.scheme.lower() in {"http","https"} and bool(parsed.netloc)
+    except Exception:
+        return False
+
+def _source_due(db: NewsDatabase, source_type: str, source: dict[str, Any]) -> bool:
+    try:
+        minutes=max(0,int(source.get("check_every_minutes",0)))
+    except (TypeError,ValueError):
+        minutes=0
+    if minutes<=0:
+        return True
+    key=f"collector_last:{source_type}:{source.get('name','unknown')}"
+    raw=db.get_settings().get(key)
+    if not raw:
+        return True
+    try:
+        last=datetime.fromisoformat(str(raw).replace("Z","+00:00"))
+        last=last if last.tzinfo else last.replace(tzinfo=timezone.utc)
+        return datetime.now(timezone.utc)-last >= timedelta(minutes=minutes)
+    except ValueError:
+        return True
 
 COLLECTORS: dict[str, Callable[[dict[str, Any]], list]] = {
     "rss": collect_rss,
@@ -43,16 +70,29 @@ def collect_once(config: dict[str, Any], db: NewsDatabase) -> tuple[int, int]:
             if not source.get("enabled", True):
                 continue
             try:
+                if not _source_due(db, source_type, source):
+                    logger.info("%s/%s: skipped; check_every_minutes has not elapsed",source_type,source.get("name","unknown"))
+                    continue
                 with agent_run(db, "trend", "collect_source", metadata={"source": source.get("name","unknown"), "type": source_type}):
                     items = collector(source)
-                    source_added, source_skipped = db.insert_many(items)
+                    safe_items=[]
+                    rejected_urls=0
+                    for item in items:
+                        if _safe_http_url(getattr(item,"url","")):
+                            safe_items.append(item)
+                        else:
+                            rejected_urls+=1
+                    if rejected_urls:
+                        logger.warning("%s/%s: rejected %d item(s) with non-http(s) URLs",source_type,source.get("name","unknown"),rejected_urls)
+                    source_added, source_skipped = db.insert_many(safe_items)
                 added += source_added
                 skipped += source_skipped
+                db.set_settings({f"collector_last:{source_type}:{source.get('name','unknown')}":datetime.now(timezone.utc).isoformat()})
                 logger.info(
                     "%s/%s: found=%d added=%d duplicate=%d",
                     source_type,
                     source.get("name", "unknown"),
-                    len(items),
+                    len(safe_items),
                     source_added,
                     source_skipped,
                 )

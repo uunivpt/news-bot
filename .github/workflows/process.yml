@@ -53,38 +53,12 @@ jobs:
         run: |
           test -n "$DATABASE_URL" || { echo "ERROR: GitHub Actions secret DATABASE_URL is missing."; exit 1; }
           echo "Production database secret is configured."
-      - name: Verify production database identity and current row count
-        env:
-          PYTHONPATH: .
-        run: |
-          python - <<'PY'
-          import os
-          from urllib.parse import urlsplit
-          import psycopg
-          url = os.environ.get("DATABASE_URL", "")
-          if not url:
-              raise SystemExit("DATABASE_URL is empty")
-          p = urlsplit(url)
-          host = p.hostname or ""
-          db = (p.path or "").lstrip("/")
-          print(f"DB target: host={host} db={db} port={p.port or 5432}")
-          with psycopg.connect(url, sslmode="require", connect_timeout=15) as conn:
-              with conn.cursor() as cur:
-                  cur.execute("SELECT current_database(), current_user, inet_server_addr()")
-                  print("DB identity:", cur.fetchone())
-                  cur.execute("SELECT COUNT(*) FROM news_items")
-                  print("news_items before collection:", cur.fetchone()[0])
-          PY
       - name: Validate source configuration
         run: python -m json.tool config/sources.json >/dev/null
       - name: Collect fresh news from configured sources
         env:
           PYTHONPATH: .
         run: python run.py --once --config config/sources.json
-      - name: Repair legacy published stories with deterministic bot
-        env:
-          BOT_REPAIR_BATCH: '5000'
-        run: python scripts/repair_bot_content.py
       - name: Repair legacy NewsData category routing
         env:
           PYTHONPATH: .

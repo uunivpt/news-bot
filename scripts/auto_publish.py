@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import subprocess
 import sys
-import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -13,15 +13,15 @@ if str(ROOT) not in sys.path:sys.path.insert(0,str(ROOT))
 from app.article_fetcher import enrich_source_text
 from app.cloudinary_storage import upload_video
 from app.database import NewsDatabase
-from app.instagram_graphic import clean_instagram_text, generate_reel_cards
-from app.instagram_reel import build_html_reel, build_reel
+from app.instagram_graphic import clean_instagram_text
+from app.instagram_reel import build_html_reel
 from app.image_acquisition import prepare_story_image
 from app.media_storage import download_to, public_video_url
 from app.meta_instagram import publish_reel, InstagramRateLimitError
-from app.newsroom import process_news
+from app.newsroom import process_news, validate_news_copy
 from app.publish_policy import risk_flags
 from app.phase_system import ensure_schema, run as agent_run, start as agent_start, finish as agent_finish, quality_gate, manager_route
-from app.advanced_ops import LAYOUTS, reserve_layout, layout_by_id, audit_stage, state_transition, visual_qa_card, record_verification, find_duplicate_story
+from app.advanced_ops import audit_stage, state_transition, visual_qa_card, record_verification, find_duplicate_story
 from app.advanced_system import ensure_schema as ensure_upgrade_schema, score_story, select_layout, attach_event, self_heal, publish_lock, mark_published, is_published, record_preview, record_source
 OUT=Path(os.getenv("MEDIA_OUTPUT_DIR","data/media")); OUT.mkdir(parents=True,exist_ok=True)
 MAX_INSTAGRAM_ATTEMPTS=999999; STALE_PROCESSING_MINUTES=20
@@ -104,6 +104,14 @@ def _direct_fallback_content(row):
  if len(title_words)<4 or len(summary_words)<18 or len(summary)<100:
   return False
  article=summary
+ copy_qa=validate_news_copy(title,summary,article)
+ if not copy_qa["passed"]:
+  print(f"Direct fallback blocked by copy completeness for item {row.get('id')}: {copy_qa['errors']}")
+  return False
+ qa=quality_gate(title,summary,article)
+ if not qa["passed"]:
+  print(f"Direct fallback blocked by quality gate for item {row.get('id')}: {qa['errors']}")
+  return False
  return {"title":title,"summary":summary,"bot_summary":summary,"bot_article":article}
 
 def prepare_content(db,row):
@@ -122,10 +130,14 @@ def process_content(db,row):
  return prepare_content(db,row)
 
 def _needs_content_repair(row):
- title=str(row.get("title") or "").strip(); summary=str(row.get("bot_summary") or row.get("summary") or "").strip(); article=str(row.get("bot_article") or "").strip()
+ title=str(row.get("title") or "").strip()
+ summary=str(row.get("bot_summary") or row.get("summary") or "").strip()
+ article=str(row.get("bot_article") or "").strip()
  if not article or not summary:return True
  if title.endswith(("…","...")) or len(title.split())>18:return True
- return _bad_fragment(summary) or _bad_fragment(article)
+ if _bad_fragment(summary) or _bad_fragment(article):return True
+ copy_qa=validate_news_copy(title,summary,article)
+ return not copy_qa["passed"]
 
 def publish_website_first(db,row,now):
  flags=risk_flags(row["title"],row.get("bot_summary") or row.get("summary") or ""); review="needs_review" if flags else "pending"
@@ -172,10 +184,14 @@ def _process_instagram_untracked(db,row,music):
   # license-aware searcher uses openly licensed candidates only.
   try:
    image_meta=prepare_story_image(row, output_dir=OUT/"news_images")
-   if image_meta:
+   if image_meta and image_meta.get("image_url"):
     db.update(item_id, **{k:v for k,v in image_meta.items() if k != "image_local_path"})
     row.update(image_meta)
     print(f"Image selected for item {item_id}: {image_meta.get('image_source')} / {image_meta.get('image_license')} / score={image_meta.get('image_selection_score')}")
+   elif image_meta:
+    # A failed/weak replacement search must never blank a previously stored image.
+    image_meta.pop("image_url",None)
+    image_meta.pop("image_local_path",None)
   except Exception as image_exc:
    print(f"Image acquisition failed for item {item_id}: {image_exc}")
    row["image_local_path"]=""
@@ -212,8 +228,8 @@ def _process_instagram_untracked(db,row,music):
   state_transition(db,item_id,"REEL_CREATED")
   audit_stage(db,item_id,"REEL_QA","completed",{"renderer":"politicshub_html_16s","layout":layout["id"],"preview":preview_path})
   record_preview(db,item_id,str(video),preview_path,qa_card,layout["id"])
-  render_id=uuid.uuid4().hex[:12]
-  public_id=f"politicshub/reels/item-{item_id}-render-{render_id}"
+  video_hash=hashlib.sha256(video.read_bytes()).hexdigest()[:16]
+  public_id=f"politicshub/reels/item-{item_id}-{video_hash}"
   url=upload_video(str(video),public_id=public_id) or public_video_url(str(video))
   if not url:raise RuntimeError("Public Reel video URL unavailable")
   db.update(item_id,reel_cloudinary_url=url,reel_cloudinary_public_id=public_id)
@@ -248,7 +264,14 @@ def repair_published_content(db,limit):
  if limit<=0:return 0
  rows=[dict(r) for r in db.latest(max(limit*12,limit),status="published") if _needs_content_repair(r)][:limit]; repaired=0
  for row in rows:
-  if process_content(db,row):repaired+=1
+  # Repair body fields only. Never silently rewrite an already-published title.
+  if str(row.get("fact_check_status") or "").lower() in {"reviewed","approved"}:
+   continue
+  fields=_process_content(db,row)
+  if fields:
+   fields.pop("title",None)
+   db.update(int(row["id"]),**fields)
+   repaired+=1
  return repaired
 
 def _schedule_due(row,now):
@@ -276,18 +299,27 @@ def _minutes_since_last(db,now):
 
 def _instagram_candidates(db,mode,limit,now):
  if limit<=0:return []
- # Phone/Instagram-only workers may intentionally leave website items in "pending".
- # Instagram should still be able to consume those queued stories.
- rows=[dict(r) for r in db.latest(max(limit*20,100),status="all",instagram_status="pending")]
- rows=[r for r in rows if r.get("status") in {"pending","published"} and _schedule_due(r,now)]
- if mode=="manual":rows=[r for r in rows if int(r.get("instagram_selected") or 0)==1]
+ ph="%"+"s" if db._postgres else "?"
+ params=["pending"]
+ conditions=[f"instagram_status={ph}", "status='published'"]
+ if mode=="manual":
+  conditions.append("instagram_selected=1")
+ else:
+  # Risk-flagged stories may remain visible on the website for post-publication
+  # review, but they must not be auto-distributed to Instagram.
+  conditions.append("(fact_check_status IS NULL OR fact_check_status <> 'needs_review')")
+ sql="SELECT * FROM news_items WHERE "+" AND ".join(conditions)+" ORDER BY id ASC"
+ rows=[dict(r) for r in db.conn.execute(sql,params).fetchall()]
+ # Scheduled/manual selection is filtered after the indexed SQL query; this keeps
+ # old manually queued stories eligible instead of losing them behind a 100-row window.
+ rows=[r for r in rows if _schedule_due(r,now)]
  for r in rows:
   try:
-   s=db.conn.execute("SELECT score,breaking FROM ph_news_scores WHERE item_id="+("%s" if db._postgres else "?"),(int(r["id"]),)).fetchone()
+   s=db.conn.execute("SELECT score,breaking FROM ph_news_scores WHERE item_id="+ph,(int(r["id"]),)).fetchone()
    r["_upgrade_score"]=float(s["score"] if s else 0); r["_upgrade_breaking"]=bool(s["breaking"] if s else 0)
   except Exception:
    r["_upgrade_score"]=0; r["_upgrade_breaking"]=False
- rows.sort(key=lambda r:(0 if r.get("_upgrade_breaking") else 1,0 if r.get("instagram_scheduled_at") else 1,-float(r.get("_upgrade_score") or 0),int(r.get("instagram_queue_order") or 0) if int(r.get("instagram_queue_order") or 0)>0 else 10**9,-int(r.get("id") or 0)))
+ rows.sort(key=lambda r:(0 if r.get("_upgrade_breaking") else 1,0 if r.get("instagram_scheduled_at") else 1,-float(r.get("_upgrade_score") or 0),int(r.get("instagram_queue_order") or 0) if int(r.get("instagram_queue_order") or 0)>0 else 10**9,int(r.get("id") or 0)))
  return rows[:limit]
 
 def main():
@@ -304,7 +336,7 @@ def main():
  except ValueError:env_daily=1000
  try:interval=max(0,int(os.getenv("INSTAGRAM_INTERVAL_MINUTES",settings.get("instagram_interval_minutes","0"))))
  except ValueError:interval=0
- daily_limit=min(admin_daily,env_daily) if env_daily else admin_daily; now=datetime.now(timezone.utc); music=audio_path() if publish_instagram else None; pending=[dict(r) for r in db.latest(max_items,status="pending")] if publish_website else []
+ daily_limit=min(admin_daily,env_daily) if env_daily else admin_daily; now=datetime.now(timezone.utc); music=audio_path() if publish_instagram else None; pending=[dict(r) for r in db.conn.execute("SELECT * FROM news_items WHERE status='pending' ORDER BY COALESCE(published_at,collected_at) ASC,id ASC LIMIT "+str(max_items)).fetchall()] if publish_website else []
  published=held=0
  for row in pending:
   # Always regenerate pending content from the freshest source. If the newsroom
@@ -313,8 +345,12 @@ def main():
   if duplicate:
    audit_stage(db,int(row["id"]),"DUPLICATE_CHECK","flagged",{"similarity":round(duplicate[0],3),"existing_id":duplicate[1].get("id")})
   p="%s" if db._postgres else "?"
-  vr=db.conn.execute("SELECT source_name FROM ph_cluster_items WHERE news_item_id="+p,(int(row["id"]),)).fetchall()
-  names=[str(x["source_name"]) for x in vr]
+  cluster_row=db.conn.execute("SELECT cluster_id FROM ph_cluster_items WHERE news_item_id="+p+" ORDER BY created_at DESC LIMIT 1",(int(row["id"]),)).fetchone()
+  if cluster_row:
+   vr=db.conn.execute("SELECT source_name FROM ph_cluster_items WHERE cluster_id="+p+" ORDER BY created_at ASC",(cluster_row["cluster_id"],)).fetchall()
+  else:
+   vr=[]
+  names=list(dict.fromkeys(str(x["source_name"]) for x in vr if str(x["source_name"] or "").strip()))
   classification=record_verification(db,int(row["id"]),len(names),names,[])
   event_id=attach_event(db,int(row["id"]),row.get("title") or "",row.get("category") or "general",row.get("source_name") or (names[0] if names else ""))
   score_story(db,row,len(names),classification,round(duplicate[0]*100,2) if duplicate else 0)

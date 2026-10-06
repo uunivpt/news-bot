@@ -172,7 +172,7 @@ jobs:
 
           assert abs(duration - 16.0) <= 0.15, duration
           assert (video["width"], video["height"]) == (1080, 1920)
-          assert video["pix_fmt"] == "yuv444p"
+          assert video["pix_fmt"] == "yuv420p"
           assert "60/1" in subprocess.check_output([
               "ffprobe", "-v", "error", "-select_streams", "v:0",
               "-show_entries", "stream=r_frame_rate", "-of", "default=nw=1:nk=1", path

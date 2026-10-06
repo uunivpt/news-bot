@@ -37,7 +37,10 @@ def main():
     material=source.get("text") or row.get("summary") or row.get("title") or ""
     result=process_news(source.get("title") or row.get("title") or "",material,row.get("category") or "general")
     if not result:failed+=1; continue
-    fields={"title":result["headline"],"summary":result["summary"],"bot_summary":result["summary"],"bot_article":result["article"]}
+    # Repairs must never silently rewrite editorial titles or human-reviewed stories.
+    if str(row.get("fact_check_status") or "").lower() in {"reviewed","approved"}:
+        continue
+    fields={"summary":result["summary"],"bot_summary":result["summary"],"bot_article":result["article"]}
     if source.get("image_url") and not row.get("image_url"):fields["image_url"]=source["image_url"]
     database.update(int(row["id"]),**fields); repaired+=1
    except Exception as exc:

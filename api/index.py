@@ -14,7 +14,7 @@ from app.models import NewsItem
 from app.factcheck import run_cross_source_check
 from app.newsroom import process_news, story_score, is_breaking, dedupe_story_rows, quality_headline, is_telegram_image
 from app.worker import dispatch_worker
-from app.phase_system import analytics as phase_analytics, cluster_stories, cluster_summary, train as train_agent
+from app.phase_system import phase_analytics, cluster_stories, cluster_summary, train as train_agent
 from app.reporting import operations_pdf
 from app.advanced_ops import ensure_advanced_schema, live_dashboard, detailed_report, record_verification, audit_stage
 from app.advanced_system import admin_snapshot, historical_analytics, event_timeline, ensure_schema as ensure_upgrade_schema
@@ -180,7 +180,9 @@ def _publicize(row):
   raw=dict(row).get("published_at_site") or dict(row).get("published_at")
   if raw:
    try:
-    dt=datetime.fromisoformat(str(raw).replace("Z","+00:00")); dt=dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc); r["published_at"]=dt.astimezone(ZoneInfo("Asia/Kolkata")).strftime("%d %b %Y · %H:%M")
+    dt=datetime.fromisoformat(str(raw).replace("Z","+00:00")); dt=dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    r["published_at"]=dt.astimezone(ZoneInfo("Asia/Kolkata")).strftime("%d %b %Y · %H:%M")
+    r["published_at_iso"]=dt.astimezone(timezone.utc).isoformat().replace("+00:00","Z")
    except ValueError:pass
   source_text=_strip_promo_nav(dict(row).get("bot_article") or dict(row).get("bot_summary") or dict(row).get("summary") or "")
   r["title"]=_public_title(r.get("title"),source_text)
@@ -230,8 +232,8 @@ def _public_row_by_id(item_id):
 def _article_html(row):
  row=dict(row); title=str(row.get("title") or "PoliticsHub.in"); category=str(row.get("category") or "India")
  canonical=SITE_ORIGIN+article_path(row)
- published=row.get("published_at") or row.get("published_at_site") or row.get("published_at")
- modified=row.get("last_viewed_at") or published
+ published=row.get("published_at_iso") or row.get("published_at_site") or row.get("published_at")
+ modified=row.get("published_at_iso") or row.get("published_at_site") or row.get("published_at")
  summary=str(row.get("summary") or row.get("bot_summary") or "")[:300]
  body=str(row.get("article") or row.get("bot_article") or row.get("body") or summary)
  source=str(row.get("source_name") or "PoliticsHub.in")
@@ -336,12 +338,14 @@ def security_headers(response):
  response.headers["Referrer-Policy"]="strict-origin-when-cross-origin"
  response.headers["Permissions-Policy"]="camera=(), microphone=(), geolocation=(), payment=(), usb=()"
  response.headers["Strict-Transport-Security"]="max-age=63072000; includeSubDomains; preload"
- response.headers["Content-Security-Policy"]="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; media-src 'self' https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-src 'self'; worker-src 'self'; upgrade-insecure-requests"
+ response.headers["Content-Security-Policy"]="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://pagead2.googlesyndication.com https://www.google.com https://www.googletagmanager.com https://www.googleadservices.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; media-src 'self' https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://pagead2.googlesyndication.com https://googleads.g.doubleclick.net https://www.google.com https://www.googleadservices.com; frame-src 'self' https://googleads.g.doubleclick.net https://tpc.googlesyndication.com; worker-src 'self'; upgrade-insecure-requests"
  response.headers["Cross-Origin-Opener-Policy"]="same-origin"
  response.headers["Cross-Origin-Resource-Policy"]="same-origin"
  response.headers["X-Permitted-Cross-Domain-Policies"]="none"
- if request.path.startswith("/api/admin"):response.headers["Cache-Control"]="no-store, no-cache, must-revalidate, max-age=0"
- elif request.method=="GET" and request.path.startswith("/api/"):response.headers["Cache-Control"]="public, max-age=30, s-maxage=30, stale-while-revalidate=60"
+ if request.path.startswith("/api/admin") or (request.path.startswith("/api/") and admin_ok()):
+  response.headers["Cache-Control"]="no-store, no-cache, must-revalidate, max-age=0"
+ elif request.method=="GET" and request.path.startswith("/api/"):
+  response.headers["Cache-Control"]="public, max-age=30, s-maxage=30, stale-while-revalidate=60"
  return response
 
 @app.post("/api/admin/setup")
@@ -402,34 +406,6 @@ def canonical_host():
 def robots():
  return app.response_class("User-agent: *\nAllow: /\nAllow: /api/\nAllow: /api/news\nAllow: /ads.txt\nDisallow: /admin/\nDisallow: /admin.html\nDisallow: /admin.js\nDisallow: /newsroom-console-8x4m7k2q.html\nSitemap: https://www.politicshub.in/sitemap.xml\nSitemap: https://www.politicshub.in/news-sitemap.xml\n",mimetype="text/plain")
 
-@app.get("/sitemap.xml")
-def sitemap():
- rows=_public_rows_for_section("all",50000)
- urls=["https://www.politicshub.in/"]+[f"https://www.politicshub.in/{x}/" for x in sorted(set(CATEGORY_SLUGS.values()))]+["https://www.politicshub.in/about.html","https://www.politicshub.in/contact.html","https://www.politicshub.in/editorial-policy.html","https://www.politicshub.in/corrections.html","https://www.politicshub.in/terms.html","https://www.politicshub.in/disclaimer.html","https://www.politicshub.in/privacy.html","https://www.politicshub.in/cookies.html","https://www.politicshub.in/author/politicshub-news-desk"]
- body="<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n"
- body+="".join("<url><loc>"+html.escape(u)+"</loc></url>\n" for u in urls)
- for row in rows:
-  try: body+="<url><loc>"+html.escape(SITE_ORIGIN+article_path(row))+"</loc></url>\n"
-  except Exception: pass
- body+="</urlset>"; return app.response_class(body,mimetype="application/xml")
-
-@app.get("/news-sitemap.xml")
-def news_sitemap():
- rows=_public_rows_for_section("all",5000); cutoff=datetime.now(timezone.utc)-timedelta(days=2); selected=[]
- for row in rows:
-  raw=row.get("published_at_site") or row.get("published_at")
-  try: dt=datetime.fromisoformat(str(raw).replace("Z","+00:00")); dt=dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
-  except Exception: continue
-  if dt>=cutoff: selected.append(row)
-  if len(selected)>=1000: break
- body="<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\" xmlns:news=\"http://www.google.com/schemas/sitemap-news/0.9\">\n"
- for row in selected:
-  raw=row.get("published_at_site") or row.get("published_at")
-  try: dt=datetime.fromisoformat(str(raw).replace("Z","+00:00")); dt=dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc); pub=dt.astimezone(timezone.utc).isoformat().replace("+00:00","Z")
-  except Exception: continue
-  title=html.escape(str(row.get("title") or "")); loc=html.escape(SITE_ORIGIN+article_path(row))
-  body+=f"<url><loc>{loc}</loc><news:news><news:publication><news:name>PoliticsHub.in</news:name><news:language>en</news:language></news:publication><news:publication_date>{html.escape(pub)}</news:publication_date><news:title>{title}</news:title></news:news></url>\n"
- body+="</urlset>"; return app.response_class(body,mimetype="application/xml")
 @app.get("/api/og-home")
 def og_home():
  from PIL import Image, ImageDraw, ImageFont
@@ -603,7 +579,7 @@ def stats():
  if err:return err
  database=db()
  try:
-  settings=database.get_settings(); a,b=_india_day_bounds(); return jsonify({"total":database.count(),"pending":len(database.latest(100,"all","pending")),"review_needed":len(database.latest(100,"all","published",None,"needs_review")),"published":len(database.latest(100,"all","published")),"instagram_failed":len(database.latest(100,"all","published",None,"all","failed")),"instagram_today":database.instagram_daily_count(a,b),"instagram_limit":int(settings.get("instagram_daily_limit","5")),"instagram_interval_minutes":int(settings.get("instagram_interval_minutes","0")),"instagram_enabled":settings.get("instagram_enabled","true")=="true","instagram_paused":settings.get("instagram_paused","false")=="true","instagram_priority_id":settings.get("instagram_priority_id",""),"website_enabled":settings.get("website_enabled","true")=="true"})
+  settings=database.get_settings(); a,b=_india_day_bounds(); return jsonify({"total":database.count(),"pending":database.count_status("pending"),"review_needed":database.count_status("published","needs_review"),"published":database.count_status("published"),"instagram_failed":database.count_status("published",None,"failed"),"instagram_today":database.instagram_daily_count(a,b),"instagram_limit":int(settings.get("instagram_daily_limit","5")),"instagram_interval_minutes":int(settings.get("instagram_interval_minutes","0")),"instagram_enabled":settings.get("instagram_enabled","true")=="true","instagram_paused":settings.get("instagram_paused","false")=="true","instagram_priority_id":settings.get("instagram_priority_id",""),"website_enabled":settings.get("website_enabled","true")=="true"})
  finally:database.close()
 
 
@@ -614,7 +590,7 @@ def admin_dashboard():
  database=db()
  try:
   settings=database.get_settings(); a,b=_india_day_bounds();
-  payload={"settings":settings,"stats":{"total":database.count(),"pending":len(database.latest(100,"all","pending")),"review_needed":len(database.latest(100,"all","published",None,"needs_review")),"published":len(database.latest(100,"all","published")),"instagram_failed":len(database.latest(100,"all","published",None,"all","failed")),"instagram_today":database.instagram_daily_count(a,b),"instagram_limit":int(settings.get("instagram_daily_limit","5")),"instagram_interval_minutes":int(settings.get("instagram_interval_minutes","0")),"instagram_enabled":settings.get("instagram_enabled","true")=="true","instagram_paused":settings.get("instagram_paused","false")=="true","instagram_priority_id":settings.get("instagram_priority_id",""),"website_enabled":settings.get("website_enabled","true")=="true"}, "activity":rows_json(database.recent_activity(20))}
+  payload={"settings":settings,"stats":{"total":database.count(),"pending":database.count_status("pending"),"review_needed":database.count_status("published","needs_review"),"published":database.count_status("published"),"instagram_failed":database.count_status("published",None,"failed"),"instagram_today":database.instagram_daily_count(a,b),"instagram_limit":int(settings.get("instagram_daily_limit","5")),"instagram_interval_minutes":int(settings.get("instagram_interval_minutes","0")),"instagram_enabled":settings.get("instagram_enabled","true")=="true","instagram_paused":settings.get("instagram_paused","false")=="true","instagram_priority_id":settings.get("instagram_priority_id",""),"website_enabled":settings.get("website_enabled","true")=="true"}, "activity":rows_json(database.recent_activity(20))}
   payload["settings"]["instagram_today"]=str(payload["stats"]["instagram_today"]); payload["settings"]["instagram_last_published_at"]=database.instagram_last_published_at() or ""
   return jsonify(payload)
  finally:database.close()
@@ -893,7 +869,7 @@ def process_item(item_id):
  if err:return err
  database=db()
  try:
-  row=next((dict(r) for r in database.latest(1000,status="all") if int(r["id"])==item_id),None)
+  row=(dict(database.get_by_id(item_id,"all")) if database.get_by_id(item_id,"all") else None)
   if not row:return jsonify({"error":"not found"}),404
   source=enrich_source_text(row.get("title") or "",row.get("summary") or "",row.get("url") or ""); material=source.get("text") or row.get("summary") or row.get("title") or ""; packets=_editorial_source_packets(database,row); result=process_news(row["title"],material,row.get("category") or "general",source_materials=packets)
   if not result:return jsonify({"error":"bot could not produce complete content from available material"}),422
@@ -935,7 +911,7 @@ def instagram_bulk():
  database=db(); changed=0
  try:
   for item_id in ids:
-   row=next((dict(r) for r in database.latest(1000,status="all",instagram_status="all") if int(r["id"])==item_id),None)
+   row=(dict(database.get_by_id(item_id,"all")) if database.get_by_id(item_id,"all") else None)
    if not row:continue
    if action=="queue":
     order=database.next_instagram_queue_order(); database.update(item_id,instagram_selected=1,instagram_status="pending",instagram_error=None,instagram_next_retry_at=None,instagram_scheduled_at=None,instagram_queue_order=order)
@@ -956,7 +932,7 @@ def instagram_publish_now(item_id):
  if err:return err
  database=db()
  try:
-  row=next((dict(r) for r in database.latest(1000,status="published",instagram_status="all") if int(r["id"])==item_id),None)
+  row=(dict(database.get_by_id(item_id,"published")) if database.get_by_id(item_id,"published") else None)
   if not row:return jsonify({"error":"published story not found"}),404
   if not row.get("bot_article") or not row.get("bot_summary"):
    source=enrich_source_text(row.get("title") or "",row.get("summary") or "",row.get("url") or ""); material=source.get("text") or row.get("summary") or row.get("title") or ""; packets=_editorial_source_packets(database,row); result=process_news(row.get("title") or "",material,row.get("category") or "general",source_materials=packets)
