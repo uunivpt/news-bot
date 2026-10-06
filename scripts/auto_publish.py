@@ -18,7 +18,7 @@ from app.instagram_reel import build_html_reel
 from app.image_acquisition import prepare_story_image
 from app.media_storage import download_to, public_video_url
 from app.meta_instagram import publish_reel, InstagramRateLimitError
-from app.newsroom import process_news
+from app.newsroom import process_news, validate_news_copy
 from app.publish_policy import risk_flags
 from app.phase_system import ensure_schema, run as agent_run, start as agent_start, finish as agent_finish, quality_gate, manager_route
 from app.advanced_ops import audit_stage, state_transition, visual_qa_card, record_verification, find_duplicate_story
@@ -104,6 +104,10 @@ def _direct_fallback_content(row):
  if len(title_words)<4 or len(summary_words)<18 or len(summary)<100:
   return False
  article=summary
+ copy_qa=validate_news_copy(title,summary,article)
+ if not copy_qa["passed"]:
+  print(f"Direct fallback blocked by copy completeness for item {row.get('id')}: {copy_qa['errors']}")
+  return False
  qa=quality_gate(title,summary,article)
  if not qa["passed"]:
   print(f"Direct fallback blocked by quality gate for item {row.get('id')}: {qa['errors']}")
@@ -126,10 +130,14 @@ def process_content(db,row):
  return prepare_content(db,row)
 
 def _needs_content_repair(row):
- title=str(row.get("title") or "").strip(); summary=str(row.get("bot_summary") or row.get("summary") or "").strip(); article=str(row.get("bot_article") or "").strip()
+ title=str(row.get("title") or "").strip()
+ summary=str(row.get("bot_summary") or row.get("summary") or "").strip()
+ article=str(row.get("bot_article") or "").strip()
  if not article or not summary:return True
  if title.endswith(("…","...")) or len(title.split())>18:return True
- return _bad_fragment(summary) or _bad_fragment(article)
+ if _bad_fragment(summary) or _bad_fragment(article):return True
+ copy_qa=validate_news_copy(title,summary,article)
+ return not copy_qa["passed"]
 
 def publish_website_first(db,row,now):
  flags=risk_flags(row["title"],row.get("bot_summary") or row.get("summary") or ""); review="needs_review" if flags else "pending"
