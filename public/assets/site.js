@@ -15,6 +15,82 @@ async function get(u){const r=await fetch(u,{cache:'default'});if(!r.ok)throw 0;
 const CACHE_KEY='ph-news-cache-v2';
 function cacheSave(items){try{localStorage.setItem(CACHE_KEY,JSON.stringify({ts:Date.now(),items}));}catch(e){}}
 function cacheLoad(){try{const x=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');return x&&Array.isArray(x.items)?x:null}catch(e){return null}}
+function slugify(value){
+ return String(value||'').toLowerCase().normalize('NFKD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,96)||'story';
+}
+function ck(item){
+ const raw=typeof item==='string'?item:(item?.category||item?.section||'all');
+ const key=String(raw).toLowerCase().trim();
+ if(key.includes('politic'))return'politics';
+ if(key.includes('india'))return'india';
+ if(key.includes('world')||key.includes('international'))return'world';
+ if(key.includes('business')||key.includes('econom'))return'business';
+ if(key.includes('tech'))return'technology';
+ if(key.includes('sport'))return'sports';
+ if(key.includes('entertain'))return'entertainment';
+ if(key.includes('hindi'))return'hindi';
+ return'all';
+}
+function inCat(item,cat){return cat==='all'||ck(item)===cat}
+function hl(cat){return cat&&cat!=='all'?'/'+encodeURIComponent(cat)+'/':'/'}
+function articleHref(item){
+ const id=String(item?.id??'').trim();
+ if(!/^\\d+$/.test(id))return '#/article/'+encodeURIComponent(id);
+ const category=ck(item);
+ return '/'+(category==='all'?'india':category)+'/'+id+'-'+slugify(item?.title||'story');
+}
+function img(item){
+ const src=String(item?.image||'').trim();
+ if(!src)return'';
+ const safe=/^(https?:)?\\/\\//i.test(src)||src.startsWith('/');
+ if(!safe)return'';
+ return '<img src="'+esc(src)+'" alt="" loading="lazy" decoding="async" onerror="this.remove()">';
+}
+function card(item){
+ const k=ck(item),title=String(item?.title||'Untitled'),summary=String(item?.summary||'').trim();
+ return '<a class="card '+(item?.image?'im':'tx')+' rv" data-k="'+k+'" href="'+esc(articleHref(item))+'" aria-label="'+esc(title)+'">'+
+   (item?.image?img(item):'<span class="wm" aria-hidden="true">'+esc((item?.category||k).slice(0,1).toUpperCase())+'</span>')+
+   '<span class="chip stk">'+esc(item?.category||k)+'</span>'+
+   '<span class="go" aria-hidden="true">↗</span>'+
+   '<h3>'+esc(title)+'</h3>'+
+   (summary?'<p>'+esc(summary)+'</p>':'')+
+   '<span class="m">'+esc(item?.source||'PoliticsHub')+' · '+esc(ago(item?.date))+'</span></a>';
+}
+function setActive(cat){
+ const key=cat||'all';
+ $('nav.main a').forEach(a=>a.classList.toggle('on',a.dataset.k===key));
+ $('#dl a.l').forEach(a=>a.classList.toggle('on',a.dataset.k===key));
+ moveInd();
+}
+function moveInd(){
+ const nav=$('nav.main'),ind=$('#ind');
+ if(!nav||!ind)return;
+ const active=$('nav.main a.on');
+ if(!active){ind.style.width='0';return}
+ const nr=nav.getBoundingClientRect(),ar=active.getBoundingClientRect();
+ ind.style.left=(ar.left-nr.left)+'px';
+ ind.style.width=ar.width+'px';
+ ind.style.background='var(--k)';
+}
+function build(){
+ const nav=$('nav.main'),drawer=$('#dl');
+ if(nav){
+  nav.innerHTML='<span id="ind" aria-hidden="true"></span>'+CATS.map(([k,l])=>'<a href="'+hl(k)+'" data-k="'+k+'">'+l+'</a>').join('');
+ }
+ if(drawer){
+  drawer.innerHTML=CATS.map(([k,l])=>'<a class="l" href="'+hl(k)+'" data-k="'+k+'">'+l+'</a>').join('');
+ }
+ const y=$('#yr');if(y)y.textContent=new Date().getFullYear();
+}
+function ticker(){
+ const box=$('#tk'),tickEl=$('#tick');
+ if(!box||!tickEl)return;
+ const rows=S.items.filter(i=>i.title).slice(0,12);
+ if(!rows.length){tickEl.hidden=true;return}
+ const links=rows.map(i=>'<a href="'+esc(articleHref(i))+'"><b>'+esc(i.category||'NEWS')+'</b>'+esc(i.title)+'</a>').join('');
+ box.innerHTML='<div>'+links+links+'</div>';
+ tickEl.hidden=false;
+}
 function hydrateCache(){const x=cacheLoad();if(!x||!x.items.length)return false;S.items=x.items.map(norm).sort((a,b)=>new Date(b.date)-new Date(a.date)||0);S.mode='cache';S.api='stale';return true}
 async function load(){
  let a=null;
