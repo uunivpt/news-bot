@@ -568,29 +568,57 @@ def build_editorial_value(title, source_materials):
 
 
 def process_news(title,source_text,category="general",source_materials=None):
-    """Build publication copy using only deterministic source extraction.
+    """Build publication copy, preferring configured Microsoft Phi-4 when available.
 
-    This path intentionally contains no LLM/API call. Source sentences are
-    selected, cleaned and assembled without inventing or rewriting facts.
+    Phi-4 output is still passed through the deterministic completeness/quality
+    gates below. If Phi-4 is disabled or unavailable, the newsroom falls back
+    to the deterministic extractive path so collection/publication never stalls.
     """
     material=clean_text(source_text)
     if len(material)<80:
         return None
+
+    # AI path: the configured endpoint must actually be reachable. No fake
+    # "AI" label is returned when the model was not called.
+    try:
+        from app.phi4 import enabled as phi4_enabled, generate_news_copy
+        if phi4_enabled():
+            ai=generate_news_copy(title,material,category)
+            headline=quality_headline(ai.get("headline",""),material)
+            summary=clean_text(ai.get("summary",""))
+            article=clean_text(ai.get("article",""))
+            copy_qa=validate_news_copy(headline,summary,article)
+            if copy_qa["passed"] and len(summary)>=50 and len(article)>=120:
+                value=build_editorial_value(headline,source_materials or [])
+                if value["eligible"]:
+                    article=article+"\n\nEditorial source comparison: "+value["text"]
+                return {
+                    "headline":headline,
+                    "summary":summary,
+                    "article":article,
+                    "editorial_context":value["text"] if value["eligible"] else "",
+                    "editorial_value":value["eligible"],
+                    "source_count":value["source_count"],
+                    "sources":value["sources"],
+                    "ai_provider":"microsoft_phi4",
+                    "ai_summary":summary,
+                    "ai_article":article,
+                }
+            raise RuntimeError(f"Phi-4 output failed newsroom QA: {copy_qa.get('errors')}")
+    except Exception as exc:
+        print(f"Phi-4 newsroom path unavailable; using deterministic fallback: {exc}")
 
     headline=quality_headline(title,material)
     if not headline:
         return None
     summary=make_summary(headline,material)
     article=make_article(headline,material)
-
     copy_qa=validate_news_copy(headline,summary,article)
     if not copy_qa["passed"]:
         return None
-
     value=build_editorial_value(headline,source_materials or [])
     if article and value["eligible"]:
         article=article+"\n\nEditorial source comparison: "+value["text"]
-
     result={
         "headline":headline,
         "summary":summary,
@@ -600,6 +628,8 @@ def process_news(title,source_text,category="general",source_materials=None):
         "source_count":value["source_count"],
         "sources":value["sources"],
         "ai_provider":"deterministic",
+        "ai_summary":"",
+        "ai_article":"",
     }
     if len(result["summary"])<50 or len(result["article"])<120:
         return None
