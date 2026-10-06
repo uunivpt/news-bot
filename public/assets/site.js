@@ -174,7 +174,7 @@ addEventListener('keydown',e=>{if(e.key==='Escape')closeAll();if(e.key==='/'&&!/
 $('#pz').onclick=e=>{const p=$('#tk').classList.toggle('pz');e.currentTarget.setAttribute('aria-pressed',p);e.currentTarget.setAttribute('aria-label',p?'Play ticker':'Pause ticker')};
 /* theme + prefs */
 function theme(t,save){document.documentElement.dataset.theme=t;if(save&&ls.get('ph-ls')!=='0')ls.set('ph-theme',t)}
-theme(ls.get('ph-theme')||'light');
+theme(ls.get('ph-theme')||'dark');
 document.addEventListener('click',e=>{const t=e.target.closest('[data-th]');if(t){theme(t.dataset.th,1);$$('[data-th]').forEach(b=>b.setAttribute('aria-pressed',b===t))}
  const s=e.target.closest('.sw');if(s){const on=s.getAttribute('aria-checked')!=='true';s.setAttribute('aria-checked',on);ls.set(s.dataset.k,on?'1':'0');if(s.dataset.k==='ph-ls'&&!on)ls.del('ph-theme')}
  if(e.target.closest('#rst')){['ph-theme','ph-cookie','ph-ls'].forEach(ls.del);theme('light');settings()}});
