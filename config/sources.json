@@ -4,10 +4,10 @@
       "name": "NewsAPI India",
       "country": "in",
       "category": "general",
-      "q": "India OR Indian",
       "page_size": 100,
       "enabled": true,
-      "public_source": true
+      "public_source": true,
+      "route_category": "india"
     }
   ],
   "newsdata": [
