@@ -50,6 +50,13 @@ REEL_HASHTAGS="#reel #update #news #politics #global"
 def caption(row):
  title=clean_instagram_text(row.get("title") or "",""); text=clean_instagram_text(row.get("bot_summary") or row.get("summary") or "",row.get("source_name") or ""); text=_dedupe_caption_text(title,text)
  base=f"{title}\n\n{text}" if text else title
+ license_text=str(row.get("image_license") or "").strip()
+ credit=str(row.get("image_credit") or "").strip()
+ source_url=str(row.get("image_source_url") or "").strip()
+ if license_text and credit and "unknown" not in license_text.lower():
+  attribution=f"Image: {credit} · {license_text}"
+  if source_url.startswith(("http://","https://")): attribution+=f" · {source_url}"
+  base+=f"\n\n{attribution}"
  return f"{base}\n\n{REEL_HASHTAGS}"
 
 def audio_path():
