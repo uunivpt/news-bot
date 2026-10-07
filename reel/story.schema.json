@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PoliticsHub Reel Story",
+  "type": "object",
+  "required": ["HEADLINE", "CATEGORY", "DATE", "LOCATION", "SOURCE", "SUMMARY"],
+  "properties": {
+    "HEADLINE": {"type": "string", "minLength": 1},
+    "IMAGE": {"type": ["string", "null"]},
+    "CATEGORY": {"type": "string", "minLength": 1},
+    "DATE": {"type": "string", "minLength": 1},
+    "LOCATION": {"type": "string", "minLength": 1},
+    "SOURCE": {"type": "string", "minLength": 1},
+    "SUMMARY": {"type": "string", "minLength": 1},
+    "AUDIO": {"type": "boolean", "default": true},
+    "LOGO": {"type": ["string", "null"]},
+    "DEBUG_SAFE": {"type": "boolean", "default": false}
+  },
+  "additionalProperties": false
+}

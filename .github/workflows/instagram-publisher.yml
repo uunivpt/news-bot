@@ -30,10 +30,26 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Cache Remotion dependencies
+        id: reel-cache
+        uses: actions/cache@v4
+        with:
+          path: reel/node_modules
+          key: reel-node-${{ runner.os }}-${{ hashFiles('reel/package.json') }}
       - name: Install media tools
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg chromium
-      - name: Install dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Install Chrome
+        uses: browser-actions/setup-chrome@v2
+        with:
+          chrome-version: stable
+      - name: Install Python dependencies
         run: pip install -r requirements.txt
+      - name: Install Remotion dependencies
+        if: steps.reel-cache.outputs.cache-hit != 'true'
+        run: npm install --prefix reel --omit=dev --no-audit --no-fund
       - name: Verify Instagram configuration
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -66,6 +82,8 @@ jobs:
           CLOUDINARY_UPLOAD_PRESET: ${{ secrets.CLOUDINARY_UPLOAD_PRESET }}
           FIXED_AUDIO_PATH: ${{ secrets.FIXED_AUDIO_PATH }}
           FIXED_AUDIO_URL: ${{ secrets.FIXED_AUDIO_URL }}
+          REMOTION_RENDER_TIMEOUT: "900"
+          RENDER_CONCURRENCY: "2"
           PUBLISH_WEBSITE: "false"
           PUBLISH_TO_INSTAGRAM: "true"
           MAX_ITEMS: "10"
