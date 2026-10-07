@@ -43,6 +43,38 @@
   ],
   "rewrites": [
     {
+      "source": "/hindi/",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/entertainment/",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/sports/",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/technology/",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/business/",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/world/",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/politics/",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/india/",
+      "destination": "/index.html"
+    },
+    {
       "source": "/india",
       "destination": "/index.html"
     },
