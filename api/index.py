@@ -112,21 +112,42 @@ def _snapshot_rows(category="all", search=None):
  return rows
 
 
+def _public_timestamp(row):
+ for key in ("published_at_site","published_at_iso","published_at","created_at","collected_at"):
+  raw=str(row.get(key) or "").strip()
+  if not raw:continue
+  normalized=re.sub(r"\s*[·•]\s*"," ",raw).strip()
+  try:
+   dt=datetime.fromisoformat(normalized.replace("Z","+00:00"))
+   if not dt.tzinfo:dt=dt.replace(tzinfo=timezone.utc)
+   return dt.timestamp()
+  except ValueError:
+   pass
+  for fmt in ("%d %b %Y %H:%M","%d %b %Y"):
+   try:
+    return datetime.strptime(normalized,fmt).replace(tzinfo=ZoneInfo("Asia/Kolkata")).timestamp()
+   except ValueError:
+    pass
+ try:return float(row.get("id") or 0)
+ except (TypeError,ValueError):return 0.0
+
+
 def _rank_public(rows):
  items=[dict(r) for r in rows]
  for item in items:
   item["news_score"]=story_score(item.get("title",""),item.get("bot_summary") or item.get("summary") or "",item.get("category") or "general",item.get("source_name") or "")
   item["is_breaking"]=is_breaking(item.get("title",""),item.get("bot_summary") or item.get("summary") or "",item["news_score"])
+ items.sort(key=lambda item:(_public_timestamp(item),int(item.get("id") or 0)),reverse=True)
  return dedupe_story_rows(items)
 def _public_rows_for_section(category="all",limit=200):
  try:
   database=db()
   try:
    rows=[dict(x) for x in database.latest(max(limit*3,limit),category,"published")]
-   return dedupe_story_rows(rows,threshold=0.78)[:limit]
+   return _rank_public(rows)[:limit]
   finally:database.close()
  except RuntimeError:
-  return _snapshot_rows(category)[:limit]
+  return _rank_public(_snapshot_rows(category))[:limit]
 
 def _section_html(category="all"):
  rows=_public_rows_for_section(category,40)
