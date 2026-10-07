@@ -6,3 +6,6 @@ config/sources.json
 data/*.db
 data/*.sqlite3
 .pytest_cache/
+
+reel/node_modules/
+reel/out/

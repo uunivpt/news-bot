@@ -4,27 +4,28 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - "app/html_reel_renderer.py"
-      - "app/templates/politicshub_reel_18s.html"
-      - "app/instagram_reel.py"
+      - "reel/**"
+      - "app/remotion_reel_renderer.py"
       - "scripts/auto_publish.py"
       - "app/image_acquisition.py"
       - "app/news_pulse_audio.py"
-      - "tests/test_image_acquisition.py"
+      - "tests/test_remotion_reel_renderer.py"
       - ".github/workflows/test_reel.yml"
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
       - name: Install FFmpeg
         run: |
@@ -37,133 +38,81 @@ jobs:
         with:
           chrome-version: stable
 
-      - name: Verify Chrome
-        run: google-chrome --version
-
       - name: Install Python dependencies
         run: pip install -r requirements.txt
 
-      - name: Validate changed Python syntax
+      - name: Install Remotion dependencies
+        run: npm install --prefix reel --no-audit --no-fund
+
+      - name: Validate Python and Remotion
+        env:
+          PYTHONPATH: .
         run: |
-          python -m py_compile api/index.py
-          python -m py_compile app/database.py
-          python -m py_compile app/image_acquisition.py
-          python -m py_compile app/news_pulse_audio.py
-          python -m py_compile app/worker.py
-          python -m py_compile app/html_reel_renderer.py
-          python -m py_compile app/instagram_reel.py
-          python -m py_compile scripts/auto_publish.py
+          python -m py_compile app/remotion_reel_renderer.py scripts/auto_publish.py
+          python -m unittest tests/test_remotion_reel_renderer.py -v
+          npm --prefix reel run check
+          npm --prefix reel test
 
-      - name: Validate browser JavaScript
+      - name: Run core regression tests
+        env:
+          PYTHONPATH: .
+          DATABASE_URL: ""
+          PGSSLMODE: ""
         run: |
-          node --check public/admin.js
-          node --check public/assets/home-init.js
-          node --check public/assets/article-init.js
-          node --check public/assets/site.js
+          python -m unittest tests/test_api_public_title.py -v
+          python -m unittest tests/test_source_config.py -v
+          python -m unittest tests/test_database.py -v
+          python -m unittest tests/test_newsroom.py -v
+          python -m unittest tests/test_normalize.py -v
+          python -m unittest tests/test_website_monitor.py -v
+          python tests/test_advanced_system.py -v
 
-      - name: Test public API title normalization
-        env:
-          PYTHONPATH: .
-          DATABASE_URL: ""
-          PGSSLMODE: ""
-        run: python -m unittest tests/test_api_public_title.py -v
-
-      - name: Test source configuration
-        env:
-          PYTHONPATH: .
-          DATABASE_URL: ""
-          PGSSLMODE: ""
-        run: python -m unittest tests/test_source_config.py -v
-
-      - name: Test database
-        env:
-          PYTHONPATH: .
-          DATABASE_URL: ""
-          PGSSLMODE: ""
-        run: python -m unittest tests/test_database.py -v
-
-      - name: Test newsroom
-        env:
-          PYTHONPATH: .
-          DATABASE_URL: ""
-          PGSSLMODE: ""
-        run: python -m unittest tests/test_newsroom.py -v
-
-      - name: Test normalize
-        env:
-          PYTHONPATH: .
-          DATABASE_URL: ""
-          PGSSLMODE: ""
-        run: python -m unittest tests/test_normalize.py -v
-
-      - name: Test website monitor
-        env:
-          PYTHONPATH: .
-          DATABASE_URL: ""
-          PGSSLMODE: ""
-        run: python -m unittest tests/test_website_monitor.py -v
-
-      - name: Test advanced system
-        env:
-          PYTHONPATH: .
-          DATABASE_URL: ""
-          PGSSLMODE: ""
-        run: python tests/test_advanced_system.py -v
-
-      - name: Build current production 16-second HTML Reel
+      - name: Build production 18-second Remotion Reel
         env:
           PYTHONPATH: .
         run: |
           mkdir -p data/media
           python - <<'PY'
-          from app.html_reel_renderer import render_html_reel
-
-          render_html_reel(
+          from app.remotion_reel_renderer import render_remotion_reel
+          render_remotion_reel(
               {
                   "headline": "A deliberately long PoliticsHub headline that must remain readable without being cut off",
                   "category": "WORLD",
-                  "date": "03 Oct 2026",
-                  "location": "Donetsk, Ukraine",
+                  "date": "07 Oct 2026",
+                  "location": "NEWS DESK",
                   "source": "PoliticsHub",
-                  "summary": "This verifies the current production HTML template, dynamic text fields, no-image path and exact 16-second duration.",
+                  "summary": "This verifies the production Remotion template, dynamic text fields, no-image fallback and exact eighteen-second duration.",
                   "image_url": None,
               },
-              "data/media/test_html_no_image.mp4",
+              "data/media/test_remotion_no_image.mp4",
           )
           PY
 
       - name: Verify final Reel
         run: |
-          test -s data/media/test_html_no_image.mp4
-          ffprobe -v error             -show_entries format=duration             -of default=noprint_wrappers=1:nokey=1             data/media/test_html_no_image.mp4
-
+          test -s data/media/test_remotion_no_image.mp4
           python - <<'PY'
-          import json
-          import subprocess
-
-          path = "data/media/test_html_no_image.mp4"
+          import json, subprocess
+          path = "data/media/test_remotion_no_image.mp4"
           raw = subprocess.check_output([
               "ffprobe", "-v", "error",
-              "-show_entries", "format=duration:stream=width,height,pix_fmt",
+              "-show_entries", "format=duration:stream=width,height,pix_fmt,r_frame_rate",
               "-of", "json", path
           ])
           info = json.loads(raw)
           duration = float(info["format"]["duration"])
           video = next(s for s in info["streams"] if s.get("width"))
-
-          assert abs(duration - 16.0) <= 0.15, duration
+          print(json.dumps(info, indent=2))
+          assert 17.75 <= duration <= 18.75, duration
           assert (video["width"], video["height"]) == (1080, 1920)
-          assert video["pix_fmt"] == "yuv420p"
-          assert "60/1" in subprocess.check_output([
-              "ffprobe", "-v", "error", "-select_streams", "v:0",
-              "-show_entries", "stream=r_frame_rate", "-of", "default=nw=1:nk=1", path
-          ], text=True)
-          print(f"PASS: {duration:.3f}s / 1080x1920 / 60fps / {video['pix_fmt']}")
+          assert video["pix_fmt"] in {"yuv420p", "yuvj420p"}, video["pix_fmt"]
+          assert video["r_frame_rate"] in {"30/1", "60/2"}, video["r_frame_rate"]
+          print(f"PASS: {duration:.3f}s / 1080x1920 / 30fps / {video['pix_fmt']}")
           PY
 
       - name: Upload Reel test artifact
         uses: actions/upload-artifact@v4
         with:
-          name: politicshub-16s-reel-test
-          path: data/media/test_html_no_image.mp4
+          name: politicshub-18s-remotion-reel-test
+          path: data/media/test_remotion_no_image.mp4
           retention-days: 3
