@@ -107,8 +107,10 @@ def collect_newsdata(source: dict[str, Any]) -> list[NewsItem]:
         source_name = str(article.get("source_name") or source.get("name") or "NewsData.io").strip()
         published = article.get("pubDate") or article.get("pubDateTZ") or datetime.now(timezone.utc).isoformat()
         external_id = str(article.get("article_id") or url)
-        description = str(article.get("description") or article.get("content") or "").strip()
-        image = article.get("image_url") or article.get("image")
+        # NewsData's own guidance permits publishing title/short description/
+        # publisher/date metadata, while warning against republishing full
+        # article content and images. Keep collection inside that safer scope.
+        description = str(article.get("description") or "").strip()[:1200]
         # NewsData's article-level category is authoritative for topic routing.
         # The source config only supplies the geographic fallback ("india").
         raw_categories = article.get("category") or []
@@ -136,7 +138,7 @@ def collect_newsdata(source: dict[str, Any]) -> list[NewsItem]:
             summary=description,
             external_id=external_id,
             category=category,
-            image_url=str(image).strip() if image else None,
+            image_url=None,
             public_source=True,
         ))
     return items
