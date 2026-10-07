@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -14,6 +15,72 @@ REEL_HEIGHT = 1920
 REEL_FPS = 30
 REEL_DURATION = 18.0
 ROOT = Path(__file__).resolve().parents[1]
+
+
+_EMOJI_RE = re.compile(
+    "["
+    "\U0001F1E6-\U0001F1FF"
+    "\U0001F300-\U0001FAFF"
+    "\u2600-\u27BF"
+    "\uFE0F"
+    "\u200D"
+    "]+",
+    flags=re.UNICODE,
+)
+
+
+def _clean_reel_text(value: object) -> str:
+    text = str(value or "").strip()
+    text = _EMOJI_RE.sub("", text)
+    text = re.sub(r"[/,:;|]+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"\s+([.!?])", r"\1", text)
+    return text
+
+
+def _first_complete_sentence(value: object) -> str:
+    text = _clean_reel_text(value)
+    if not text:
+        return ""
+    match = re.search(r"^(.+?[.!?])(?:\s|$)", text)
+    sentence = (match.group(1) if match else text).strip()
+    if sentence and sentence[-1] not in ".!?":
+        sentence += "."
+    return sentence
+
+
+def _reel_headline(news: dict) -> str:
+    raw = news.get("headline") or news.get("title") or "Latest news update"
+    headline = _clean_reel_text(raw)
+    if len(headline.split()) < 4:
+        richer = _first_complete_sentence(news.get("summary") or news.get("bot_summary"))
+        if len(richer.split()) >= 4:
+            headline = richer
+    if headline and headline[-1] not in ".!?":
+        headline += "."
+    return headline or "Latest news update."
+
+
+def _reel_summary(news: dict) -> str:
+    primary = _first_complete_sentence(
+        news.get("summary") or news.get("bot_summary") or news.get("bot_article") or news.get("article")
+    )
+    if not primary:
+        primary = "Read the full verified update on PoliticsHub.in."
+    words = primary.split()
+    if len(words) < 10 or len(primary) < 70:
+        extra_source = news.get("bot_article") or news.get("article") or news.get("body") or ""
+        extra_text = _clean_reel_text(extra_source)
+        extra_parts = re.split(r"(?<=[.!?])\s+", extra_text)
+        for part in extra_parts:
+            part = _first_complete_sentence(part)
+            if not part or part.lower() == primary.lower() or len(part.split()) < 6:
+                continue
+            combined = (primary + " " + part).strip()
+            if len(combined) <= 300:
+                primary = combined
+            break
+    return primary
 
 
 def _display_date(value: object) -> str:
@@ -43,13 +110,13 @@ def _story_image(news: dict) -> str | None:
 
 def build_story_props(news: dict) -> dict:
     return {
-        "HEADLINE": str(news.get("headline") or news.get("title") or "Latest news update").strip(),
+        "HEADLINE": _reel_headline(news),
         "IMAGE": _story_image(news),
-        "CATEGORY": str(news.get("category") or "NEWS").strip(),
+        "CATEGORY": _clean_reel_text(news.get("category") or "NEWS").upper(),
         "DATE": _display_date(news.get("date") or news.get("published_at")),
-        "LOCATION": str(news.get("location") or "NEWS DESK").strip(),
-        "SOURCE": str(news.get("source") or news.get("source_name") or "PoliticsHub.in").strip(),
-        "SUMMARY": str(news.get("summary") or news.get("bot_summary") or "Read the full verified update on PoliticsHub.in").strip(),
+        "LOCATION": _clean_reel_text(news.get("location") or "NEWS DESK"),
+        "SOURCE": _clean_reel_text(news.get("source") or news.get("source_name") or "PoliticsHub.in"),
+        "SUMMARY": _reel_summary(news),
         # Production audio is muxed by Python so the bot keeps using its existing fixed News Pulse track.
         "AUDIO": False,
         "LOGO": None,
