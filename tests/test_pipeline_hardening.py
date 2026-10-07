@@ -7,7 +7,7 @@ from pathlib import Path
 from app.collector import _safe_http_url
 from app.database import NewsDatabase
 from app.newsroom import process_news, quality_headline, validate_news_copy
-from scripts.auto_publish import _direct_fallback_content, _instagram_candidates
+from scripts.auto_publish import _direct_fallback_content, _instagram_candidates, _india_reel_due
 
 
 class PipelineHardeningTests(unittest.TestCase):
@@ -113,6 +113,57 @@ class PipelineHardeningTests(unittest.TestCase):
                 db.conn.commit()
                 rows = _instagram_candidates(db, "auto", 10, datetime.now(timezone.utc))
                 self.assertEqual([int(x["id"]) for x in rows], [2])
+            finally:
+                db.close()
+
+    def test_auto_instagram_prioritizes_india_when_recent_reels_have_none(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = NewsDatabase(path=str(Path(tmp) / "news.db"))
+            try:
+                now = datetime.now(timezone.utc).isoformat()
+                for item_id in (10, 11, 12):
+                    db.conn.execute(
+                        "INSERT INTO news_items "
+                        "(id,source_name,source_type,title,url,normalized_url,url_hash,title_hash,collected_at,status,category,instagram_status,instagram_published_at,fact_check_status) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (
+                            item_id, "Test", "rss", f"Published world {item_id}",
+                            f"https://example.com/pub-{item_id}", f"https://example.com/pub-{item_id}",
+                            f"pub-url-{item_id}", f"pub-title-{item_id}", now, "published",
+                            "world", "published", now, "pending",
+                        ),
+                    )
+                for item_id, category in ((1, "world"), (2, "india")):
+                    db.conn.execute(
+                        "INSERT INTO news_items "
+                        "(id,source_name,source_type,title,url,normalized_url,url_hash,title_hash,collected_at,status,category,instagram_status,instagram_selected,fact_check_status) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (
+                            item_id, "Test", "rss", f"Candidate {item_id}",
+                            f"https://example.com/{item_id}", f"https://example.com/{item_id}",
+                            f"url-{item_id}", f"title-{item_id}", now, "published",
+                            category, "pending", 0, "pending",
+                        ),
+                    )
+                db.conn.commit()
+                self.assertTrue(_india_reel_due(db, 3))
+                rows = _instagram_candidates(db, "auto", 1, datetime.now(timezone.utc))
+                self.assertEqual([int(x["id"]) for x in rows], [2])
+
+                db.conn.execute(
+                    "INSERT INTO news_items "
+                    "(id,source_name,source_type,title,url,normalized_url,url_hash,title_hash,collected_at,status,category,instagram_status,instagram_published_at,fact_check_status) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        13, "Test", "rss", "Recent India Reel", "https://example.com/13",
+                        "https://example.com/13", "url-13", "title-13", now, "published",
+                        "india", "published", now, "pending",
+                    ),
+                )
+                db.conn.commit()
+                self.assertFalse(_india_reel_due(db, 3))
+                rows = _instagram_candidates(db, "auto", 1, datetime.now(timezone.utc))
+                self.assertEqual([int(x["id"]) for x in rows], [1])
             finally:
                 db.close()
 
