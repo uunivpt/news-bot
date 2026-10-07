@@ -175,3 +175,84 @@ footer{background:#090909;color:#f5f5f7;margin:34px 14px 14px;border-radius:12px
 /* release marker: editorial brand UI */
 
 .article-share{display:inline-flex;align-items:center;gap:9px;border:0;background:transparent;padding:10px 0;margin-top:22px;color:inherit;font:inherit;text-transform:uppercase;letter-spacing:.04em;cursor:pointer}.article-share span{font-size:22px}.article-share b{font-size:13px}.share-pop{position:fixed;z-index:1000;left:50%;bottom:24px;transform:translateX(-50%);width:min(92vw,420px);padding:22px;background:rgba(255,255,255,.98);border:1px solid rgba(0,0,0,.12);border-radius:18px;box-shadow:0 18px 50px rgba(0,0,0,.2)}.share-pop>button{position:absolute;right:12px;top:8px;border:0;background:transparent;font-size:26px;cursor:pointer}.share-pop strong{display:block;margin-bottom:14px}.share-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.share-grid a{display:block;padding:12px;border:1px solid rgba(0,0,0,.12);border-radius:10px;text-align:center;text-decoration:none;color:inherit}.share-grid a:hover{border-color:#b51f3a}@media (prefers-color-scheme:dark){.share-pop{background:#111;color:#f5f2ec;border-color:#333}.share-grid a{border-color:#333;color:#f5f2ec}}
+
+/* PoliticsHub editorial refresh v13 */
+:root{
+  --bg:#f6f6f3;--ink:#0a0a0a;--mut:#66666f;--line:rgba(10,10,10,.12);
+  --card:#fff;--red:#ff2d2d;--k:#ff2d2d;--glass:rgba(255,255,255,.92);
+  --sh:0 10px 30px rgba(0,0,0,.055);--shh:0 22px 55px rgba(0,0,0,.14)
+}
+[data-theme=dark]{
+  --bg:#090909;--ink:#f7f7f5;--mut:#9b9b9f;--line:rgba(255,255,255,.13);
+  --card:#121214;--glass:rgba(12,12,13,.92);--sh:none;--shh:0 24px 60px rgba(0,0,0,.45)
+}
+body:before{display:none}
+.wrap{max-width:1360px}
+#hd{top:0;margin:0 auto;padding-top:12px;background:linear-gradient(var(--bg) 0 56%,transparent)}
+.top{min-height:64px;border-radius:18px;padding:8px 10px 8px 18px;border:1px solid var(--line);box-shadow:none}
+.logo img{height:40px!important}
+nav.main{background:transparent;gap:0;padding:0;border-left:1px solid var(--line);border-radius:0;padding-left:12px}
+nav.main a{padding:11px 12px;border-radius:10px;font-size:12px;letter-spacing:.02em}
+nav.main a.on{background:var(--ink);color:var(--bg)}
+#ind{display:none}
+.ib{width:42px;height:42px;border-radius:12px}
+.tick{height:44px;margin-top:10px;border-radius:14px;border:1px solid var(--line);box-shadow:none}
+.tile{border-radius:20px;box-shadow:none;border:1px solid var(--line)}
+.bento{gap:18px;margin-top:24px;margin-bottom:54px}
+.hl{grid-column:span 8;min-height:560px;background:var(--ink);color:var(--bg);padding:clamp(26px,4vw,54px)}
+.hl .lbl,.hl p{color:color-mix(in srgb,var(--bg) 72%,transparent)}
+.hl h1{font-size:clamp(42px,5.6vw,82px);line-height:.96;letter-spacing:-.05em;margin:44px 0 22px;overflow:visible}
+.hl .btn{background:var(--red);color:#fff}
+.hl .btn:hover{background:#fff;color:#0a0a0a}
+.burst{display:none}
+.cv{grid-column:span 4;min-height:560px;border-radius:20px}
+.cv .cap{left:16px;right:16px;bottom:16px;border-radius:12px;text-align:center}
+.ct,.sc,.lt{grid-column:span 4;min-height:210px}
+.ct .num{font-size:clamp(70px,8vw,118px)}
+.pills a{border:1px solid var(--line);background:transparent;border-radius:12px}
+.li{font-size:18px;line-height:1.25}
+.band{margin:22px 0 42px;rotate:0;border-radius:14px;padding:14px 0}
+.bt{font-size:clamp(26px,3.3vw,44px)}
+.tabs{margin:0 0 24px;padding:0;gap:6px}
+.tabs a{box-shadow:none;border:1px solid var(--line);border-radius:10px;background:transparent}
+.sh{margin:14px 0 18px;padding-top:8px;border-top:1px solid var(--line)}
+.sh h2{font-size:clamp(30px,3vw,46px)}
+.grid{gap:18px}
+.card{grid-column:span 4;min-height:370px;border-radius:18px;border:1px solid var(--line);box-shadow:none;padding:24px}
+.card:nth-child(7n+1),.card:nth-child(7n+4){grid-column:span 6;min-height:430px}
+.card h3{font-size:clamp(25px,2.25vw,34px);line-height:1.06;display:block;overflow:visible}
+.card:nth-child(7n+1) h3,.card:nth-child(7n+4) h3{font-size:clamp(29px,3vw,46px)}
+.card p{-webkit-line-clamp:4;font-size:14px;line-height:1.55}
+.card .m{font-weight:600;letter-spacing:.01em}
+.chip{border-radius:10px;padding:8px 10px;text-transform:uppercase;letter-spacing:.08em;font-size:10px}
+.go{border-radius:12px}
+.ah{border-radius:20px;border:1px solid var(--line);box-shadow:none}
+.ah h1{font-size:clamp(38px,5.8vw,76px);line-height:.98}
+.ahero{border-radius:20px}
+.src{border:1px solid var(--line);box-shadow:none;border-radius:16px}
+.newsletter-card{border:1px solid var(--line)!important;border-radius:20px!important;box-shadow:none!important}
+footer{border-top:1px solid var(--line)}
+@media(max-width:980px){
+  .burger{display:grid}
+  nav.main{display:none}
+  .hl,.cv{grid-column:span 12}
+  .hl{min-height:480px}
+  .cv{min-height:420px}
+  .ct,.sc,.lt{grid-column:span 4}
+  .card,.card:nth-child(7n+1),.card:nth-child(7n+4){grid-column:span 6;min-height:380px}
+}
+@media(max-width:640px){
+  #hd{padding-top:8px}
+  .top{border-radius:14px;min-height:58px;padding:6px 8px 6px 12px}
+  .logo img{height:34px!important}
+  .bento{gap:12px;margin-top:14px;margin-bottom:34px}
+  .hl{min-height:420px;padding:24px 20px}
+  .hl h1{font-size:clamp(36px,11vw,58px);margin:30px 0 18px}
+  .cv{min-height:320px}
+  .ct,.sc,.lt{grid-column:span 12;min-height:170px}
+  .band{margin:12px 0 30px}
+  .grid{gap:12px}
+  .card,.card:nth-child(7n+1),.card:nth-child(7n+4){grid-column:span 12;min-height:340px}
+  .card h3,.card:nth-child(7n+1) h3,.card:nth-child(7n+4) h3{font-size:clamp(27px,8.2vw,38px)}
+  .tabs{margin-left:-14px;margin-right:-14px;padding:0 14px}
+}
