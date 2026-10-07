@@ -1,7 +1,7 @@
 
 const CATS=[['all','Home'],['india','India'],['politics','Politics'],['world','World'],['business','Business'],['technology','Technology'],['sports','Sports'],['entertainment','Entertainment'],['hindi','Hindi']];
 const TABS=[['all','All'],['politics','Politics'],['india','India'],...CATS.slice(3)];
-const ENDPOINTS={api:'/api/news?category=all&limit=120',search:'/api/search',snap:'/news-data.json'};
+const ENDPOINTS={api:'/api/news?category=all&limit=120',item:'/api/news/',search:'/api/search',snap:'/news-data.json'};
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ls={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}},del:k=>{try{localStorage.removeItem(k)}catch(e){}}};
@@ -147,7 +147,7 @@ function home(c){setActive(c);document.title=(c==='all'?'':CATS.find(x=>x[0]===c
  $('#app').innerHTML=hero+band+tabs+`<div class="sh"><h2>Latest stories</h2><span class="lbl">${list.length} stories</span></div><div class="grid">${rest.map(card).join('')||'<p class="msg" style="grid-column:1/-1">That is the only story in this section for now.</p>'}</div><section class="newsletter-card"><span class="lbl red">PoliticsHub Brief</span><h2>Important stories. No noise.</h2><p>Get a concise newsroom update in your inbox.</p><form id="homeNl"><input type="email" required placeholder="you@example.com" aria-label="Email address"><button class="btn">Subscribe</button></form><small id="homeNlMsg"></small></section>`;fx();enhanceHome(c);bindNewsletter()}
 async function article(id){setActive('');
  let it=S.items.find(i=>i.id===id);
- if(!it||(!it.body&&S.mode==='api')){if(!it)$('#app').innerHTML='<div class="art"><div class="sk"></div></div>';try{const r=await fetch(ENDPOINTS.api+'/'+encodeURIComponent(id),{cache:'no-store',headers:{'Cache-Control':'no-cache'}});if(r.ok){const j=await r.json();const raw=j.article||j.data||j;it=norm({...raw,image:raw.image_url||raw.image,source:raw.source_name||raw.source,date:raw.published_at||raw.published_at_site,body:raw.article||raw.bot_article||raw.content,summary:raw.summary||raw.bot_summary});it.id=id}}catch(e){}}
+ if(!it||(!it.body&&S.mode==='api')){if(!it)$('#app').innerHTML='<div class="art"><div class="sk"></div></div>';try{const r=await fetch(ENDPOINTS.item+encodeURIComponent(id),{cache:'no-store',headers:{'Cache-Control':'no-cache'}});if(r.ok){const j=await r.json();const raw=j.article||j.data||j;it=norm({...raw,image:raw.image_url||raw.image,source:raw.source_name||raw.source,date:raw.published_at||raw.published_at_site,body:raw.article||raw.bot_article||raw.content,summary:raw.summary||raw.bot_summary});it.id=id}}catch(e){}}
  if(!it){$('#app').innerHTML=`<div class="msg"><h3>We couldn't load this story</h3><p>It may have been removed, or the news service is unreachable.</p><p style="margin-top:20px"><a class="btn" href="#/">Back to latest</a></p></div>`;return}
  document.title=it.title+' — PoliticsHub.in';document.body.dataset.k=ck(it);
  const paras=(it.body||'').split(/\n+/).filter(Boolean).map(p=>`<p>${esc(p)}</p>`).join('')||(it.summary?`<p>${esc(it.summary)}</p>`:'');
