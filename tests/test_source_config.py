@@ -18,14 +18,17 @@ class SourceConfigTests(unittest.TestCase):
                 self.assertIn("name", source)
                 self.assertIn("enabled", source)
 
-    def test_news_api_sources_are_enabled_and_india_scoped(self):
+    def test_news_api_sources_are_india_scoped_and_licensed_for_use(self):
         config = json.loads(Path("config/sources.json").read_text(encoding="utf-8"))
         newsapi = config["newsapi"]
         newsdata = config["newsdata"]
         self.assertTrue(newsapi)
         self.assertTrue(newsdata)
-        self.assertTrue(all(item.get("enabled") for item in newsapi + newsdata))
         self.assertTrue(all(item.get("country") == "in" for item in newsapi + newsdata))
+        self.assertTrue(all(item.get("enabled") for item in newsdata))
+        for item in newsapi:
+            if not item.get("enabled"):
+                self.assertTrue(item.get("license_review_required"))
 
 
 if __name__ == "__main__":
