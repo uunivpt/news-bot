@@ -167,8 +167,7 @@ def _section_html(category="all"):
    if image.startswith(("http://","https://","/")):
     media='<img src="'+html.escape(image,quote=True)+'" alt="" loading="lazy" decoding="async">'
    card_class="card im" if media else "card tx"
-   fallback="" if media else '<span class="wm" aria-hidden="true">'+html.escape(str(row.get("category") or category or "N")[:1].upper())+"</span>"
-   cards.append('<a class="'+card_class+' rv" href="'+html.escape(href,quote=True)+'">'+media+fallback+'<span class="chip stk">'+html.escape(str(row.get("category") or category or "News"))+'</span><span class="go" aria-hidden="true">↗</span><h3>'+title+'</h3><p>'+summary+'</p><span class="m">'+source+" · "+date+"</span></a>")
+   cards.append('<a class="'+card_class+' rv" href="'+html.escape(href,quote=True)+'">'+media+'<span class="chip stk">'+html.escape(str(row.get("category") or category or "News"))+'</span><span class="go" aria-hidden="true">↗</span><h3>'+title+'</h3><p>'+summary+'</p><span class="m">'+source+" · "+date+"</span></a>")
   except Exception:
    pass
  first=rows[0] if rows else {}
@@ -181,8 +180,6 @@ def _section_html(category="all"):
  first_media=""
  if first_image.startswith(("http://","https://","/")):
   first_media='<img src="'+html.escape(first_image,quote=True)+'" alt="" loading="eager" decoding="async">'
- else:
-  first_media='<span class="big">'+first_category+"</span>"
  jump=[]
  for cat in ("india","politics","world","business","technology","sports","entertainment","hindi"):
   jump.append('<a href="/'+cat+'/">'+cat.title()+'<small>'+str(sum(1 for r in rows if str(r.get("category") or "").lower()==cat))+'</small></a>')
@@ -194,7 +191,8 @@ def _section_html(category="all"):
    pass
  body='<section class="bento">'
  body+='<div class="tile hl"><span class="burst" aria-hidden="true">✺</span><span class="lbl"><i class="dot"></i>What matters, clearly.</span><h1>'+first_title+'</h1><p>'+first_summary+'</p><a class="btn" href="'+first_href+'">Read latest story <span aria-hidden="true">↗</span></a></div>'
- body+='<a class="tile cv '+("im" if first_image.startswith(("http://","https://","/")) else "tx")+'" href="'+first_href+'" aria-label="'+first_title+'">'+first_media+'<span class="chip stk">'+first_category+'</span><span class="cap">'+first_source+'</span></a>'
+ if first_media:
+  body+='<a class="tile cv im" href="'+first_href+'" aria-label="'+first_title+'">'+first_media+'<span class="chip stk">'+first_category+'</span><span class="cap">'+first_source+'</span></a>'
  body+='<div class="tile ct"><span class="lbl">Today on PoliticsHub.in</span><b class="num" data-n="'+str(len(rows))+'">'+str(len(rows))+'</b><span>stories in '+html.escape(label)+'</span></div>'
  body+='<div class="tile sc"><span class="lbl">Jump to a desk</span><div class="pills">'+"".join(jump)+'</div></div>'
  body+='<div class="tile lt"><span class="lbl">Just in</span>'+"".join(just_in)+'</div></section>'
@@ -255,11 +253,9 @@ def _publicize(row):
   article_text=_strip_promo_nav(source_text)
   article_text=re.sub(r"(?:\n|\s)*Why it matters:\s*$","",article_text,flags=re.I).strip()
   r["article"]=article_text
-  # Never make public browsers depend on third-party hotlinking. Every public
-  # story gets a same-origin image URL; the image endpoint serves the source
-  # image when possible and falls back to a branded PoliticsHub image.
-  if r.get("id"):
-   r["image_url"]="/api/image/"+str(int(r["id"]))
+  # Website images are source-only. Images found later for Instagram/Reels
+  # (Wikimedia/Openverse/etc.) must never appear on the website.
+  r["image_url"]=_public_image_path(r)
   r.pop("editorial_context",None)
   if "editorial_value" in r: r["editorial_value"]=bool(r.get("editorial_value"))
   if "source_count" in r: r["source_count"]=int(r.get("source_count") or 0)
@@ -268,7 +264,18 @@ def _publicize(row):
  return r
 
 
+def _is_source_supplied_image(row):
+ if not isinstance(row,dict):return False
+ url=str(row.get("image_url") or "").strip()
+ if not url.startswith(("http://","https://")):return False
+ source=str(row.get("image_source") or "").strip().lower()
+ # Fresh collector rows have no image_source yet. Once the Reel image helper
+ # validates an original source image it tags it as article-source.
+ return source in {"","article-source"}
+
+
 def _public_image_path(row):
+ if not _is_source_supplied_image(row):return ""
  item_id=row.get("id") if isinstance(row,dict) else None
  try:return "/api/image/"+str(int(item_id))
  except (TypeError,ValueError):return ""
@@ -303,11 +310,11 @@ def public_story_image(item_id):
   row=dict(row) if row else None
  finally:
   database.close()
- if not row:
-  return redirect("/api/og/"+str(item_id),code=302)
+ if not row or not _is_source_supplied_image(row):
+  return Response(status=404)
  source_url=str(row.get("image_url") or "").strip()
  if not _safe_public_image_origin(source_url):
-  return redirect("/api/og/"+str(item_id),code=302)
+  return Response(status=404)
  try:
   import requests
   from urllib.parse import urlsplit
@@ -336,8 +343,8 @@ def public_story_image(item_id):
   response.headers["X-Content-Type-Options"]="nosniff"
   return response
  except Exception as exc:
-  print(f"Public image proxy fallback for item {item_id}: {exc}")
-  return redirect("/api/og/"+str(item_id),code=302)
+  print(f"Public source image unavailable for item {item_id}: {exc}")
+  return Response(status=404)
 
 
 SITE_ORIGIN="https://politicshub.in"
@@ -405,7 +412,7 @@ def _article_html(row):
 <main class="wrap"><article class="art" data-k="{html.escape(category.lower())}">
 <div class="ah"><span class="chip">{html.escape(category)}</span><h1>{html.escape(title)}</h1><p class="dek">{html.escape(summary)}</p>
 <div class="by"><span>By <a href="/author/politicshub-news-desk">{EDITORIAL_DESK}</a></span><span>{html.escape(str(published or ""))}</span><span>{html.escape(source)}</span></div></div>
-{"<div class='ahero'><img src='"+html.escape(str(row.get("image_url") or image))+"' alt='"+html.escape(title)+"' loading='eager'></div>" if row.get("image_url") else ""}
+{"<div class='ahero'><img src='"+html.escape(str(row.get("image_url") or image))+"' alt='"+html.escape(title)+"' loading='eager' onerror='this.parentElement.remove()'></div>" if row.get("image_url") else ""}
 <div class="body">{paras}</div>
 <div class="src"><strong>Source transparency:</strong> This is a source-linked brief prepared from the originating report. When multiple independent sources are available, PoliticsHub compares their reported details; otherwise no independent reporting claim is made.</div>
 <div class="src">Source: {html.escape(source)}. {"<a href='"+html.escape(str(row.get("url")))+"' rel='nofollow noopener' target='_blank'>Read the original report</a>" if row.get("url") else ""}</div>

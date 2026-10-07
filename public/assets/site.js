@@ -64,7 +64,7 @@ function img(item){
 function card(item){
  const k=ck(item),title=String(item?.title||'Untitled'),summary=String(item?.summary||'').trim();
  return '<a class="card '+(item?.image?'im':'tx')+' rv" data-k="'+k+'" href="'+esc(articleHref(item))+'" aria-label="'+esc(title)+'">'+
- (item?.image?img(item):'<span class="wm" aria-hidden="true">'+esc((item?.category||k).slice(0,1).toUpperCase())+'</span>')+
+ (item?.image?img(item):'')+
  '<span class="chip stk">'+esc(item?.category||k)+'</span>'+
  '<span class="go" aria-hidden="true">↗</span>'+
  '<h3>'+esc(title)+'</h3>'+
@@ -136,8 +136,9 @@ function home(c){setActive(c);document.title=(c==='all'?'':CATS.find(x=>x[0]===c
  const words=f.title.split(' ').map((w,i)=>`<span class="w"><span style="--i:${i}">${esc(w)}</span></span>`).join(' ');
  const lt=rest.slice(0,3).map(i=>`<a class="li" data-k="${ck(i)}" href="${articleHref(i)}"><span>${esc(i.title)}</span><small>${ago(i.date)}</small></a>`).join('')||'<p class="msg" style="padding:20px 0">No other stories yet.</p>';
  const pl=CATS.slice(1).map(([k,l])=>`<a data-k="${k}" href="${hl(k)}">${l}<small>${S.items.filter(i=>inCat(i,k)).length}</small></a>`).join('');
+ const cover=f.image?`<a class="tile cv im" data-k="${fk}" style="--d:1" href="${articleHref(f)}" aria-label="${esc(f.title)}">${img(f)}<span class="chip stk">${esc(f.category)}</span><span class="cap">${esc(f.source)} ${ago(f.date)}</span></a>`:'';
  const hero=`<section class="bento"><div class="tile hl" data-k="${fk}"><span class="burst" aria-hidden="true">✺</span><span class="lbl"><i class="dot"></i>What matters, clearly. ${date}</span><h1>${words}</h1><p>${esc(f.summary)}</p><a class="btn" data-mag href="${articleHref(f)}">Read latest story <span aria-hidden="true">↗</span></a></div>
- <a class="tile cv ${f.image?'im':'tx'}" data-k="${fk}" style="--d:1" href="${articleHref(f)}" aria-label="${esc(f.title)}">${f.image?img(f):`<span class="big">${esc(f.category)}</span>`}<span class="chip stk">${esc(f.category)}</span><span class="cap">${esc(f.source)} ${ago(f.date)}</span></a>
+ ${cover}
  <div class="tile ct" style="--d:2"><span class="lbl">Today on PoliticsHub.in</span><b class="num" data-n="${list.length}">${list.length}</b><span>stories in ${esc(ctn)}</span></div>
  <div class="tile sc" style="--d:3"><span class="lbl">Jump to a desk</span><div class="pills">${pl}</div></div>
  <div class="tile lt" style="--d:4"><span class="lbl">Just in</span>${lt}</div></section>`;

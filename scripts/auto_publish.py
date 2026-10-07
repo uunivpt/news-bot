@@ -140,17 +140,8 @@ def _needs_content_repair(row):
  return not copy_qa["passed"]
 
 def publish_website_first(db,row,now):
- # Give website stories a usable editorial image when the source did not
- # provide one. Public delivery uses the same-origin /api/image/<id> proxy.
- if not str(row.get("image_url") or "").strip():
-  try:
-   image_meta=prepare_story_image(row,output_dir=OUT/"news_images")
-   if image_meta and image_meta.get("image_url"):
-    fields={k:v for k,v in image_meta.items() if k!="image_local_path"}
-    db.update(int(row["id"]),**fields); row.update(image_meta)
-    print(f"Website image selected for item {row['id']}: {image_meta.get('image_source')} / {image_meta.get('image_license')}")
-  except Exception as image_exc:
-   print(f"Website image acquisition skipped for item {row.get('id')}: {image_exc}")
+ # Website policy: display only images supplied by the originating source.
+ # Do not search/acquire replacement images for text-only source stories.
  flags=risk_flags(row["title"],row.get("bot_summary") or row.get("summary") or ""); review="needs_review" if flags else "pending"
  db.update(int(row["id"]),status="published",published_at_site=now,fact_check_status=review,fact_check_notes=", ".join(flags) if flags else None); row["status"]="published"; return row
 

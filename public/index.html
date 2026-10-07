@@ -72,7 +72,7 @@ html[data-theme=light] footer{background:#f4f1ec!important;border-top-color:rgba
  function phTs(v){var raw=String(v||'').trim();if(!raw)return 0;raw=raw.split('·').join(' ').split('•').join(' ');var t=Date.parse(raw);return Number.isFinite(t)?t:0}
  function phSorted(items){return Array.from(items).sort(function(a,b){return phTs(b.date)-phTs(a.date)||Number(b.id||0)-Number(a.id||0)})}
  function phMeta(i){return '<span class="meta"><b>'+esc(i.category||'News')+'</b><span>'+esc(ago(i.date)||fmt(i.date))+'</span><span>'+esc(i.source||'PoliticsHub')+'</span></span>'}
- function phMedia(i,lead){if(i.image)return '<div class="'+(lead?'ph14-media':'ph14-thumb')+'"><img src="'+esc(i.image)+'" alt="" loading="'+(lead?'eager':'lazy')+'" decoding="async" onerror="this.remove()"></div>';return lead?'<div class="ph14-media"><div class="ph14-media-fallback">'+esc((i.category||'N').slice(0,1))+'</div></div>':'<div class="ph14-thumb"><span>'+esc((i.category||'N').slice(0,1))+'</span></div>'}
+ function phMedia(i,lead){if(!i.image)return'';return '<div class="'+(lead?'ph14-media':'ph14-thumb')+'"><img src="'+esc(i.image)+'" alt="" loading="'+(lead?'eager':'lazy')+'" decoding="async" onerror="this.parentElement.remove()"></div>'}
  home=function(c){
   setActive(c);document.title=(c==='all'?'':(CATS.find(function(x){return x[0]===c})||['',''])[1]+' — ')+'PoliticsHub.in';
   var list=phSorted(S.items.filter(function(i){return inCat(i,c)})),lead=list[0],briefs=list.slice(1,4),rows=list.slice(4,18);
