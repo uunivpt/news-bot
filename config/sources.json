@@ -81,29 +81,37 @@
       "name": "Watcher Guru",
       "username": "@WatcherGuru",
       "category": "business",
-      "enabled": true,
-      "public_source": true
+      "enabled": false,
+      "public_source": true,
+      "terms_review_required": true,
+      "note": "Disabled because Telegram's Content Licensing Terms prohibit scraping/aggregation outside intended platform use without an applicable exception or permission."
     },
     {
       "name": "Middle East Spectator",
       "username": "@Middle_East_Spectator",
       "category": "world",
-      "enabled": true,
-      "public_source": true
+      "enabled": false,
+      "public_source": true,
+      "terms_review_required": true,
+      "note": "Disabled because Telegram's Content Licensing Terms prohibit scraping/aggregation outside intended platform use without an applicable exception or permission."
     },
     {
       "name": "Geopolitics Prime",
       "username": "@geopolitics_prime",
       "category": "politics",
-      "enabled": true,
-      "public_source": true
+      "enabled": false,
+      "public_source": true,
+      "terms_review_required": true,
+      "note": "Disabled because Telegram's Content Licensing Terms prohibit scraping/aggregation outside intended platform use without an applicable exception or permission."
     },
     {
       "name": "DD Geopolitics",
       "username": "@DDGeopolitics",
       "category": "world",
-      "enabled": true,
-      "public_source": true
+      "enabled": false,
+      "public_source": true,
+      "terms_review_required": true,
+      "note": "Disabled because Telegram's Content Licensing Terms prohibit scraping/aggregation outside intended platform use without an applicable exception or permission."
     }
   ],
   "website": [
