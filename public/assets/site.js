@@ -234,7 +234,7 @@ function activeFeedCategory(){
  return hash[0]==='c'&&CATS.some(x=>x[0]===hash[1])?hash[1]:'all';
 }
 function feedSignature(items,category){
- return (items||[]).filter(i=>inCat(i,category)).slice(0,30).map(i=>String(i.id)+':'+String(i.date||'')).join('|');
+ return (items||[]).filter(i=>inCat(i,category)).slice(0,30).map(i=>String(i.id)+':'+String(i.date||'')+':'+String(i.title||'')+':'+String(i.summary||'').slice(0,80)).join('|');
 }
 async function refreshLatest(force=false){
  if(liveRefreshBusy)return;
