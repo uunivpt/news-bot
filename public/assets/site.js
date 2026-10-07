@@ -124,8 +124,9 @@ async function load(opts={}){
  const apiP=get(ENDPOINTS.api).then(rows=>{a=rows;S.api=a.length?'ok':'empty';paintFirst(a,'api')}).catch(()=>{S.api='bad'});
  const snapP=get(ENDPOINTS.snap).then(rows=>{b=rows;S.snap=b.length?'ok':'empty';paintFirst(b,'snapshot')}).catch(()=>{S.snap='bad'});
  await Promise.allSettled([apiP,snapP]);
- S.items=mergeFeeds(a,b);
- if(S.items.length){S.mode=a.length?'api+snapshot':'snapshot';cacheSave(S.items)}
+ const existing=S.items.slice();
+ S.items=a.length?mergeFeeds(a,b):(existing.length?mergeFeeds(existing,b):mergeFeeds(a,b));
+ if(S.items.length){S.mode=a.length?'api+snapshot':(existing.length?'stale-live+snapshot':'snapshot');cacheSave(S.items)}
  else if(!painted){S.mode='empty'}
 }
 function home(c){setActive(c);document.title=(c==='all'?'':CATS.find(x=>x[0]===c)?.[1]+' — ')+'PoliticsHub.in';
