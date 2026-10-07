@@ -167,8 +167,7 @@ def _section_html(category="all"):
    if image.startswith(("http://","https://","/")):
     media='<img src="'+html.escape(image,quote=True)+'" alt="" loading="lazy" decoding="async">'
    card_class="card im" if media else "card tx"
-   fallback="" if media else '<span class="wm" aria-hidden="true">'+html.escape(str(row.get("category") or category or "N")[:1].upper())+"</span>"
-   cards.append('<a class="'+card_class+' rv" href="'+html.escape(href,quote=True)+'">'+media+fallback+'<span class="chip stk">'+html.escape(str(row.get("category") or category or "News"))+'</span><span class="go" aria-hidden="true">↗</span><h3>'+title+'</h3><p>'+summary+'</p><span class="m">'+source+" · "+date+"</span></a>")
+   cards.append('<a class="'+card_class+' rv" href="'+html.escape(href,quote=True)+'">'+media+'<span class="chip stk">'+html.escape(str(row.get("category") or category or "News"))+'</span><span class="go" aria-hidden="true">↗</span><h3>'+title+'</h3><p>'+summary+'</p><span class="m">'+source+" · "+date+"</span></a>")
   except Exception:
    pass
  first=rows[0] if rows else {}
@@ -181,8 +180,6 @@ def _section_html(category="all"):
  first_media=""
  if first_image.startswith(("http://","https://","/")):
   first_media='<img src="'+html.escape(first_image,quote=True)+'" alt="" loading="eager" decoding="async">'
- else:
-  first_media='<span class="big">'+first_category+"</span>"
  jump=[]
  for cat in ("india","politics","world","business","technology","sports","entertainment","hindi"):
   jump.append('<a href="/'+cat+'/">'+cat.title()+'<small>'+str(sum(1 for r in rows if str(r.get("category") or "").lower()==cat))+'</small></a>')
@@ -194,7 +191,8 @@ def _section_html(category="all"):
    pass
  body='<section class="bento">'
  body+='<div class="tile hl"><span class="burst" aria-hidden="true">✺</span><span class="lbl"><i class="dot"></i>What matters, clearly.</span><h1>'+first_title+'</h1><p>'+first_summary+'</p><a class="btn" href="'+first_href+'">Read latest story <span aria-hidden="true">↗</span></a></div>'
- body+='<a class="tile cv '+("im" if first_image.startswith(("http://","https://","/")) else "tx")+'" href="'+first_href+'" aria-label="'+first_title+'">'+first_media+'<span class="chip stk">'+first_category+'</span><span class="cap">'+first_source+'</span></a>'
+ if first_media:
+  body+='<a class="tile cv im" href="'+first_href+'" aria-label="'+first_title+'">'+first_media+'<span class="chip stk">'+first_category+'</span><span class="cap">'+first_source+'</span></a>'
  body+='<div class="tile ct"><span class="lbl">Today on PoliticsHub.in</span><b class="num" data-n="'+str(len(rows))+'">'+str(len(rows))+'</b><span>stories in '+html.escape(label)+'</span></div>'
  body+='<div class="tile sc"><span class="lbl">Jump to a desk</span><div class="pills">'+"".join(jump)+'</div></div>'
  body+='<div class="tile lt"><span class="lbl">Just in</span>'+"".join(just_in)+'</div></section>'
