@@ -220,27 +220,37 @@ const qcat=new URLSearchParams(location.search).get('category');if(!location.has
 setActive('all');
 const hadCache=hydrateCache();
 if(hadCache){ticker();render();}
-load({early:!hadCache}).then(()=>{ticker();render()});
-let liveRefreshBusy=false;
+let liveRefreshBusy=true,lastRefreshAt=0;
+load({early:!hadCache}).then(()=>{ticker();render()}).finally(()=>{liveRefreshBusy=false;lastRefreshAt=Date.now()});
 function onStoryListRoute(){
  const path=location.pathname.split('/').filter(Boolean),hash=location.hash.slice(1);
  if(path.length>=2&&/^\d+-/.test(path[1]))return false;
  return !hash.startsWith('/article/')&&!hash.startsWith('/settings');
 }
-async function refreshLatest(){
+function activeFeedCategory(){
+ const path=location.pathname.split('/').filter(Boolean);
+ if(path.length===1&&CATS.some(x=>x[0]===path[0]))return path[0];
+ const hash=location.hash.slice(1).split('/').filter(Boolean);
+ return hash[0]==='c'&&CATS.some(x=>x[0]===hash[1])?hash[1]:'all';
+}
+function feedSignature(items,category){
+ return (items||[]).filter(i=>inCat(i,category)).slice(0,30).map(i=>String(i.id)+':'+String(i.date||'')).join('|');
+}
+async function refreshLatest(force=false){
  if(liveRefreshBusy)return;
+ if(!force&&Date.now()-lastRefreshAt<15000)return;
  liveRefreshBusy=true;
- const before=S.items.slice(0,8).map(i=>String(i.id)+':'+String(i.date||'')).join('|');
+ const category=activeFeedCategory(),before=feedSignature(S.items,category);
  try{
   await load();
-  const after=S.items.slice(0,8).map(i=>String(i.id)+':'+String(i.date||'')).join('|');
+  const after=feedSignature(S.items,category);
   ticker();
-  if(after!==before&&onStoryListRoute())render();
- }finally{liveRefreshBusy=false}
+  if(after!==before&&onStoryListRoute())render(true);
+ }finally{liveRefreshBusy=false;lastRefreshAt=Date.now()}
 }
 setInterval(refreshLatest,90000);
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshLatest()});
-addEventListener('focus',refreshLatest);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshLatest(true)});
+addEventListener('focus',()=>refreshLatest());
 if('serviceWorker' in navigator) addEventListener('load',()=>navigator.serviceWorker.register('/service-worker.js').catch(()=>{}));
 
 async function enhanceHome(category){
