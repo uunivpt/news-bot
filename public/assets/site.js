@@ -1,7 +1,7 @@
 
 const CATS=[['all','Home'],['india','India'],['politics','Politics'],['world','World'],['business','Business'],['technology','Technology'],['sports','Sports'],['entertainment','Entertainment'],['hindi','Hindi']];
 const TABS=[['all','All'],['politics','Politics'],['india','India'],...CATS.slice(3)];
-const ENDPOINTS={api:'/api/news?category=all&limit=300',search:'/api/search',snap:'/news-data.json'};
+const ENDPOINTS={api:'/api/news?category=all&limit=120',search:'/api/search',snap:'/news-data.json'};
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ls={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}},del:k=>{try{localStorage.removeItem(k)}catch(e){}}};
@@ -14,9 +14,22 @@ function norm(a,i){const id=a.id??a.slug??a._id??'n'+i;const img=a.image||a.imag
  return{...a,id:String(id),title:a.title||a.headline||'Untitled',summary:a.summary||a.description||a.excerpt||'',body:a.content||a.body||a.text||'',image:typeof img==='string'?img:'',category:String(a.category||a.section||'General'),source:(a.source&&a.source.name)||a.source||a.publisher||'',date:a.published_at_iso||a.publishedAt||a.pubDate||a.date||a.published_at||a.created_at||'',url:a.url||a.link||'',author:a.author||a.author_name||'PoliticsHub Editorial Desk'}}
 const pick=j=>Array.isArray(j)?j:(j.articles||j.news||j.items||j.data||j.results||[]);
 async function get(u){const r=await fetch(u,{cache:'no-store',headers:{'Accept':'application/json','Cache-Control':'no-cache'}});if(!r.ok)throw 0;const rows=pick(await r.json());return rows.map((x,i)=>{const img=x.image_url||x.image||x.imageUrl||x.urlToImage||x.thumbnail||x.img||'';const source=x.source_name||(x.source&&x.source.name)||x.source||x.publisher||'PoliticsHub';const date=x.published_at_iso||x.published_at_site||x.publishedAt||x.pubDate||x.date||x.published_at||x.created_at||'';const body=x.article||x.bot_article||x.content||x.body||x.text||'';const summary=x.summary||x.bot_summary||x.description||x.excerpt||'';return {...x,id:String(x.id??x.slug??x._id??'n'+i),image:typeof img==='string'?img:'',source:String(source),date,body:String(body),summary:String(summary)};})}
-const CACHE_KEY='ph-news-cache-v6';
+const CACHE_KEY='ph-news-cache';
+const LEGACY_CACHE_KEYS=['ph-news-cache-v6','ph-news-cache-v5','ph-news-cache-v4'];
 function cacheSave(items){try{localStorage.setItem(CACHE_KEY,JSON.stringify({ts:Date.now(),items}));}catch(e){}}
-function cacheLoad(){try{const x=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');return x&&Array.isArray(x.items)?x:null}catch(e){return null}}
+function cacheLoad(){
+ try{
+  const keys=[CACHE_KEY,...LEGACY_CACHE_KEYS];
+  for(const key of keys){
+   const x=JSON.parse(localStorage.getItem(key)||'null');
+   if(x&&Array.isArray(x.items)&&x.items.length){
+    if(key!==CACHE_KEY)cacheSave(x.items);
+    return x;
+   }
+  }
+ }catch(e){}
+ return null
+}
 function slugify(value){
  return String(value||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,96)||'story';
 }
@@ -90,10 +103,7 @@ function ticker(){
  tickEl.hidden=false;
 }
 function hydrateCache(){const x=cacheLoad();if(!x||!x.items.length)return false;S.items=x.items.map(norm).sort((a,b)=>ts(b.date)-ts(a.date)||0);S.mode='cache';S.api='stale';return true}
-async function load(){
- let a=[],b=[];
- try{a=await get(ENDPOINTS.api);S.api=a.length?'ok':'empty'}catch(e){S.api='bad'}
- try{b=await get(ENDPOINTS.snap);S.snap=b.length?'ok':'empty'}catch(e){S.snap='bad'}
+function mergeFeeds(a,b){
  const all=[...(a||[]),...(b||[])].map(norm);
  const seen=new Map();
  for(const item of all){
@@ -102,9 +112,21 @@ async function load(){
   const prev=seen.get(key);
   if(!prev||ts(item.date)>ts(prev.date)||(!prev.body&&item.body)||(!prev.image&&item.image))seen.set(key,item);
  }
- S.items=[...seen.values()].sort((x,y)=>ts(y.date)-ts(x.date)||0);
+ return [...seen.values()].sort((x,y)=>ts(y.date)-ts(x.date)||0)
+}
+async function load(opts={}){
+ let a=[],b=[],painted=false;
+ const early=!!opts.early;
+ const paintFirst=(rows,mode)=>{
+  if(!early||painted||S.items.length||!rows?.length)return;
+  painted=true;S.items=rows.map(norm).sort((x,y)=>ts(y.date)-ts(x.date)||0);S.mode=mode;cacheSave(S.items);ticker();render();
+ };
+ const apiP=get(ENDPOINTS.api).then(rows=>{a=rows;S.api=a.length?'ok':'empty';paintFirst(a,'api')}).catch(()=>{S.api='bad'});
+ const snapP=get(ENDPOINTS.snap).then(rows=>{b=rows;S.snap=b.length?'ok':'empty';paintFirst(b,'snapshot')}).catch(()=>{S.snap='bad'});
+ await Promise.allSettled([apiP,snapP]);
+ S.items=mergeFeeds(a,b);
  if(S.items.length){S.mode=a.length?'api+snapshot':'snapshot';cacheSave(S.items)}
- else{S.mode='empty'}
+ else if(!painted){S.mode='empty'}
 }
 function home(c){setActive(c);document.title=(c==='all'?'':CATS.find(x=>x[0]===c)?.[1]+' — ')+'PoliticsHub.in';
  const list=S.items.filter(i=>inCat(i,c));const f=list[0];const rest=list.filter(i=>i!==f);
@@ -196,7 +218,7 @@ const qcat=new URLSearchParams(location.search).get('category');if(!location.has
 setActive('all');
 const hadCache=hydrateCache();
 if(hadCache){ticker();render();}
-load().then(()=>{ticker();render()});
+load({early:!hadCache}).then(()=>{ticker();render()});
 let liveRefreshBusy=false;
 function onStoryListRoute(){
  const path=location.pathname.split('/').filter(Boolean),hash=location.hash.slice(1);
@@ -253,15 +275,6 @@ const __doS=doS; doS=async function(){
  $('#sres').innerHTML=r.slice(0,50).map(i=>'<a class="sr" href="'+esc(articleHref(i))+'">'+(i.image?'<img src="'+esc(i.image)+'" alt="" loading="lazy" onerror="this.remove()">':'')+'<div><span class="lbl red">'+esc(i.category)+'</span><h3>'+esc(i.title)+'</h3><small>'+esc(i.source)+' '+ago(i.date)+'</small></div></a>').join('');
 };
 const __article=article; article=async function(id){await __article(id);trackView(id)};
-async function liveRefresh(){
- if(document.visibilityState!=='visible'||location.pathname.split('/').filter(Boolean).length>=2||location.hash.startsWith('#/article/')||location.hash.startsWith('#/settings'))return;
- const old=S.items.map(i=>[i.id,i.title,i.date,i.summary].join('|')).join(',');
- await load(); ticker();
- const fresh=S.items.map(i=>[i.id,i.title,i.date,i.summary].join('|')).join(',');
- if(old!==fresh) render();
-}
-setInterval(liveRefresh,60000);
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')liveRefresh()});
 
 function bindNewsletter(){const f=$('#homeNl');if(!f)return;f.onsubmit=async e=>{e.preventDefault();const m=$('#homeNlMsg');try{const r=await fetch('/api/newsletter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:f.querySelector('input').value})});const j=await r.json();m.textContent=j.message||j.error||'Done';if(r.ok)f.reset()}catch(x){m.textContent='Could not subscribe right now.'}}}
 
