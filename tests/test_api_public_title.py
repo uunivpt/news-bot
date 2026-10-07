@@ -1,6 +1,6 @@
 import unittest
 
-from api.index import _public_title, _rank_public, _public_image_path, _safe_public_image_origin
+from api.index import _public_title, _rank_public, _public_image_path, _safe_public_image_origin, _is_source_supplied_image
 
 
 class PublicTitleTests(unittest.TestCase):
@@ -19,9 +19,19 @@ class PublicTitleTests(unittest.TestCase):
         ranked = _rank_public(rows)
         self.assertEqual([item["id"] for item in ranked], [100, 999, 998])
 
-    def test_public_story_images_use_same_origin_proxy(self):
-        self.assertEqual(_public_image_path({"id": 42}), "/api/image/42")
-        self.assertEqual(_public_image_path({"id": None}), "")
+    def test_public_story_images_use_same_origin_proxy_only_for_source_images(self):
+        self.assertEqual(_public_image_path({"id": 42, "image_url": "https://source.example/photo.jpg", "image_source": ""}), "/api/image/42")
+        self.assertEqual(_public_image_path({"id": 42, "image_url": "https://source.example/photo.jpg", "image_source": "article-source"}), "/api/image/42")
+        self.assertEqual(_public_image_path({"id": 42, "image_url": "https://commons.example/photo.jpg", "image_source": "wikimedia"}), "")
+        self.assertEqual(_public_image_path({"id": 42, "image_url": "https://openverse.example/photo.jpg", "image_source": "Openverse"}), "")
+        self.assertEqual(_public_image_path({"id": 42, "image_url": "", "image_source": ""}), "")
+        self.assertEqual(_public_image_path({"id": None, "image_url": "https://source.example/photo.jpg", "image_source": ""}), "")
+
+    def test_source_image_detection_distinguishes_reel_acquired_images(self):
+        self.assertTrue(_is_source_supplied_image({"image_url": "https://source.example/photo.jpg", "image_source": ""}))
+        self.assertTrue(_is_source_supplied_image({"image_url": "https://source.example/photo.jpg", "image_source": "article-source"}))
+        self.assertFalse(_is_source_supplied_image({"image_url": "https://commons.example/photo.jpg", "image_source": "wikimedia"}))
+        self.assertFalse(_is_source_supplied_image({"image_url": "", "image_source": ""}))
 
     def test_image_proxy_rejects_unsafe_origins(self):
         self.assertTrue(_safe_public_image_origin("https://static.example.com/photo.jpg"))
