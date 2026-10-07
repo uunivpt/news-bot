@@ -6,12 +6,14 @@ const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelecto
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ls={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}},del:k=>{try{localStorage.removeItem(k)}catch(e){}}};
 const S={items:[],mode:'loading',api:'unknown',snap:'unknown',tried:0};
-const fmt=d=>{const x=new Date(d);return isNaN(x)?'':x.toLocaleString('en-IN',{day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'})};
-const ago=d=>{const m=(Date.now()-new Date(d))/6e4;if(isNaN(m))return'';return m<60?Math.max(1,~~m)+'m ago':m<1440?~~(m/60)+'h ago':fmt(d).split(',')[0]};
+const dt=d=>{const raw=String(d||'').trim().replace(/\s*[·•]\s*/g,' ').replace(/\s+/g,' ');const x=new Date(raw);return isNaN(x)?null:x};
+const ts=d=>dt(d)?.getTime()||0;
+const fmt=d=>{const x=dt(d);return !x?'':x.toLocaleString('en-IN',{day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'})};
+const ago=d=>{const x=dt(d);if(!x)return'';const m=(Date.now()-x)/6e4;return m<60?Math.max(1,~~m)+'m ago':m<1440?~~(m/60)+'h ago':fmt(d).split(',')[0]};
 function norm(a,i){const id=a.id??a.slug??a._id??'n'+i;const img=a.image||a.image_url||a.imageUrl||a.urlToImage||a.thumbnail||a.img||'';
- return{id:String(id),title:a.title||a.headline||'Untitled',summary:a.summary||a.description||a.excerpt||'',body:a.content||a.body||a.text||'',image:typeof img==='string'?img:'',category:String(a.category||a.section||'General'),source:(a.source&&a.source.name)||a.source||a.publisher||'',date:a.published_at||a.publishedAt||a.pubDate||a.date||a.created_at||'',url:a.url||a.link||'',author:a.author||a.author_name||'PoliticsHub Editorial Desk'}}
+ return{...a,id:String(id),title:a.title||a.headline||'Untitled',summary:a.summary||a.description||a.excerpt||'',body:a.content||a.body||a.text||'',image:typeof img==='string'?img:'',category:String(a.category||a.section||'General'),source:(a.source&&a.source.name)||a.source||a.publisher||'',date:a.published_at_iso||a.publishedAt||a.pubDate||a.date||a.published_at||a.created_at||'',url:a.url||a.link||'',author:a.author||a.author_name||'PoliticsHub Editorial Desk'}}
 const pick=j=>Array.isArray(j)?j:(j.articles||j.news||j.items||j.data||j.results||[]);
-async function get(u){const r=await fetch(u,{cache:'no-store',headers:{'Accept':'application/json','Cache-Control':'no-cache'}});if(!r.ok)throw 0;const rows=pick(await r.json());return rows.map((x,i)=>{const img=x.image_url||x.image||x.imageUrl||x.urlToImage||x.thumbnail||x.img||'';const source=x.source_name||(x.source&&x.source.name)||x.source||x.publisher||'PoliticsHub';const date=x.published_at||x.published_at_site||x.publishedAt||x.pubDate||x.date||x.created_at||'';const body=x.article||x.bot_article||x.content||x.body||x.text||'';const summary=x.summary||x.bot_summary||x.description||x.excerpt||'';return {...x,id:String(x.id??x.slug??x._id??'n'+i),image:typeof img==='string'?img:'',source:String(source),date,body:String(body),summary:String(summary)};})}
+async function get(u){const r=await fetch(u,{cache:'no-store',headers:{'Accept':'application/json','Cache-Control':'no-cache'}});if(!r.ok)throw 0;const rows=pick(await r.json());return rows.map((x,i)=>{const img=x.image_url||x.image||x.imageUrl||x.urlToImage||x.thumbnail||x.img||'';const source=x.source_name||(x.source&&x.source.name)||x.source||x.publisher||'PoliticsHub';const date=x.published_at_iso||x.published_at_site||x.publishedAt||x.pubDate||x.date||x.published_at||x.created_at||'';const body=x.article||x.bot_article||x.content||x.body||x.text||'';const summary=x.summary||x.bot_summary||x.description||x.excerpt||'';return {...x,id:String(x.id??x.slug??x._id??'n'+i),image:typeof img==='string'?img:'',source:String(source),date,body:String(body),summary:String(summary)};})}
 const CACHE_KEY='ph-news-cache-v4';
 function cacheSave(items){try{localStorage.setItem(CACHE_KEY,JSON.stringify({ts:Date.now(),items}));}catch(e){}}
 function cacheLoad(){try{const x=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');return x&&Array.isArray(x.items)?x:null}catch(e){return null}}
@@ -87,7 +89,7 @@ function ticker(){
  box.innerHTML='<div>'+links+links+'</div>';
  tickEl.hidden=false;
 }
-function hydrateCache(){const x=cacheLoad();if(!x||!x.items.length)return false;S.items=x.items.map(norm).sort((a,b)=>new Date(b.date)-new Date(a.date)||0);S.mode='cache';S.api='stale';return true}
+function hydrateCache(){const x=cacheLoad();if(!x||!x.items.length)return false;S.items=x.items.map(norm).sort((a,b)=>ts(b.date)-ts(a.date)||0);S.mode='cache';S.api='stale';return true}
 async function load(){
  let a=[],b=[];
  try{a=await get(ENDPOINTS.api);S.api=a.length?'ok':'empty'}catch(e){S.api='bad'}
@@ -98,9 +100,9 @@ async function load(){
   const key=String(item.id||item.url||item.title).trim().toLowerCase();
   if(!key)continue;
   const prev=seen.get(key);
-  if(!prev||new Date(item.date)>new Date(prev.date)||(!prev.body&&item.body)||(!prev.image&&item.image))seen.set(key,item);
+  if(!prev||ts(item.date)>ts(prev.date)||(!prev.body&&item.body)||(!prev.image&&item.image))seen.set(key,item);
  }
- S.items=[...seen.values()].sort((x,y)=>new Date(y.date)-new Date(x.date)||0);
+ S.items=[...seen.values()].sort((x,y)=>ts(y.date)-ts(x.date)||0);
  if(S.items.length){S.mode=a.length?'api+snapshot':'snapshot';cacheSave(S.items)}
  else{S.mode='empty'}
 }

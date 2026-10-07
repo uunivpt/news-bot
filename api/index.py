@@ -485,7 +485,7 @@ def newsletter_subscribe():
 def seo_section(category):
  category=category.lower().strip()
  if category not in set(CATEGORY_SLUGS.values()): return jsonify({"error":"not found"}),404
- return Response(_section_html(category if category!="india" or category in CATEGORY_SLUGS else "all"),mimetype="text/html")
+ return send_from_directory(app.static_folder,"index.html",max_age=0)
 
 @app.get("/author/politicshub-news-desk")
 def author_page(): return _editorial_page("PoliticsHub News Desk","The PoliticsHub Editorial Desk publishes and edits newsroom stories, source links and public corrections.","author")
@@ -496,12 +496,7 @@ def seo_article(category,item_id,slug):
  if not row:return jsonify({"error":"not found"}),404
  canonical_path=article_path(row); requested=f"/{category}/{item_id}-{slug}"
  if requested.rstrip("/")!=canonical_path.rstrip("/"):return redirect(SITE_ORIGIN+canonical_path,code=301)
- try:
-  database=db()
-  try: database.increment_view(item_id,datetime.now(timezone.utc).isoformat())
-  finally: database.close()
- except Exception as exc: print(f"view counter skipped: {exc}")
- return Response(_article_html(row),mimetype="text/html")
+ return send_from_directory(app.static_folder,"index.html",max_age=0)
 
 @app.post("/api/admin/logout")
 def logout():
