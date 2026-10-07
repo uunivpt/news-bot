@@ -140,6 +140,17 @@ def _needs_content_repair(row):
  return not copy_qa["passed"]
 
 def publish_website_first(db,row,now):
+ # Give website stories a usable editorial image when the source did not
+ # provide one. Public delivery uses the same-origin /api/image/<id> proxy.
+ if not str(row.get("image_url") or "").strip():
+  try:
+   image_meta=prepare_story_image(row,output_dir=OUT/"news_images")
+   if image_meta and image_meta.get("image_url"):
+    fields={k:v for k,v in image_meta.items() if k!="image_local_path"}
+    db.update(int(row["id"]),**fields); row.update(image_meta)
+    print(f"Website image selected for item {row['id']}: {image_meta.get('image_source')} / {image_meta.get('image_license')}")
+  except Exception as image_exc:
+   print(f"Website image acquisition skipped for item {row.get('id')}: {image_exc}")
  flags=risk_flags(row["title"],row.get("bot_summary") or row.get("summary") or ""); review="needs_review" if flags else "pending"
  db.update(int(row["id"]),status="published",published_at_site=now,fact_check_status=review,fact_check_notes=", ".join(flags) if flags else None); row["status"]="published"; return row
 
@@ -317,6 +328,17 @@ def _minutes_since_last(db,now):
  try:last=datetime.fromisoformat(str(raw).replace("Z","+00:00")); last=last if last.tzinfo else last.replace(tzinfo=timezone.utc); return max(0,(now-last).total_seconds()/60)
  except ValueError:return None
 
+def _india_reel_due(db,window=3):
+ try:
+  rows=db.conn.execute(
+   "SELECT category FROM news_items WHERE instagram_status='published' AND instagram_published_at IS NOT NULL ORDER BY instagram_published_at DESC,id DESC LIMIT "+str(max(1,int(window)))
+  ).fetchall()
+ except Exception:
+  return True
+ if not rows:return True
+ return not any(str(r["category"] or "").strip().lower()=="india" for r in rows)
+
+
 def _instagram_candidates(db,mode,limit,now):
  if limit<=0:return []
  ph="%"+"s" if db._postgres else "?"
@@ -339,7 +361,18 @@ def _instagram_candidates(db,mode,limit,now):
    r["_upgrade_score"]=float(s["score"] if s else 0); r["_upgrade_breaking"]=bool(s["breaking"] if s else 0)
   except Exception:
    r["_upgrade_score"]=0; r["_upgrade_breaking"]=False
- rows.sort(key=lambda r:(0 if r.get("_upgrade_breaking") else 1,0 if r.get("instagram_scheduled_at") else 1,-float(r.get("_upgrade_score") or 0),int(r.get("instagram_queue_order") or 0) if int(r.get("instagram_queue_order") or 0)>0 else 10**9,int(r.get("id") or 0)))
+ if mode=="manual":
+  rows.sort(key=lambda r:(0 if r.get("instagram_scheduled_at") else 1,0 if r.get("_upgrade_breaking") else 1,-float(r.get("_upgrade_score") or 0),int(r.get("instagram_queue_order") or 0) if int(r.get("instagram_queue_order") or 0)>0 else 10**9,int(r.get("id") or 0)))
+ else:
+  india_due=_india_reel_due(db,3)
+  rows.sort(key=lambda r:(
+   0 if r.get("instagram_scheduled_at") else 1,
+   0 if india_due and str(r.get("category") or "").strip().lower()=="india" else 1,
+   0 if r.get("_upgrade_breaking") else 1,
+   -float(r.get("_upgrade_score") or 0),
+   int(r.get("instagram_queue_order") or 0) if int(r.get("instagram_queue_order") or 0)>0 else 10**9,
+   int(r.get("id") or 0),
+  ))
  return rows[:limit]
 
 def main():
