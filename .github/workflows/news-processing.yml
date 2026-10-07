@@ -7,10 +7,11 @@ on:
   push:
     branches:
       - main
-  # Stagger away from the top of the hour so GitHub Actions scheduler load
-  # does not keep the newsroom job waiting.
+  # The 5-minute collector triggers this workflow via workflow_run.
+  # Keep only a low-frequency fallback schedule so duplicate newsroom runs
+  # cannot build a stale processing queue.
   schedule:
-    - cron: "2-59/5 * * * *"
+    - cron: "17,47 * * * *"
   workflow_run:
     workflows: ["News Collector"]
     types: [completed]
