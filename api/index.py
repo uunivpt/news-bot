@@ -573,17 +573,33 @@ def newsletter_status(): return jsonify({"ok":True,"available":True})
 def newsletter_subscribe():
  if not _public_rate_allowed(20,3600):return jsonify({"error":"too many requests"}),429
  body=request.get_json(silent=True) or request.form.to_dict() or {}; email=str(body.get("email","")).strip().lower()
+ consent=str(body.get("consent","")).strip().lower() in {"1","true","yes","on"}
+ adult=str(body.get("adult","")).strip().lower() in {"1","true","yes","on"}
  if not re.fullmatch(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",email):return jsonify({"error":"Enter a valid email address"}),400
+ if not consent:return jsonify({"error":"Please agree to receive the newsletter and to the Privacy Policy."}),400
+ if not adult:return jsonify({"error":"Newsletter signup is currently limited to people aged 18 or older."}),400
  try:
   database=db()
-  try: database.subscribe_newsletter(email); return jsonify({"ok":True,"message":"You are on the PoliticsHub newsletter list."})
+  try: database.subscribe_newsletter(email,confirmed=True); return jsonify({"ok":True,"message":"You are on the PoliticsHub newsletter list. You can unsubscribe at any time."})
   finally: database.close()
  except RuntimeError:
   try:
    import requests
-   response=requests.post(PUBLIC_BACKEND_ORIGIN+"/api/newsletter",json={"email":email},timeout=_PUBLIC_API_TIMEOUT,headers={"Accept":"application/json","X-PoliticsHub-Proxy":"1"})
+   response=requests.post(PUBLIC_BACKEND_ORIGIN+"/api/newsletter",json={"email":email,"consent":True,"adult":True},timeout=_PUBLIC_API_TIMEOUT,headers={"Accept":"application/json","X-PoliticsHub-Proxy":"1"})
    return app.response_class(response.content,status=response.status_code,content_type=response.headers.get("Content-Type","application/json"))
   except Exception: return jsonify({"error":"newsletter service unavailable"}),503
+
+@app.delete("/api/newsletter")
+def newsletter_unsubscribe():
+ if not _public_rate_allowed(20,3600):return jsonify({"error":"too many requests"}),429
+ body=request.get_json(silent=True) or request.form.to_dict() or {}; email=str(body.get("email","")).strip().lower()
+ if not re.fullmatch(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",email):return jsonify({"error":"Enter a valid email address"}),400
+ try:
+  database=db()
+  try: database.unsubscribe_newsletter(email); return jsonify({"ok":True,"message":"If that address was subscribed, it has been removed."})
+  finally: database.close()
+ except RuntimeError:
+  return jsonify({"error":"newsletter service unavailable"}),503
 
 @app.get("/<category>/")
 def seo_section(category):
