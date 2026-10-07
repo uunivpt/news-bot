@@ -7,9 +7,9 @@
 <meta name="description" content="Independent reporting. Clearly.">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/site.css?v=phui13">
+<link rel="stylesheet" href="/assets/site.css?v=phui15">
 <style id="ph-v14">
-html[data-theme],body{background:#070707!important;color:#f5f5f2!important}body:before{display:none!important}
+html[data-theme=dark],html[data-theme=dark] body{background:#070707!important;color:#f5f5f2!important}body:before{display:none!important}
 #hd{position:sticky!important;top:0!important;margin:0!important;padding:0!important;max-width:none!important;background:rgba(7,7,7,.97)!important;border-bottom:1px solid #242424!important;backdrop-filter:blur(16px);z-index:60}
 #hd .top{max-width:1440px!important;margin:0 auto!important;min-height:72px!important;padding:10px 22px!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important}
 .logo{display:flex!important;align-items:center!important;gap:10px!important;margin-right:28px!important}.logo:after{content:"PoliticsHub.in";font:800 24px/1 "Bricolage Grotesque",sans-serif;letter-spacing:-.04em;color:#fff}.logo img{width:32px!important;height:32px!important;filter:none!important;mix-blend-mode:normal!important}
@@ -27,6 +27,24 @@ nav.main{background:transparent!important;border-radius:0!important;padding:0!im
 footer{background:#0b0b0b!important;border-top:1px solid #222!important;border-radius:0!important;margin:70px 0 0!important}
 @media(max-width:1050px){.ph14-hero{grid-template-columns:1fr}.ph14-lead{border-right:0;border-bottom:1px solid #2a2a2a}.ph14-side{padding-left:0;display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.ph14-side-head{grid-column:1/-1}.ph14-feed{grid-template-columns:1fr}.ph14-rail{position:static;border-left:0;border-top:1px solid #2a2a2a;padding:0}}
 @media(max-width:720px){#hd .top{min-height:60px!important;padding:8px 12px!important}.logo{margin-right:auto!important}.logo:after{font-size:20px}.logo img{width:28px!important;height:28px!important}#app{padding:0 14px!important}.ph14-home{padding-top:14px}.ph14-datebar{font-size:9px}.ph14-lead{display:block;min-height:0}.ph14-copy{padding:28px 0}.ph14-copy h1{font-size:clamp(38px,12vw,58px);margin:20px 0 16px}.ph14-media{height:300px}.ph14-side{display:block}.ph14-row{grid-template-columns:1fr 110px;gap:14px;min-height:130px;padding:20px 0}.ph14-row h3{font-size:25px}.ph14-row p{display:none}.ph14-thumb{height:100px}}
+
+html[data-theme=light],html[data-theme=light] body{background:#f4f1ec!important;color:#121212!important}
+html[data-theme=light] #hd{background:rgba(244,241,236,.97)!important;border-bottom-color:rgba(18,18,18,.12)!important}
+html[data-theme=light] .logo:after,html[data-theme=light] .acts .ib{color:#121212!important}
+html[data-theme=light] .logo img{filter:invert(1)!important}
+html[data-theme=light] nav.main a{color:#666!important}
+html[data-theme=light] nav.main a.on,html[data-theme=light] nav.main a:hover{background:#e7e2db!important;color:#111!important}
+html[data-theme=light] .tick{background:#f8f5f0!important;border-top-color:rgba(18,18,18,.1)!important}
+html[data-theme=light] .ph14-datebar,html[data-theme=light] .ph14-cats,html[data-theme=light] .ph14-hero,html[data-theme=light] .ph14-lead,html[data-theme=light] .ph14-side-head,html[data-theme=light] .ph14-section-head,html[data-theme=light] .ph14-brief,html[data-theme=light] .ph14-row,html[data-theme=light] .ph14-rail,html[data-theme=light] .ph14-rail-card{border-color:rgba(18,18,18,.12)!important}
+html[data-theme=light] .ph14-datebar,html[data-theme=light] .ph14-side-head span,html[data-theme=light] .ph14-section-head span,html[data-theme=light] .ph14-brief .meta,html[data-theme=light] .ph14-row .meta,html[data-theme=light] .ph14-status{color:#6b6965!important}
+html[data-theme=light] .ph14-datebar strong,html[data-theme=light] .ph14-copy h1,html[data-theme=light] .ph14-read,html[data-theme=light] .ph14-side-head h2,html[data-theme=light] .ph14-section-head h2,html[data-theme=light] .ph14-brief h3,html[data-theme=light] .ph14-row h3,html[data-theme=light] .ph14-rail-card h3{color:#111!important}
+html[data-theme=light] .ph14-copy p,html[data-theme=light] .ph14-brief p,html[data-theme=light] .ph14-row p,html[data-theme=light] .ph14-rail-card p{color:#66635f!important}
+html[data-theme=light] .ph14-cats a,html[data-theme=light] .ph14-desk a{border-color:#cbc5bd!important;color:#625f5a!important}
+html[data-theme=light] .ph14-cats a.on,html[data-theme=light] .ph14-cats a:hover{background:#111!important;color:#fff!important;border-color:#111!important}
+html[data-theme=light] .ph14-media,html[data-theme=light] .ph14-thumb{background:#e7e2db!important}
+html[data-theme=light] .ph14-media-fallback{background:linear-gradient(145deg,#eee9e2,#ddd7cf)!important;color:#aaa39a!important}
+html[data-theme=light] .ph14-thumb span{color:#aaa39a!important}
+html[data-theme=light] footer{background:#f4f1ec!important;border-top-color:rgba(18,18,18,.12)!important}
 </style>
 </head>
 <body>
@@ -48,7 +66,7 @@ footer{background:#0b0b0b!important;border-top:1px solid #222!important;border-r
 <div id="bd"></div><div id="cv" aria-hidden="true"></div>
 <aside id="dr" aria-label="Menu" aria-hidden="true"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px"><span class="lbl">Sections</span><button class="ib" id="dx" aria-label="Close menu"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div><div id="dl"></div><div class="ft">PoliticsHub.in newsroom</div></aside>
 <div id="sp" role="dialog" aria-modal="true" aria-label="Search" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" placeholder="Search stories" aria-label="Search stories" autocomplete="off"><button class="ib" type="button" id="sx" aria-label="Close search"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></form><p class="lbl" id="sc" style="margin:18px 0" aria-live="polite"></p><div id="sres"></div></div></div>
-<script src="/assets/site.js?v=phui13"></script>
+<script src="/assets/site.js?v=phui15"></script>
 <script id="ph-v14-script">
 (function(){
  function phTs(v){var raw=String(v||'').trim();if(!raw)return 0;raw=raw.split('·').join(' ').split('•').join(' ');var t=Date.parse(raw);return Number.isFinite(t)?t:0}
