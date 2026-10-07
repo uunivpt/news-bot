@@ -269,9 +269,11 @@ def _is_source_supplied_image(row):
  url=str(row.get("image_url") or "").strip()
  if not url.startswith(("http://","https://")):return False
  source=str(row.get("image_source") or "").strip().lower()
- # Fresh collector rows have no image_source yet. Once the Reel image helper
- # validates an original source image it tags it as article-source.
- return source in {"","article-source"}
+ license_key=str(row.get("image_license") or "").strip().lower().split(" ",1)[0]
+ # Never publish a feed/publisher image merely because it arrived with a story.
+ # The public website is source-image-only AND requires an explicit low-risk
+ # public-domain/CC0-style licence. Unknown-source images remain hidden.
+ return source=="article-source" and license_key in {"cc0","pdm"}
 
 
 def _public_image_path(row):
