@@ -15,6 +15,7 @@ function setConsent(mode){
  if(value!=='preferences')clearOptionalStorage();
  document.querySelector('#privacyConsent')?.remove();
  if(document.documentElement.dataset.theme==='dark'&&!preferencesAllowed())theme('light');
+ if(location.hash.startsWith('#/settings'))settings('prefs');
 }
 function showConsentBanner(force=false){
  if(!force&&consentMode())return;
@@ -226,7 +227,7 @@ function theme(t,save){t=t==='dark'?'dark':'light';document.documentElement.data
 theme(preferencesAllowed()&&ls.get('ph-theme')==='dark'?'dark':'light');
 document.addEventListener('click',e=>{const t=e.target.closest('[data-th]');if(t){theme(t.dataset.th,1);$$('[data-th]').forEach(b=>b.setAttribute('aria-pressed',b===t))}
  const s=e.target.closest('.sw');if(s){const on=s.getAttribute('aria-checked')!=='true';s.setAttribute('aria-checked',on);ls.set(s.dataset.k,on?'1':'0');if(s.dataset.k==='ph-ls'&&!on)ls.del('ph-theme')}
- if(e.target.closest('#rst')){['ph-theme','ph-cookie','ph-ls'].forEach(ls.del);theme('light');settings()}});
+ if(e.target.closest('#rst')){clearOptionalStorage();ls.del(CONSENT_KEY);theme('light');settings();showConsentBanner(true)}});
 const fine=matchMedia('(hover:hover) and (pointer:fine)').matches&&!matchMedia('(prefers-reduced-motion:reduce)').matches;
 addEventListener('pointerdown',e=>{const s=document.documentElement.style;s.setProperty('--cx',e.clientX+'px');s.setProperty('--cy',e.clientY+'px')});
 if(fine){const cr=document.createElement('div');cr.id='cr';cr.innerHTML='<span>Read</span>';document.body.append(cr);let mx=0,my=0,cx=0,cy=0,on=0;
