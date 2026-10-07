@@ -11,6 +11,10 @@ on:
   # does not keep the newsroom job waiting.
   schedule:
     - cron: "2-59/5 * * * *"
+  workflow_run:
+    workflows: ["News Collector"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 # Code pushes must never compete with the production newsroom scheduler.
@@ -21,6 +25,7 @@ concurrency:
 
 jobs:
   process:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -54,6 +59,7 @@ jobs:
       - name: Validate source configuration
         run: python -m json.tool config/sources.json >/dev/null
       - name: Collect fresh sources
+        if: github.event_name != 'workflow_run'
         env:
           PYTHONPATH: .
         run: python run.py --once --config config/sources.json

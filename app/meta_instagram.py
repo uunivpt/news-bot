@@ -1,6 +1,7 @@
 """Instagram Reels publishing helper with robust account resolution and diagnostics."""
 from __future__ import annotations
 import os, time
+from functools import lru_cache
 from urllib.parse import urlsplit
 import requests
 
@@ -26,8 +27,14 @@ def _raise_meta(r,action):
         raise InstagramRateLimitError(f"Instagram {action} rate limit reached; retry later.")
     raise RuntimeError(f"Instagram {action} failed ({r.status_code}): {text}")
 
+@lru_cache(maxsize=8)
 def _resolve_instagram_user(base,token,configured_account):
     # The ID must belong to the Instagram user represented by this access token.
+    if urlsplit(base).hostname == "graph.instagram.com":
+        resolved = _resolve_from_token(base,token)
+        if configured_account and configured_account != resolved:
+            print("Configured Instagram ID is stale; using the token-resolved Instagram account.")
+        return resolved
     if configured_account:
         print(f"Using configured Instagram account ID: {configured_account}")
         return configured_account

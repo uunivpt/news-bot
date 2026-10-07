@@ -22,7 +22,11 @@ Story processing is deterministic-only: source text is cleaned, selected, and as
 Generate admin hashes with `python scripts/hash_password.py`.
 
 ## Automation
-`.github/workflows/process.yml` runs every 5 minutes. It installs ffmpeg, runs the deterministic newsroom tests, repairs eligible legacy stories, processes pending stories, and publishes to Instagram only when the required Meta and public-media configuration exists.
+`collector.yml` collects sources; a successful collection triggers `news-processing.yml`, which publishes website stories and then triggers `instagram-publisher.yml`. Existing scheduled triggers remain as recovery paths. All three use concurrency groups to prevent overlapping copies of the same worker. GitHub schedule times are best-effort, not a five-minute SLA; an external dispatch scheduler can trigger the collector for a stricter cadence.
+
+Both collection paths receive news API keys. Source failures appear in the Actions summary and warnings; complete source failure fails the run. HTTP 403 responses from government sites require an approved accessible feed or permission from the provider; they are not bypassed. Instagram Login resolves its account from the token and caches it per worker process; Facebook Login retains the explicit account setting.
+
+Image acquisition tries up to five relevant licensed candidates before falling back to a text-only Reel. Article text retains the lead fact even when the headline repeats it; summaries still avoid headline repetition.
 
 ## Local test
 `pip install -r requirements.txt`

@@ -5,6 +5,10 @@ on:
     # Stagger away from the top of the hour because GitHub can delay/drop
     # scheduled jobs during high scheduler load.
     - cron: "4-59/5 * * * *"
+  workflow_run:
+    workflows: ["News Processing (Production)"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
   push:
     branches:
@@ -18,6 +22,7 @@ concurrency:
 
 jobs:
   publish:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:

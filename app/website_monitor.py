@@ -75,10 +75,11 @@ def collect_website(source):
  allowed_hosts={str(h).lower().strip() for h in source.get("allowed_hosts",[]) if h}
  if not allowed_hosts:allowed_hosts={(urlparse(seeds[0]).hostname or "").lower()}
  prefixes=[str(p) for p in source.get("article_path_prefixes",[]) if p]; max_links=min(max(int(source.get("max_links",40)),1),200); timeout=min(max(int(source.get("timeout_seconds",12)),3),30)
- candidates=[]; seen=set()
+ candidates=[]; seen=set(); fetched_seeds=0
  for seed in seeds:
   fetched=_fetch(seed,timeout)
   if not fetched:continue
+  fetched_seeds+=1
   final_url,soup=fetched
   for anchor in soup.find_all("a",href=True):
    url=_absolute(final_url,str(anchor.get("href")))
@@ -88,6 +89,7 @@ def collect_website(source):
    seen.add(url); candidates.append(url)
    if len(candidates)>=max_links:break
   if len(candidates)>=max_links:break
+ if not fetched_seeds:raise RuntimeError("All configured website sections were unavailable")
  items=[]
  for url in candidates:
   fetched=_fetch(url,timeout)

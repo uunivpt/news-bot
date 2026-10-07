@@ -23,7 +23,7 @@ def _get_json(url: str, *, params: dict[str, Any], headers: dict[str, str] | Non
 def collect_newsapi(source: dict[str, Any]) -> list[NewsItem]:
     key = os.getenv("NEWSAPI_KEY", "").strip()
     if not key:
-        return []
+        raise RuntimeError("Required news API key is missing")
 
     params: dict[str, Any] = {
         "country": source.get("country", "in"),
@@ -72,7 +72,7 @@ def collect_newsapi(source: dict[str, Any]) -> list[NewsItem]:
 def collect_newsdata(source: dict[str, Any]) -> list[NewsItem]:
     key = os.getenv("NEWSDATA_API_KEY", "").strip()
     if not key:
-        return []
+        raise RuntimeError("Required news API key is missing")
 
     params: dict[str, Any] = {
         "apikey": key,
@@ -82,6 +82,9 @@ def collect_newsdata(source: dict[str, Any]) -> list[NewsItem]:
     for field in ("q", "qInTitle", "category"):
         if source.get(field):
             params[field] = source[field]
+    # Geographic routing labels are not NewsData topic categories.
+    if params.get("category") in {"india", "general"}:
+        params.pop("category")
     if source.get("size"):
         params["size"] = min(int(source["size"]), 50)
 

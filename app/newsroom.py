@@ -436,13 +436,13 @@ def _is_duplicate_of_title(sentence,title):
     reverse=len(sentence_words & title_words)/max(1,len(sentence_words))
     return overlap>=0.72 and reverse>=0.55
 
-def _unique_news_sentences(title,source_text,limit):
+def _unique_news_sentences(title,source_text,limit,exclude_title=True):
     chosen=select_sentences(source_text,limit,title=title)
     result=[];seen=set()
     for item in chosen:
         key=re.sub(r"[^a-z0-9]+"," ",item.lower()).strip()
         if not key or key in seen:continue
-        if _is_duplicate_of_title(item,title):continue
+        if exclude_title and _is_duplicate_of_title(item,title):continue
         seen.add(key);result.append(item)
         if len(result)>=limit:break
     return result
@@ -455,7 +455,7 @@ def make_summary(title,source_text):
     return " ".join(chosen)
 
 def make_article(title,source_text):
-    chosen=_unique_news_sentences(title,source_text,40)
+    chosen=_unique_news_sentences(title,source_text,40,exclude_title=False)
     if not chosen:return ""
     paragraphs=[]
     if chosen[:3]:

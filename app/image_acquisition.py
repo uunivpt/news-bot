@@ -224,9 +224,7 @@ def acquire_story_image(
             print(f"Source image unusable; trying licensed image search: {exc}")
 
     queries = build_image_queries(headline, summary, category)
-    best = None
-    best_score = -1
-    used_query = ""
+    candidates = {}
 
     for query in queries:
         try:
@@ -244,13 +242,20 @@ def acquire_story_image(
             if not landing_url.startswith(("http://", "https://")):
                 continue
             score = _score_candidate(item, headline, summary, query)
-            if score > best_score:
-                best = item
-                best_score = score
-                used_query = query
+            if score >= 25 and (direct_url not in candidates or score > candidates[direct_url][0]):
+                candidates[direct_url] = (score, item, query)
 
     # Do not use a weak, generic open-licensed image merely to fill the panel.
-    if not best or best_score < 25:
+    best = None
+    output = Path(output_dir) / f"{row.get('id') or 'story'}_news.jpg"
+    for best_score, candidate, used_query in sorted(candidates.values(), key=lambda entry: entry[0], reverse=True)[:5]:
+        try:
+            width, height = _download_and_validate(str(candidate["url"]), output)
+            best = candidate
+            break
+        except Exception as exc:
+            print(f"Image candidate download failed; trying next candidate: {exc}")
+    if best is None:
         # A weak image is worse than a clean Reel without one. Return metadata
         # instead of inventing a match or silently using an unlicensed result.
         return {
@@ -263,14 +268,6 @@ def acquire_story_image(
             "image_selection_score": 0,
             "image_local_path": "",
         }
-
-    item_id = str(row.get("id") or "story")
-    output = Path(output_dir) / f"{item_id}_news.jpg"
-    try:
-        width, height = _download_and_validate(str(best["url"]), output)
-    except Exception as exc:
-        print(f"Selected image download failed: {exc}")
-        raise
 
     license_name = str(best.get("license") or "").upper()
     version = str(best.get("license_version") or "").strip()

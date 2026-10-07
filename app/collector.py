@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 from pathlib import Path
@@ -61,6 +62,8 @@ def load_sources(path: str = "config/sources.json") -> dict[str, Any]:
 def collect_once(config: dict[str, Any], db: NewsDatabase) -> tuple[int, int]:
     ensure_schema(db)
     added = skipped = 0
+    healthy = 0
+    failures = []
     for source_type, sources in config.items():
         collector = COLLECTORS.get(source_type)
         if collector is None:
@@ -75,6 +78,7 @@ def collect_once(config: dict[str, Any], db: NewsDatabase) -> tuple[int, int]:
                     continue
                 with agent_run(db, "trend", "collect_source", metadata={"source": source.get("name","unknown"), "type": source_type}):
                     items = collector(source)
+                    healthy += 1
                     safe_items=[]
                     rejected_urls=0
                     for item in items:
@@ -97,10 +101,21 @@ def collect_once(config: dict[str, Any], db: NewsDatabase) -> tuple[int, int]:
                     source_skipped,
                 )
             except Exception:
-                logger.exception("Collector failed for %s", source.get("name", "unknown"))
+                name = source.get("name", "unknown")
+                failures.append(name)
+                logger.exception("Collector failed for %s", name)
+                if os.getenv("GITHUB_ACTIONS"):
+                    print("::warning::A news source failed; see the collection summary.")
     try:
         with agent_run(db, "research", "cluster_stories"):
             cluster_stories(db, 250)
     except Exception:
         logger.exception("Story clustering failed")
+    if os.getenv("GITHUB_STEP_SUMMARY"):
+        with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as report:
+            report.write(f"\n### Source collection\nSuccessful checks: {healthy}; failed checks: {len(failures)}; new items: {added}.\n")
+            for name in failures:
+                report.write(f"- Failed source: {name}\n")
+    if failures and not healthy:
+        raise RuntimeError("All attempted news sources failed")
     return added, skipped
