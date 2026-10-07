@@ -62,7 +62,7 @@ def collect_newsapi(source: dict[str, Any]) -> list[NewsItem]:
             published_at=published,
             summary=str(article.get("description") or article.get("content") or "").strip(),
             external_id=external_id,
-            category=source.get("category", "india"),
+            category=source.get("route_category") or ("india" if str(source.get("country") or "").lower() == "in" else source.get("category", "general")),
             image_url=str(article.get("urlToImage") or "").strip() or None,
             public_source=True,
         ))
