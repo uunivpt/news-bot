@@ -168,12 +168,18 @@ class NewsDatabase:
  def instagram_last_published_at(self):
   row=self.conn.execute("SELECT instagram_published_at FROM news_items WHERE instagram_status='published' AND instagram_published_at IS NOT NULL ORDER BY instagram_published_at DESC LIMIT 1").fetchone(); return (row["instagram_published_at"] if self._postgres else row[0]) if row else None
  def close(self):self.conn.close()
- def subscribe_newsletter(self,email,source="website"):
+ def subscribe_newsletter(self,email,source="website",confirmed=True):
   email=str(email or "").strip().lower()
   now=NewsItem.now_iso()
   ph="%s" if self._postgres else "?"
-  if self._postgres:self.conn.execute(f"INSERT INTO newsletter_subscribers (email,subscribed_at,source,confirmed) VALUES ({ph},{ph},{ph},0) ON CONFLICT (email) DO NOTHING",(email,now,source))
-  else:self.conn.execute(f"INSERT OR IGNORE INTO newsletter_subscribers (email,subscribed_at,source,confirmed) VALUES ({ph},{ph},{ph},0)",(email,now,source));self.conn.commit()
+  value=1 if confirmed else 0
+  if self._postgres:self.conn.execute(f"INSERT INTO newsletter_subscribers (email,subscribed_at,source,confirmed) VALUES ({ph},{ph},{ph},{ph}) ON CONFLICT (email) DO UPDATE SET source=EXCLUDED.source,confirmed=EXCLUDED.confirmed",(email,now,source,value))
+  else:self.conn.execute(f"INSERT INTO newsletter_subscribers (email,subscribed_at,source,confirmed) VALUES ({ph},{ph},{ph},{ph}) ON CONFLICT(email) DO UPDATE SET source=excluded.source,confirmed=excluded.confirmed",(email,now,source,value));self.conn.commit()
+ def unsubscribe_newsletter(self,email):
+  email=str(email or "").strip().lower()
+  ph="%s" if self._postgres else "?"
+  self.conn.execute(f"DELETE FROM newsletter_subscribers WHERE email = {ph}",(email,))
+  if not self._postgres:self.conn.commit()
  def newsletter_count(self):
   row=self.conn.execute("SELECT COUNT(*) AS count FROM newsletter_subscribers").fetchone()
   return int(row["count"] if self._postgres else row[0])
