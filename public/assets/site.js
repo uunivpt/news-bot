@@ -5,6 +5,26 @@ const ENDPOINTS={api:'/api/news?category=all&limit=120',item:'/api/news/',search
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ls={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}},del:k=>{try{localStorage.removeItem(k)}catch(e){}}};
+const CONSENT_KEY='ph-consent-v1';
+function consentMode(){return ls.get(CONSENT_KEY)||''}
+function preferencesAllowed(){return consentMode()==='preferences'}
+function clearOptionalStorage(){[CACHE_KEY,...LEGACY_CACHE_KEYS,'ph-theme','ph-cookie','ph-ls'].forEach(ls.del)}
+function setConsent(mode){
+ const value=mode==='preferences'?'preferences':'essential';
+ ls.set(CONSENT_KEY,value);
+ if(value!=='preferences')clearOptionalStorage();
+ document.querySelector('#privacyConsent')?.remove();
+ if(document.documentElement.dataset.theme==='dark'&&!preferencesAllowed())theme('light');
+}
+function showConsentBanner(force=false){
+ if(!force&&consentMode())return;
+ document.querySelector('#privacyConsent')?.remove();
+ const box=document.createElement('section');box.id='privacyConsent';box.className='privacy-consent';box.setAttribute('role','dialog');box.setAttribute('aria-label','Privacy choices');
+ box.innerHTML='<div><strong>Privacy choices</strong><p>PoliticsHub.in uses essential storage for your privacy choice. Optional browser storage can remember theme and cache recent stories. Advertising tags are currently disabled.</p><a href="/cookies.html">Cookie Policy</a> · <a href="/privacy.html">Privacy Policy</a></div><div class="privacy-actions"><button type="button" class="btn secondary" data-consent-choice="essential">Essential only</button><button type="button" class="btn" data-consent-choice="preferences">Allow preferences</button></div>';
+ document.body.append(box);
+}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-consent-choice]');if(b)setConsent(b.dataset.consentChoice);if(e.target.closest('[data-open-consent]')){e.preventDefault();showConsentBanner(true)}});
+
 const S={items:[],mode:'loading',api:'unknown',snap:'unknown',tried:0};
 const dt=d=>{const raw=String(d||'').trim().replace(/\s*[·•]\s*/g,' ').replace(/\s+/g,' ');const x=new Date(raw);return isNaN(x)?null:x};
 const ts=d=>dt(d)?.getTime()||0;
@@ -16,8 +36,9 @@ const pick=j=>Array.isArray(j)?j:(j.articles||j.news||j.items||j.data||j.results
 async function get(u){const r=await fetch(u,{cache:'no-store',headers:{'Accept':'application/json','Cache-Control':'no-cache'}});if(!r.ok)throw 0;const rows=pick(await r.json());return rows.map((x,i)=>{const img=x.image_url||x.image||x.imageUrl||x.urlToImage||x.thumbnail||x.img||'';const source=x.source_name||(x.source&&x.source.name)||x.source||x.publisher||'PoliticsHub';const date=x.published_at_iso||x.published_at_site||x.publishedAt||x.pubDate||x.date||x.published_at||x.created_at||'';const body=x.article||x.bot_article||x.content||x.body||x.text||'';const summary=x.summary||x.bot_summary||x.description||x.excerpt||'';return {...x,id:String(x.id??x.slug??x._id??'n'+i),image:typeof img==='string'?img:'',source:String(source),date,body:String(body),summary:String(summary)};})}
 const CACHE_KEY='ph-news-cache';
 const LEGACY_CACHE_KEYS=['ph-news-cache-v6','ph-news-cache-v5','ph-news-cache-v4'];
-function cacheSave(items){try{localStorage.setItem(CACHE_KEY,JSON.stringify({ts:Date.now(),items}));}catch(e){}}
+function cacheSave(items){if(!preferencesAllowed())return;try{localStorage.setItem(CACHE_KEY,JSON.stringify({ts:Date.now(),items}));}catch(e){}}
 function cacheLoad(){
+ if(!preferencesAllowed())return null;
  try{
   const keys=[CACHE_KEY,...LEGACY_CACHE_KEYS];
   for(const key of keys){
@@ -144,7 +165,7 @@ function home(c){setActive(c);document.title=(c==='all'?'':CATS.find(x=>x[0]===c
  <div class="tile sc" style="--d:3"><span class="lbl">Jump to a desk</span><div class="pills">${pl}</div></div>
  <div class="tile lt" style="--d:4"><span class="lbl">Just in</span>${lt}</div></section>`;
  const bs=CATS.slice(1).map(([k,l])=>`<a data-k="${k}" href="${hl(k)}">${l}</a><i>✦</i>`).join(''),band=`<div class="band" aria-label="Browse sections"><div class="bt">${bs}<span class="bt-dup" aria-hidden="true" data-nosnippet>${bs+bs}</span></div></div>`;
- $('#app').innerHTML=hero+band+tabs+`<div class="sh"><h2>Latest stories</h2><span class="lbl">${list.length} stories</span></div><div class="grid">${rest.map(card).join('')||'<p class="msg" style="grid-column:1/-1">That is the only story in this section for now.</p>'}</div><section class="newsletter-card"><span class="lbl red">PoliticsHub Brief</span><h2>Important stories. No noise.</h2><p>Get a concise newsroom update in your inbox.</p><form id="homeNl"><input type="email" required placeholder="you@example.com" aria-label="Email address"><button class="btn">Subscribe</button></form><small id="homeNlMsg"></small></section>`;fx();enhanceHome(c);bindNewsletter()}
+ $('#app').innerHTML=hero+band+tabs+`<div class="sh"><h2>Latest stories</h2><span class="lbl">${list.length} stories</span></div><div class="grid">${rest.map(card).join('')||'<p class="msg" style="grid-column:1/-1">That is the only story in this section for now.</p>'}</div><section class="newsletter-card"><span class="lbl red">PoliticsHub Brief</span><h2>Important stories. No noise.</h2><p>Get a concise newsroom update in your inbox.</p><form id="homeNl"><input type="email" required placeholder="you@example.com" aria-label="Email address"><label class="consent-check"><input name="privacy" type="checkbox" required> I agree to receive the newsletter and to the <a href="/privacy.html">Privacy Policy</a>.</label><label class="consent-check"><input name="adult" type="checkbox" required> I confirm I am 18 or older.</label><button class="btn">Subscribe</button></form><small id="homeNlMsg"></small></section>`;fx();enhanceHome(c);bindNewsletter()}
 async function article(id){setActive('');
  let it=S.items.find(i=>i.id===id);
  if(!it||(!it.body&&S.mode==='api')){if(!it)$('#app').innerHTML='<div class="art"><div class="sk"></div></div>';try{const r=await fetch(ENDPOINTS.item+encodeURIComponent(id),{cache:'no-store',headers:{'Cache-Control':'no-cache'}});if(r.ok){const j=await r.json();const raw=j.article||j.data||j;it=norm({...raw,image:raw.image_url||raw.image,source:raw.source_name||raw.source,date:raw.published_at||raw.published_at_site,body:raw.article||raw.bot_article||raw.content,summary:raw.summary||raw.bot_summary});it.id=id}}catch(e){}}
@@ -201,8 +222,8 @@ $('#sres').onclick=e=>{if(e.target.closest('a'))closeS()};
 addEventListener('keydown',e=>{if(e.key==='Escape')closeAll();if(e.key==='/'&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)){e.preventDefault();openS()}});
 $('#pz').onclick=e=>{const p=$('#tk').classList.toggle('pz');e.currentTarget.setAttribute('aria-pressed',p);e.currentTarget.setAttribute('aria-label',p?'Play ticker':'Pause ticker')};
 /* theme + prefs */
-function theme(t,save){t=t==='dark'?'dark':'light';document.documentElement.dataset.theme=t;if(save&&ls.get('ph-ls')!=='0')ls.set('ph-theme',t)}
-theme(ls.get('ph-theme')==='dark'?'dark':'light');
+function theme(t,save){t=t==='dark'?'dark':'light';document.documentElement.dataset.theme=t;if(save&&preferencesAllowed()&&ls.get('ph-ls')!=='0')ls.set('ph-theme',t)}
+theme(preferencesAllowed()&&ls.get('ph-theme')==='dark'?'dark':'light');
 document.addEventListener('click',e=>{const t=e.target.closest('[data-th]');if(t){theme(t.dataset.th,1);$$('[data-th]').forEach(b=>b.setAttribute('aria-pressed',b===t))}
  const s=e.target.closest('.sw');if(s){const on=s.getAttribute('aria-checked')!=='true';s.setAttribute('aria-checked',on);ls.set(s.dataset.k,on?'1':'0');if(s.dataset.k==='ph-ls'&&!on)ls.del('ph-theme')}
  if(e.target.closest('#rst')){['ph-theme','ph-cookie','ph-ls'].forEach(ls.del);theme('light');settings()}});
@@ -252,6 +273,7 @@ setInterval(refreshLatest,90000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshLatest(true)});
 addEventListener('focus',()=>refreshLatest());
 if('serviceWorker' in navigator) addEventListener('load',()=>navigator.serviceWorker.register('/service-worker.js').catch(()=>{}));
+addEventListener('load',()=>showConsentBanner(false));
 
 async function enhanceHome(category){
  const target=$('#app .grid'); if(!target)return;
@@ -288,7 +310,7 @@ const __doS=doS; doS=async function(){
 };
 const __article=article; article=async function(id){await __article(id);trackView(id)};
 
-function bindNewsletter(){const f=$('#homeNl');if(!f)return;f.onsubmit=async e=>{e.preventDefault();const m=$('#homeNlMsg');try{const r=await fetch('/api/newsletter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:f.querySelector('input').value})});const j=await r.json();m.textContent=j.message||j.error||'Done';if(r.ok)f.reset()}catch(x){m.textContent='Could not subscribe right now.'}}}
+function bindNewsletter(){const f=$('#homeNl');if(!f)return;f.onsubmit=async e=>{e.preventDefault();const m=$('#homeNlMsg'),email=f.querySelector('input[type="email"]'),privacy=f.querySelector('[name="privacy"]'),adult=f.querySelector('[name="adult"]');try{const r=await fetch('/api/newsletter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email?.value||'',consent:!!privacy?.checked,adult:!!adult?.checked})});const j=await r.json();m.textContent=j.message||j.error||'Done';if(r.ok)f.reset()}catch(x){m.textContent='Could not subscribe right now.'}}}
 
 function shareStory(title){const data={title:title||document.title,text:title||document.title,url:location.href};if(navigator.share){navigator.share(data).catch(()=>{});return}const old=document.querySelector('.share-pop');old?.remove();const p=document.createElement('div');p.className='share-pop';p.setAttribute('role','dialog');p.setAttribute('aria-label','Share this story');const u=encodeURIComponent(location.href),t=encodeURIComponent(title||document.title);p.innerHTML='<button type="button" data-share-close aria-label="Close">×</button><strong>Share this story</strong><div class="share-grid"><a href="https://wa.me/?text='+encodeURIComponent((title||document.title)+' '+location.href)+'" target="_blank" rel="noopener noreferrer">WhatsApp</a><a href="https://t.me/share/url?url='+u+'&text='+t+'" target="_blank" rel="noopener noreferrer">Telegram</a><a href="https://www.facebook.com/sharer/sharer.php?u='+u+'" target="_blank" rel="noopener noreferrer">Facebook</a><a href="https://twitter.com/intent/tweet?text='+t+'&url='+u+'" target="_blank" rel="noopener noreferrer">X</a></div>';document.body.append(p);p.querySelector('[data-share-close]').onclick=()=>p.remove();p.addEventListener('click',e=>{if(e.target===p)p.remove()})}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-share-title]');if(b)shareStory(b.dataset.shareTitle)});
