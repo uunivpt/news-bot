@@ -7,7 +7,7 @@ from pathlib import Path
 from app.collector import _safe_http_url
 from app.database import NewsDatabase
 from app.newsroom import process_news, quality_headline, validate_news_copy
-from scripts.auto_publish import _direct_fallback_content, _instagram_candidates, _india_reel_due
+from scripts.auto_publish import _direct_fallback_content, _instagram_candidates, _india_reel_due, _website_candidates
 
 
 class PipelineHardeningTests(unittest.TestCase):
@@ -70,6 +70,28 @@ class PipelineHardeningTests(unittest.TestCase):
                 db.close()
 
 
+    def test_website_candidates_prioritize_fresh_india_without_old_backlog(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = NewsDatabase(path=str(Path(tmp) / "news.db"))
+            try:
+                now = datetime.now(timezone.utc).isoformat()
+                rows = [(1, "india"), (2, "world"), (3, "politics"), (100, "world"), (101, "india"), (102, "technology"), (103, "india")]
+                for item_id, category in rows:
+                    db.conn.execute(
+                        "INSERT INTO news_items "
+                        "(id,source_name,source_type,title,url,normalized_url,url_hash,title_hash,collected_at,status,category,instagram_status,fact_check_status) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (item_id, "Test", "rss", f"Story {item_id}", f"https://example.com/{item_id}", f"https://example.com/{item_id}", f"url-{item_id}", f"title-{item_id}", now, "pending", category, "pending", "pending"),
+                    )
+                db.conn.commit()
+                selected = _website_candidates(db, 4)
+                ids = [int(row["id"]) for row in selected]
+                self.assertEqual(ids[0], 103)
+                self.assertIn(101, ids)
+                self.assertIn(102, ids)
+                self.assertNotIn(1, ids)
+            finally:
+                db.close()
     def test_pending_instagram_retry_backoff_is_honored(self):
         with tempfile.TemporaryDirectory() as tmp:
             db = NewsDatabase(path=str(Path(tmp) / "news.db"))
