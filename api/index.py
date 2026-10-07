@@ -255,11 +255,9 @@ def _publicize(row):
   article_text=_strip_promo_nav(source_text)
   article_text=re.sub(r"(?:\n|\s)*Why it matters:\s*$","",article_text,flags=re.I).strip()
   r["article"]=article_text
-  # Never make public browsers depend on third-party hotlinking. Every public
-  # story gets a same-origin image URL; the image endpoint serves the source
-  # image when possible and falls back to a branded PoliticsHub image.
-  if r.get("id"):
-   r["image_url"]="/api/image/"+str(int(r["id"]))
+  # Website images are source-only. Images found later for Instagram/Reels
+  # (Wikimedia/Openverse/etc.) must never appear on the website.
+  r["image_url"]=_public_image_path(r)
   r.pop("editorial_context",None)
   if "editorial_value" in r: r["editorial_value"]=bool(r.get("editorial_value"))
   if "source_count" in r: r["source_count"]=int(r.get("source_count") or 0)
@@ -268,7 +266,18 @@ def _publicize(row):
  return r
 
 
+def _is_source_supplied_image(row):
+ if not isinstance(row,dict):return False
+ url=str(row.get("image_url") or "").strip()
+ if not url.startswith(("http://","https://")):return False
+ source=str(row.get("image_source") or "").strip().lower()
+ # Fresh collector rows have no image_source yet. Once the Reel image helper
+ # validates an original source image it tags it as article-source.
+ return source in {"","article-source"}
+
+
 def _public_image_path(row):
+ if not _is_source_supplied_image(row):return ""
  item_id=row.get("id") if isinstance(row,dict) else None
  try:return "/api/image/"+str(int(item_id))
  except (TypeError,ValueError):return ""
@@ -303,11 +312,11 @@ def public_story_image(item_id):
   row=dict(row) if row else None
  finally:
   database.close()
- if not row:
-  return redirect("/api/og/"+str(item_id),code=302)
+ if not row or not _is_source_supplied_image(row):
+  return Response(status=404)
  source_url=str(row.get("image_url") or "").strip()
  if not _safe_public_image_origin(source_url):
-  return redirect("/api/og/"+str(item_id),code=302)
+  return Response(status=404)
  try:
   import requests
   from urllib.parse import urlsplit
@@ -336,8 +345,8 @@ def public_story_image(item_id):
   response.headers["X-Content-Type-Options"]="nosniff"
   return response
  except Exception as exc:
-  print(f"Public image proxy fallback for item {item_id}: {exc}")
-  return redirect("/api/og/"+str(item_id),code=302)
+  print(f"Public source image unavailable for item {item_id}: {exc}")
+  return Response(status=404)
 
 
 SITE_ORIGIN="https://politicshub.in"
@@ -405,7 +414,7 @@ def _article_html(row):
 <main class="wrap"><article class="art" data-k="{html.escape(category.lower())}">
 <div class="ah"><span class="chip">{html.escape(category)}</span><h1>{html.escape(title)}</h1><p class="dek">{html.escape(summary)}</p>
 <div class="by"><span>By <a href="/author/politicshub-news-desk">{EDITORIAL_DESK}</a></span><span>{html.escape(str(published or ""))}</span><span>{html.escape(source)}</span></div></div>
-{"<div class='ahero'><img src='"+html.escape(str(row.get("image_url") or image))+"' alt='"+html.escape(title)+"' loading='eager'></div>" if row.get("image_url") else ""}
+{"<div class='ahero'><img src='"+html.escape(str(row.get("image_url") or image))+"' alt='"+html.escape(title)+"' loading='eager' onerror='this.parentElement.remove()'></div>" if row.get("image_url") else ""}
 <div class="body">{paras}</div>
 <div class="src"><strong>Source transparency:</strong> This is a source-linked brief prepared from the originating report. When multiple independent sources are available, PoliticsHub compares their reported details; otherwise no independent reporting claim is made.</div>
 <div class="src">Source: {html.escape(source)}. {"<a href='"+html.escape(str(row.get("url")))+"' rel='nofollow noopener' target='_blank'>Read the original report</a>" if row.get("url") else ""}</div>
