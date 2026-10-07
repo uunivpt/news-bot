@@ -255,13 +255,89 @@ def _publicize(row):
   article_text=_strip_promo_nav(source_text)
   article_text=re.sub(r"(?:\n|\s)*Why it matters:\s*$","",article_text,flags=re.I).strip()
   r["article"]=article_text
-  # Keep verified source images public; the frontend already handles missing images safely.
+  # Never make public browsers depend on third-party hotlinking. Every public
+  # story gets a same-origin image URL; the image endpoint serves the source
+  # image when possible and falls back to a branded PoliticsHub image.
+  if r.get("id"):
+   r["image_url"]="/api/image/"+str(int(r["id"]))
   r.pop("editorial_context",None)
   if "editorial_value" in r: r["editorial_value"]=bool(r.get("editorial_value"))
   if "source_count" in r: r["source_count"]=int(r.get("source_count") or 0)
  score=story_score(r.get("title",""),r.get("summary",""),r.get("category") or "general",r.get("source_name") or "")
  r["news_score"]=score; r["is_breaking"]=is_breaking(r.get("title",""),r.get("summary",""),score)
  return r
+
+
+def _public_image_path(row):
+ item_id=row.get("id") if isinstance(row,dict) else None
+ try:return "/api/image/"+str(int(item_id))
+ except (TypeError,ValueError):return ""
+
+
+def _safe_public_image_origin(url):
+ from urllib.parse import urlsplit
+ import ipaddress
+ try:
+  parts=urlsplit(str(url or "").strip())
+ except ValueError:
+  return False
+ if parts.scheme not in {"http","https"} or not parts.hostname or parts.username or parts.password:
+  return False
+ host=parts.hostname.lower().rstrip(".")
+ if host in {"localhost","localhost.localdomain"} or host.endswith((".local",".internal",".localhost")):
+  return False
+ try:
+  ip=ipaddress.ip_address(host)
+  if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+   return False
+ except ValueError:
+  pass
+ return True
+
+
+@app.get("/api/image/<int:item_id>")
+def public_story_image(item_id):
+ database=db()
+ try:
+  row=database.get_by_id(int(item_id),"published")
+  row=dict(row) if row else None
+ finally:
+  database.close()
+ if not row:
+  return redirect("/api/og/"+str(item_id),code=302)
+ source_url=str(row.get("image_url") or "").strip()
+ if not _safe_public_image_origin(source_url):
+  return redirect("/api/og/"+str(item_id),code=302)
+ try:
+  import requests
+  from urllib.parse import urlsplit
+  parts=urlsplit(source_url)
+  headers={
+   "User-Agent":"Mozilla/5.0 (compatible; PoliticsHubImageProxy/1.0; +https://politicshub.in)",
+   "Accept":"image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+   "Referer":parts.scheme+"://"+parts.netloc+"/",
+  }
+  with requests.get(source_url,headers=headers,stream=True,allow_redirects=True,timeout=12) as upstream:
+   upstream.raise_for_status()
+   content_type=(upstream.headers.get("content-type") or "").split(";",1)[0].strip().lower()
+   if not content_type.startswith("image/"):
+    raise RuntimeError("upstream did not return an image")
+   raw_length=upstream.headers.get("content-length")
+   if raw_length and int(raw_length)>8*1024*1024:
+    raise RuntimeError("upstream image is too large")
+   payload=bytearray()
+   for chunk in upstream.iter_content(64*1024):
+    if not chunk:continue
+    payload.extend(chunk)
+    if len(payload)>8*1024*1024:
+     raise RuntimeError("upstream image exceeded size limit")
+  response=Response(bytes(payload),mimetype=content_type)
+  response.headers["Cache-Control"]="public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800"
+  response.headers["X-Content-Type-Options"]="nosniff"
+  return response
+ except Exception as exc:
+  print(f"Public image proxy fallback for item {item_id}: {exc}")
+  return redirect("/api/og/"+str(item_id),code=302)
 
 
 SITE_ORIGIN="https://politicshub.in"
