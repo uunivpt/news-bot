@@ -3,10 +3,10 @@ from __future__ import annotations
 """Deterministic, license-aware news image acquisition.
 
 Priority:
-1. Keep an already-collected source image (existing behaviour) when present.
-2. If there is no source image, search Openverse for openly licensed candidates.
+1. Reuse an existing image only when an explicit compatible license is already recorded.
+2. Otherwise search Openverse for public-domain/CC0 candidates.
 3. Score candidates against headline/summary entities and event terms.
-4. Reject licenses that do not allow commercial reuse/adaptation.
+4. Reject unknown, attribution-dependent, non-commercial or no-derivatives licenses.
 5. Download the selected image and keep full provenance metadata.
 
 This module deliberately does not treat arbitrary Google Images results as
@@ -22,7 +22,7 @@ import requests
 from PIL import Image
 
 OPENVERSE_URL = "https://api.openverse.org/v1/images/"
-ALLOWED_LICENSES = {"cc0", "pdm", "by", "by-sa"}
+ALLOWED_LICENSES = {"cc0", "pdm"}
 MIN_WIDTH = 720
 MIN_HEIGHT = 720
 MIN_LANDSCAPE = (1280, 720)
@@ -200,19 +200,21 @@ def acquire_story_image(
     summary = str(row.get("bot_summary") or row.get("summary") or "").strip()
     category = str(row.get("category") or "general").strip()
 
-    # Existing source image remains the first-choice path. We do not claim a
-    # license that the source page did not provide.
+    # Never reuse a publisher image merely because it appeared in a feed.
+    # Reuse is allowed only when compatible license metadata was explicitly
+    # recorded earlier. Unknown-license source images are treated as unusable.
     existing = str(row.get("image_url") or "").strip()
-    if existing.startswith(("http://", "https://")):
+    existing_license = str(row.get("image_license") or "").lower().strip().split(" ", 1)[0]
+    if existing.startswith(("http://", "https://")) and existing_license in ALLOWED_LICENSES:
         output = Path(output_dir) / f"{row.get('id') or 'story'}_source.jpg"
         try:
             width, height = _download_and_validate(existing, output)
             return {
                 "image_url": existing,
-                "image_source": "article-source",
-                "image_license": "unknown-source-license",
-                "image_credit": str(row.get("source_name") or "").strip(),
-                "image_source_url": str(row.get("url") or "").strip(),
+                "image_source": str(row.get("image_source") or "licensed-source").strip(),
+                "image_license": str(row.get("image_license") or existing_license).strip(),
+                "image_credit": str(row.get("image_credit") or row.get("source_name") or "").strip(),
+                "image_source_url": str(row.get("image_source_url") or row.get("url") or "").strip(),
                 "image_search_query": "",
                 "image_selection_score": 100,
                 "image_local_path": str(output),
@@ -221,7 +223,7 @@ def acquire_story_image(
                 "image_selected_at": datetime.now(timezone.utc).isoformat(),
             }
         except Exception as exc:
-            print(f"Source image unusable; trying licensed image search: {exc}")
+            print(f"Licensed source image unusable; trying public-domain image search: {exc}")
 
     queries = build_image_queries(headline, summary, category)
     candidates = {}
