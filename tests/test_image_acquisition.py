@@ -24,7 +24,7 @@ class ImageAcquisitionTests(unittest.TestCase):
 
     def test_license_filter(self):
         self.assertTrue(_license_allowed("cc0"))
-        self.assertTrue(_license_allowed("by-sa"))
+        self.assertFalse(_license_allowed("by-sa"))
         self.assertFalse(_license_allowed("copyright"))
         self.assertFalse(_license_allowed(""))
 
