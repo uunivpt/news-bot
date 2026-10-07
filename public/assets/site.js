@@ -14,7 +14,7 @@ function norm(a,i){const id=a.id??a.slug??a._id??'n'+i;const img=a.image||a.imag
  return{...a,id:String(id),title:a.title||a.headline||'Untitled',summary:a.summary||a.description||a.excerpt||'',body:a.content||a.body||a.text||'',image:typeof img==='string'?img:'',category:String(a.category||a.section||'General'),source:(a.source&&a.source.name)||a.source||a.publisher||'',date:a.published_at_iso||a.publishedAt||a.pubDate||a.date||a.published_at||a.created_at||'',url:a.url||a.link||'',author:a.author||a.author_name||'PoliticsHub Editorial Desk'}}
 const pick=j=>Array.isArray(j)?j:(j.articles||j.news||j.items||j.data||j.results||[]);
 async function get(u){const r=await fetch(u,{cache:'no-store',headers:{'Accept':'application/json','Cache-Control':'no-cache'}});if(!r.ok)throw 0;const rows=pick(await r.json());return rows.map((x,i)=>{const img=x.image_url||x.image||x.imageUrl||x.urlToImage||x.thumbnail||x.img||'';const source=x.source_name||(x.source&&x.source.name)||x.source||x.publisher||'PoliticsHub';const date=x.published_at_iso||x.published_at_site||x.publishedAt||x.pubDate||x.date||x.published_at||x.created_at||'';const body=x.article||x.bot_article||x.content||x.body||x.text||'';const summary=x.summary||x.bot_summary||x.description||x.excerpt||'';return {...x,id:String(x.id??x.slug??x._id??'n'+i),image:typeof img==='string'?img:'',source:String(source),date,body:String(body),summary:String(summary)};})}
-const CACHE_KEY='ph-news-cache-v4';
+const CACHE_KEY='ph-news-cache-v5';
 function cacheSave(items){try{localStorage.setItem(CACHE_KEY,JSON.stringify({ts:Date.now(),items}));}catch(e){}}
 function cacheLoad(){try{const x=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');return x&&Array.isArray(x.items)?x:null}catch(e){return null}}
 function slugify(value){
@@ -177,8 +177,8 @@ $('#sres').onclick=e=>{if(e.target.closest('a'))closeS()};
 addEventListener('keydown',e=>{if(e.key==='Escape')closeAll();if(e.key==='/'&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)){e.preventDefault();openS()}});
 $('#pz').onclick=e=>{const p=$('#tk').classList.toggle('pz');e.currentTarget.setAttribute('aria-pressed',p);e.currentTarget.setAttribute('aria-label',p?'Play ticker':'Pause ticker')};
 /* theme + prefs */
-function theme(t,save){document.documentElement.dataset.theme=t;if(save&&ls.get('ph-ls')!=='0')ls.set('ph-theme',t)}
-theme(ls.get('ph-theme')||'dark');
+function theme(t,save){t=t==='dark'?'dark':'light';document.documentElement.dataset.theme=t;if(save&&ls.get('ph-ls')!=='0')ls.set('ph-theme',t)}
+theme(ls.get('ph-theme')==='dark'?'dark':'light');
 document.addEventListener('click',e=>{const t=e.target.closest('[data-th]');if(t){theme(t.dataset.th,1);$$('[data-th]').forEach(b=>b.setAttribute('aria-pressed',b===t))}
  const s=e.target.closest('.sw');if(s){const on=s.getAttribute('aria-checked')!=='true';s.setAttribute('aria-checked',on);ls.set(s.dataset.k,on?'1':'0');if(s.dataset.k==='ph-ls'&&!on)ls.del('ph-theme')}
  if(e.target.closest('#rst')){['ph-theme','ph-cookie','ph-ls'].forEach(ls.del);theme('light');settings()}});
@@ -196,8 +196,28 @@ const qcat=new URLSearchParams(location.search).get('category');if(!location.has
 setActive('all');
 const hadCache=hydrateCache();
 if(hadCache){ticker();render();}
-load().then(()=>{ticker();render()})
-if('serviceWorker' in navigator) addEventListener('load',()=>navigator.serviceWorker.register('/service-worker.js').catch(()=>{}));;
+load().then(()=>{ticker();render()});
+let liveRefreshBusy=false;
+function onStoryListRoute(){
+ const path=location.pathname.split('/').filter(Boolean),hash=location.hash.slice(1);
+ if(path.length>=2&&/^\d+-/.test(path[1]))return false;
+ return !hash.startsWith('/article/')&&!hash.startsWith('/settings');
+}
+async function refreshLatest(){
+ if(liveRefreshBusy)return;
+ liveRefreshBusy=true;
+ const before=S.items.slice(0,8).map(i=>String(i.id)+':'+String(i.date||'')).join('|');
+ try{
+  await load();
+  const after=S.items.slice(0,8).map(i=>String(i.id)+':'+String(i.date||'')).join('|');
+  ticker();
+  if(after!==before&&onStoryListRoute())render();
+ }finally{liveRefreshBusy=false}
+}
+setInterval(refreshLatest,90000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshLatest()});
+addEventListener('focus',refreshLatest);
+if('serviceWorker' in navigator) addEventListener('load',()=>navigator.serviceWorker.register('/service-worker.js').catch(()=>{}));
 
 async function enhanceHome(category){
  const target=$('#app .grid'); if(!target)return;
