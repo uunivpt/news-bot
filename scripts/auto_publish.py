@@ -366,6 +366,22 @@ def _instagram_candidates(db,mode,limit,now):
   ))
  return rows[:limit]
 
+def _website_candidates(db,limit):
+ # Always work from the newest collected stories so a large historical pending
+ # backlog can never hide today's news. Reserve part of each batch for India
+ # while still leaving room for other desks.
+ limit=max(1,int(limit))
+ pool=[dict(r) for r in db.latest(max(100,limit*8),status="pending")]
+ india_quota=max(1,min(5,limit//3))
+ india=[r for r in pool if str(r.get("category") or "").strip().lower()=="india"][:india_quota]
+ selected_ids={int(r["id"]) for r in india}
+ selected=list(india)
+ for row in pool:
+  if int(row["id"]) in selected_ids:continue
+  selected.append(row)
+  if len(selected)>=limit:break
+ return selected[:limit]
+
 def main():
  db=NewsDatabase(); ensure_schema(db); ensure_upgrade_schema(db); settings=db.get_settings(); env_ig=os.getenv("PUBLISH_TO_INSTAGRAM","false").lower() in {"1","true","yes"}; env_web=os.getenv("PUBLISH_WEBSITE","true").lower() in {"1","true","yes"}; priority_id=str(settings.get("instagram_priority_id","") or "").strip(); paused=settings.get("instagram_paused","false")=="true"; publish_instagram=env_ig and (settings.get("instagram_enabled","true")=="true" or bool(priority_id)); publish_website=env_web and settings.get("website_enabled","true")=="true"
  try:max_items=max(1,int(os.getenv("MAX_ITEMS","15")))
@@ -380,7 +396,7 @@ def main():
  except ValueError:env_daily=1000
  try:interval=max(0,int(os.getenv("INSTAGRAM_INTERVAL_MINUTES",settings.get("instagram_interval_minutes","0"))))
  except ValueError:interval=0
- daily_limit=min(admin_daily,env_daily) if env_daily else admin_daily; now=datetime.now(timezone.utc); music=audio_path() if publish_instagram else None; pending=[dict(r) for r in db.conn.execute("SELECT * FROM news_items WHERE status='pending' ORDER BY COALESCE(published_at,collected_at) ASC,id ASC LIMIT "+str(max_items)).fetchall()] if publish_website else []
+ daily_limit=min(admin_daily,env_daily) if env_daily else admin_daily; now=datetime.now(timezone.utc); music=audio_path() if publish_instagram else None; pending=_website_candidates(db,max_items) if publish_website else []
  published=held=0
  for row in pending:
   # Always regenerate pending content from the freshest source. If the newsroom
