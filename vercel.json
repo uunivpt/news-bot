@@ -40,5 +40,71 @@
         }
       ]
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/india",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/india/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/politics",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/politics/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/world",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/world/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/business",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/business/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/technology",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/technology/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/sports",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/sports/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/entertainment",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/entertainment/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/hindi",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/hindi/:path*",
+      "destination": "/index.html"
+    }
   ]
 }
