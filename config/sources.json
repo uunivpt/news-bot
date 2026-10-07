@@ -5,9 +5,11 @@
       "country": "in",
       "category": "general",
       "page_size": 100,
-      "enabled": true,
+      "enabled": false,
       "public_source": true,
-      "route_category": "india"
+      "route_category": "india",
+      "license_review_required": true,
+      "note": "Disabled in production until a NewsAPI plan/licence permitting production use is confirmed."
     }
   ],
   "newsdata": [
