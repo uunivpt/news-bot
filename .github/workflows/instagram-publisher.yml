@@ -66,11 +66,6 @@ jobs:
             echo "Missing Instagram secrets: ${missing[*]}"
             exit 1
           fi
-      - name: Release verified Nana Patekar tribute to website and priority Instagram queue
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          PYTHONPATH: .
-        run: python scripts/publish_nana_tribute_once.py
       - name: Publish Instagram queue
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
