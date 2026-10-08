@@ -43,100 +43,128 @@
   ],
   "rewrites": [
     {
-      "source": "/hindi/",
-      "destination": "/index.html"
+      "source": "/news-sitemap.xml",
+      "destination": "/api/seo-news-sitemap"
     },
     {
-      "source": "/entertainment/",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/sports/",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/technology/",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/business/",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/world/",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/politics/",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/india/",
-      "destination": "/index.html"
+      "source": "/india/:story",
+      "destination": "/api/seo-article/india/:story"
     },
     {
       "source": "/india",
-      "destination": "/index.html"
+      "destination": "/api/seo-section/india"
     },
     {
-      "source": "/india/:path*",
-      "destination": "/index.html"
+      "source": "/india/",
+      "destination": "/api/seo-section/india"
+    },
+    {
+      "source": "/politics/:story",
+      "destination": "/api/seo-article/politics/:story"
     },
     {
       "source": "/politics",
-      "destination": "/index.html"
+      "destination": "/api/seo-section/politics"
     },
     {
-      "source": "/politics/:path*",
-      "destination": "/index.html"
+      "source": "/politics/",
+      "destination": "/api/seo-section/politics"
+    },
+    {
+      "source": "/world/:story",
+      "destination": "/api/seo-article/world/:story"
     },
     {
       "source": "/world",
-      "destination": "/index.html"
+      "destination": "/api/seo-section/world"
     },
     {
-      "source": "/world/:path*",
-      "destination": "/index.html"
+      "source": "/world/",
+      "destination": "/api/seo-section/world"
+    },
+    {
+      "source": "/business/:story",
+      "destination": "/api/seo-article/business/:story"
     },
     {
       "source": "/business",
-      "destination": "/index.html"
+      "destination": "/api/seo-section/business"
     },
     {
-      "source": "/business/:path*",
-      "destination": "/index.html"
+      "source": "/business/",
+      "destination": "/api/seo-section/business"
+    },
+    {
+      "source": "/technology/:story",
+      "destination": "/api/seo-article/technology/:story"
     },
     {
       "source": "/technology",
-      "destination": "/index.html"
+      "destination": "/api/seo-section/technology"
     },
     {
-      "source": "/technology/:path*",
-      "destination": "/index.html"
+      "source": "/technology/",
+      "destination": "/api/seo-section/technology"
+    },
+    {
+      "source": "/sports/:story",
+      "destination": "/api/seo-article/sports/:story"
     },
     {
       "source": "/sports",
-      "destination": "/index.html"
+      "destination": "/api/seo-section/sports"
     },
     {
-      "source": "/sports/:path*",
-      "destination": "/index.html"
+      "source": "/sports/",
+      "destination": "/api/seo-section/sports"
+    },
+    {
+      "source": "/entertainment/:story",
+      "destination": "/api/seo-article/entertainment/:story"
     },
     {
       "source": "/entertainment",
-      "destination": "/index.html"
+      "destination": "/api/seo-section/entertainment"
     },
     {
-      "source": "/entertainment/:path*",
-      "destination": "/index.html"
+      "source": "/entertainment/",
+      "destination": "/api/seo-section/entertainment"
+    },
+    {
+      "source": "/science/:story",
+      "destination": "/api/seo-article/science/:story"
+    },
+    {
+      "source": "/science",
+      "destination": "/api/seo-section/science"
+    },
+    {
+      "source": "/science/",
+      "destination": "/api/seo-section/science"
+    },
+    {
+      "source": "/health/:story",
+      "destination": "/api/seo-article/health/:story"
+    },
+    {
+      "source": "/health",
+      "destination": "/api/seo-section/health"
+    },
+    {
+      "source": "/health/",
+      "destination": "/api/seo-section/health"
+    },
+    {
+      "source": "/hindi/:story",
+      "destination": "/api/seo-article/hindi/:story"
     },
     {
       "source": "/hindi",
-      "destination": "/index.html"
+      "destination": "/api/seo-section/hindi"
     },
     {
-      "source": "/hindi/:path*",
-      "destination": "/index.html"
+      "source": "/hindi/",
+      "destination": "/api/seo-section/hindi"
     }
   ]
 }

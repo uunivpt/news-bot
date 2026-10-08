@@ -59,48 +59,9 @@ def main():
         json.dumps(public,ensure_ascii=False,separators=(",",":")),encoding="utf-8"
     )
 
-    static_urls=["/","/about.html","/contact.html","/editorial-policy.html","/corrections.html",
-                 "/privacy.html","/cookies.html","/terms.html","/disclaimer.html","/newsletter.html"]
-    static_xml='<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' +         "".join("<url><loc>"+esc_xml(SITE+p)+"</loc></url>" for p in static_urls) + "</urlset>"
-    Path("public/static-sitemap.xml").write_text(static_xml,encoding="utf-8")
-
-    urls=[]
-    for row in sitemap_rows:
-        if not row.get("id") or not row.get("title"):
-            continue
-        urls.append("<url><loc>"+esc_xml(
-            SITE+"/"+section(normalize_category(row.get("category"), row.get("title"), ""))+"/"+str(int(row["id"]))+"-"+slug(row.get("title"))
-        )+"</loc></url>")
-
-    for old in Path("public").glob("news-sitemap-*.xml"):
-        old.unlink()
-
-    chunks=[urls[i:i+45000] for i in range(0,len(urls),45000)] or [[]]
-    if len(chunks)==1:
-        Path("public/news-sitemap.xml").write_text(
-            '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+
-            "".join(chunks[0])+"</urlset>",encoding="utf-8"
-        )
-    else:
-        refs=[]
-        for index,chunk in enumerate(chunks,1):
-            filename=Path("public")/f"news-sitemap-{index}.xml"
-            filename.write_text(
-                '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+
-                "".join(chunk)+"</urlset>",encoding="utf-8"
-            )
-            refs.append("<sitemap><loc>"+esc_xml(SITE+f"/news-sitemap-{index}.xml")+"</loc></sitemap>")
-        Path("public/news-sitemap.xml").write_text(
-            '<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+
-            "".join(refs)+"</sitemapindex>",encoding="utf-8"
-        )
-
-    Path("public/sitemap.xml").write_text(
-        '<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+
-        "<sitemap><loc>"+SITE+"/static-sitemap.xml</loc></sitemap>"+
-        "<sitemap><loc>"+SITE+"/news-sitemap.xml</loc></sitemap></sitemapindex>",encoding="utf-8"
-    )
-    print(f"Public snapshot rows: {len(public)}; archive sitemap URLs: {len(urls)}")
+    # Sitemap XML is generated live by /api/seo-news-sitemap from the database,
+    # with this snapshot as the outage fallback. Never publish stale archive URLs.
+    print(f"Public snapshot rows: {len(public)}; sitemap served dynamically.")
 
 if __name__=="__main__":
     main()

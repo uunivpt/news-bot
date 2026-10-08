@@ -13,6 +13,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from app.article_fetcher import enrich_source_text
 from app.database import NewsDatabase, DatabaseUnavailable
 from app.category_routing import normalize_category
+from app.seo_indexing import is_indexable, eligible_articles, news_sitemap_xml, SITE_ORIGIN as CANONICAL_ORIGIN
 from app.models import NewsItem
 from app.factcheck import run_cross_source_check
 from app.newsroom import process_news, story_score, is_breaking, dedupe_story_rows, quality_headline, is_telegram_image
@@ -401,14 +402,14 @@ def public_story_image(item_id):
   return Response(status=404)
 
 
-SITE_ORIGIN="https://politicshub.in"
+SITE_ORIGIN=CANONICAL_ORIGIN
 EDITORIAL_DESK="PoliticsHub Editorial Desk"
 EDITORIAL_EMAIL="politicshub.in@gmail.com"
 CATEGORY_SLUGS={"general":"india","india":"india","world":"world","politics":"politics","business":"business","technology":"technology","sports":"sports","entertainment":"entertainment","science":"science","health":"health","hindi":"hindi"}
 
 def _slugify(value):
- value=re.sub(r"[^a-z0-9]+","-",str(value or "").lower()).strip("-")
- return value[:110] or "story"
+ from app.seo_indexing import slugify
+ return slugify(value)
 
 def article_path(row):
  category=normalize_category(row.get("category"),row.get("title"),row.get("bot_summary") or row.get("summary") or "")
@@ -430,7 +431,8 @@ def _public_row_by_id(item_id):
  return proxied.get_json(silent=True) if proxied is not None and proxied.status_code<400 else None
 
 def _article_html(row):
- row=dict(row); title=str(row.get("title") or "PoliticsHub.in"); category=str(row.get("category") or "India")
+ row=dict(row); robots_meta = "" if is_indexable(row) else '<meta name="robots" content="noindex,follow">'
+ title=str(row.get("title") or "PoliticsHub.in"); category=str(row.get("category") or "India")
  canonical=SITE_ORIGIN+article_path(row)
  published=row.get("published_at_iso") or row.get("published_at_site") or row.get("published_at")
  modified=row.get("published_at_iso") or row.get("published_at_site") or row.get("published_at")
@@ -454,6 +456,7 @@ def _article_html(row):
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{html.escape(title)} — PoliticsHub.in</title>
+{robots_meta}
 <meta name="description" content="{html.escape(summary[:160])}">
 <link rel="canonical" href="{html.escape(canonical)}">
 <meta property="og:type" content="article"><meta property="og:site_name" content="PoliticsHub.in">
@@ -659,11 +662,12 @@ def newsletter_unsubscribe():
  except RuntimeError:
   return jsonify({"error":"newsletter service unavailable"}),503
 
+@app.get("/api/seo-section/<category>")
 @app.get("/<category>/")
 def seo_section(category):
  category=category.lower().strip()
  if category not in set(CATEGORY_SLUGS.values()): return jsonify({"error":"not found"}),404
- return send_from_directory(app.static_folder,"index.html",max_age=0)
+ return Response(_section_html(category),mimetype="text/html",headers={"Cache-Control":"public,max-age=60,s-maxage=180"})
 
 @app.get("/search.html")
 def search_page():return redirect("/#/search",code=302)
@@ -674,13 +678,25 @@ def public_status_page():return redirect("/#/settings/status",code=302)
 @app.get("/author/politicshub-news-desk")
 def author_page(): return _editorial_page("PoliticsHub News Desk","The PoliticsHub Editorial Desk publishes and edits newsroom stories, source links and public corrections.","author")
 
+@app.get("/api/seo-article/<category>/<int:item_id>-<slug>")
 @app.get("/<category>/<int:item_id>-<slug>")
 def seo_article(category,item_id,slug):
+ category=category.lower()
+ if category not in set(CATEGORY_SLUGS.values()):
+  return jsonify({"error":"not found"}),404
  row=_public_row_by_id(item_id)
- if not row:return jsonify({"error":"not found"}),404
+ if not row:
+  # During a database outage, historical items absent from the bounded
+  # snapshot are temporarily inaccessible, not permanently deleted.
+  try:
+   database=db()
+   database.close()
+  except RuntimeError:
+   return Response("Article temporarily unavailable",status=503,headers={"Retry-After":"300","X-Robots-Tag":"noindex"})
+  return jsonify({"error":"not found"}),404
  canonical_path=article_path(row); requested=f"/{category}/{item_id}-{slug}"
  if requested.rstrip("/")!=canonical_path.rstrip("/"):return redirect(SITE_ORIGIN+canonical_path,code=301)
- return send_from_directory(app.static_folder,"index.html",max_age=0)
+ return Response(_article_html(row),mimetype="text/html",headers={"Cache-Control":"public,max-age=60,s-maxage=180"})
 
 @app.post("/api/admin/logout")
 def logout():
@@ -1258,62 +1274,52 @@ def _sitemap_static_xml():
 
 
 def _published_sitemap_rows():
- database=db()
  try:
-  rows=database.conn.execute("SELECT id,title,category,published_at_site,published_at FROM news_items WHERE status='published' ORDER BY COALESCE(published_at_site,published_at) DESC,id DESC").fetchall()
-  return [dict(r) for r in rows]
- finally:
-  database.close()
+  database=db()
+  try:
+   rows=database.conn.execute(
+    "SELECT id,title,category,published_at_site,published_at,bot_article,"
+    "bot_summary,summary,source_type,public_source,url,status "
+    "FROM news_items WHERE status='published' "
+    "ORDER BY COALESCE(published_at_site,published_at) DESC,id DESC"
+   ).fetchall()
+   return [dict(r) for r in rows]
+  finally:
+   database.close()
+ except RuntimeError:
+  return _snapshot_rows("all")
 
 
 @app.get("/sitemap.xml")
 def sitemap_index():
- try:
-  rows=_published_sitemap_rows()
-  chunk=45000
-  pages=max(1,(len(rows)+chunk-1)//chunk)
-  body='<sitemap><loc>'+_xml_escape(SITE_ORIGIN+'/static-sitemap.xml')+'</loc></sitemap>'
-  body+=''.join('<sitemap><loc>'+_xml_escape(SITE_ORIGIN+('/news-sitemap.xml' if i==1 else '/news-sitemap-'+str(i)+'.xml'))+'</loc></sitemap>' for i in range(1,pages+1))
-  xml='<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+body+'</sitemapindex>'
-  return Response(xml,mimetype="application/xml",headers={"Cache-Control":"public,max-age=300"})
- except Exception as exc:
-  print(f"Sitemap index failed: {exc}")
-  return Response('<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><sitemap><loc>'+_xml_escape(SITE_ORIGIN+'/static-sitemap.xml')+'</loc></sitemap><sitemap><loc>'+_xml_escape(SITE_ORIGIN+'/news-sitemap.xml')+'</loc></sitemap></sitemapindex>',mimetype="application/xml",headers={"Cache-Control":"public,max-age=300"})
-
+ from app.seo_indexing import sitemap_index_xml
+ return Response(sitemap_index_xml(),mimetype="application/xml",headers={"Cache-Control":"public,max-age=300"})
 
 @app.get("/static-sitemap.xml")
 def static_sitemap():
- return Response(_sitemap_static_xml(),mimetype="application/xml",headers={"Cache-Control":"public,max-age=3600"})
+ from app.seo_indexing import static_sitemap_xml
+ return Response(static_sitemap_xml(),mimetype="application/xml",headers={"Cache-Control":"public,max-age=3600"})
 
-
+@app.get("/api/seo-news-sitemap")
 @app.get("/news-sitemap.xml")
 def news_sitemap_first():
  return _news_sitemap_page(1)
-
 
 @app.get("/news-sitemap-<int:page>.xml")
 def news_sitemap_page(page):
  return _news_sitemap_page(page)
 
-
 def _news_sitemap_page(page):
  if page<1:return Response("Not found",status=404)
- try:
-  rows=_published_sitemap_rows(); chunk=45000; start=(page-1)*chunk
-  if start>=len(rows):return Response("Not found",status=404)
-  selected=rows[start:start+chunk]; items=[]
-  for row in selected:
-   url=article_path(row)
-   stamp=row.get("published_at_site") or row.get("published_at")
-   item='<url><loc>'+_xml_escape(SITE_ORIGIN+url)+'</loc>'
-   if stamp:item+='<lastmod>'+_xml_escape(str(stamp))+'</lastmod>'
-   item+='</url>'; items.append(item)
-  xml='<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+''.join(items)+'</urlset>'
-  return Response(xml,mimetype="application/xml",headers={"Cache-Control":"public,max-age=300"})
- except Exception as exc:
-  print(f"News sitemap failed: {exc}")
-  return Response("Sitemap unavailable",status=503)
-
+ rows=_published_sitemap_rows()
+ if not rows:
+  return Response("Sitemap temporarily unavailable",status=503,headers={"Retry-After":"300"})
+ selected=eligible_articles(rows)
+ chunk=40000
+ if (page-1)*chunk >= len(selected) and page!=1:
+  return Response("Not found",status=404)
+ xml=news_sitemap_xml(selected[(page-1)*chunk:page*chunk])
+ return Response(xml,mimetype="application/xml",headers={"Cache-Control":"public,max-age=300,s-maxage=300"})
 
 @app.get("/")
 def seo_home():
