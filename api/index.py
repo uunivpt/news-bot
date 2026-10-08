@@ -107,8 +107,10 @@ def _proxy_public(path):
   return None
 
 # Static assets live outside the Python function bundle on Vercel.
-# Read the public snapshot over HTTPS only when no bundled file is available.
+# During a database outage, read the latest production-branch snapshot without
+# requiring a new Vercel deployment for every feed refresh.
 _snapshot_remote_cache={"until":0.0,"payload":[]}
+PUBLIC_FEED_URL="https://raw.githubusercontent.com/uunivpt/news-bot/main/public/news-data.json"
 
 def _snapshot_rows(category="all", search=None):
  path=Path(app.static_folder or "public") / "news-data.json"
@@ -116,23 +118,27 @@ def _snapshot_rows(category="all", search=None):
  if path.is_file():
   try:payload=json.loads(path.read_text(encoding="utf-8"))
   except (OSError,ValueError):pass
- elif os.getenv("VERCEL")=="1":
+ if os.getenv("VERCEL")=="1":
   now=time.monotonic()
   if now < _snapshot_remote_cache["until"]:
    payload=_snapshot_remote_cache["payload"]
   else:
-   _snapshot_remote_cache.update(until=now+15,payload=[])
-   try:
-    import requests
-    response=requests.get(SITE_ORIGIN+"/news-data.json",timeout=(2,5),headers={"Accept":"application/json"})
-    response.raise_for_status()
-    if len(response.content)<=2_000_000:
-     incoming=response.json()
-     if isinstance(incoming,list):
-      payload=incoming
-      _snapshot_remote_cache.update(until=now+90,payload=incoming)
-   except Exception:
-    pass
+   previous=_snapshot_remote_cache["payload"]
+   if previous:payload=previous
+   _snapshot_remote_cache.update(until=now+15,payload=payload)
+   import requests
+   for url in (PUBLIC_FEED_URL, SITE_ORIGIN+"/news-data.json"):
+    try:
+     response=requests.get(url,timeout=(2,5),headers={"Accept":"application/json"})
+     response.raise_for_status()
+     if len(response.content)<=2_000_000:
+      incoming=response.json()
+      if isinstance(incoming,list) and incoming and all(isinstance(x,dict) and x.get("title") for x in incoming):
+       payload=incoming
+       _snapshot_remote_cache.update(until=now+90,payload=incoming)
+       break
+    except Exception:
+     continue
  if not isinstance(payload,list):return []
  rows=[dict(x) for x in payload if isinstance(x,dict) and x.get("title")]
  for row in rows:

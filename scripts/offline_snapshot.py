@@ -46,7 +46,7 @@ def parse_date(value):
 def clean_text(value):
     text = re.sub(r"<[^>]+>", " ", str(value or ""))
     text = html.unescape(text)
-    text = re.sub(r"\\s+", " ", text).strip()
+    text = re.sub(r"\s+", " ", text).strip()
     return text
 
 

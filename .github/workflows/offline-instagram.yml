@@ -2,8 +2,12 @@ name: Emergency Instagram News (No Database)
 
 on:
   schedule:
-    - cron: "23 */2 * * *"
+    - cron: "23,53 * * * *"
   workflow_dispatch:
+  workflow_run:
+    workflows: ["Emergency Public News Feed (No Database)"]
+    types: [completed]
+    branches: [main]
   push:
     branches: [main]
     paths:
@@ -20,6 +24,7 @@ concurrency:
 
 jobs:
   publish:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -82,9 +87,10 @@ jobs:
           FIXED_AUDIO_URL: ${{ secrets.FIXED_AUDIO_URL }}
           REMOTION_RENDER_TIMEOUT: "900"
           RENDER_CONCURRENCY: "2"
+          INSTAGRAM_POST_FORMAT: "reel"
         run: PYTHONPATH=. python scripts/offline_instagram.py
       - name: Save confirmed publication receipt
-        if: steps.database.outputs.healthy != 'true'
+        if: always() && steps.database.outputs.healthy == 'false'
         run: |
           if [ ! -f public/instagram-offline-ledger.json ]; then
             echo "No new Reel was published."

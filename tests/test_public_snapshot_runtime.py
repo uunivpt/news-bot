@@ -27,6 +27,19 @@ class PublicSnapshotRuntimeTests(unittest.TestCase):
    self.assertEqual(article.status_code,200)
    self.assertIn('Published original source story',article.json['article'])
    self.assertEqual(get.call_count,1)
+   self.assertEqual(get.call_args.args[0],api.PUBLIC_FEED_URL)
+ def test_serverless_prefers_fresh_feed_over_bundled_snapshot(self):
+  import json
+  from pathlib import Path
+  Path(self.tmp.name,'news-data.json').write_text(json.dumps([{'id':1,'title':'Old bundled story'}]))
+  response=Mock(content=b'[]')
+  response.json.return_value=[{'id':2,'title':'Fresh production story'}]
+  with patch.dict(os.environ,{'VERCEL':'1'}),patch.object(api.app,'_static_folder',self.tmp.name),patch('requests.get',return_value=response):
+   self.assertEqual(api._snapshot_rows()[0]['id'],2)
+ def test_failed_refresh_preserves_last_good_feed(self):
+  api._snapshot_remote_cache.update(until=0,payload=[{'id':2,'title':'Last good story'}])
+  with patch.dict(os.environ,{'VERCEL':'1'}),patch.object(api.app,'_static_folder',self.tmp.name),patch('requests.get',side_effect=RuntimeError('offline')):
+   self.assertEqual(api._snapshot_rows()[0]['id'],2)
  def test_unavailable_public_snapshot_stays_503(self):
   response=Mock(status_code=404,content=b'')
   response.raise_for_status.side_effect=RuntimeError('not found')

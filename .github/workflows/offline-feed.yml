@@ -4,6 +4,10 @@ on:
   schedule:
     - cron: "11,41 * * * *"
   workflow_dispatch:
+  workflow_run:
+    workflows: ["News Collector"]
+    types: [completed]
+    branches: [main]
   push:
     branches: [main]
     paths:
@@ -19,6 +23,7 @@ permissions:
 
 jobs:
   refresh:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'failure'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -47,4 +52,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add public/news-data.json
           git commit -m "Refresh PoliticsHub public news snapshot"
+          git pull --rebase origin main
           git push origin HEAD:main

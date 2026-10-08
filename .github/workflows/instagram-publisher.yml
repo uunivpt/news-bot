@@ -86,6 +86,7 @@ jobs:
           RENDER_CONCURRENCY: "2"
           PUBLISH_WEBSITE: "false"
           PUBLISH_TO_INSTAGRAM: "true"
+          INSTAGRAM_POST_FORMAT: "reel"
           MAX_ITEMS: "10"
           BOT_REPAIR_ITEMS: "0"
           INSTAGRAM_NEW_ITEMS: "1000"
