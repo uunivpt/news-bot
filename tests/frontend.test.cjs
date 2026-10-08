@@ -59,3 +59,13 @@ test('service worker does not cache API, live snapshot or error responses',()=>{
  assert.match(sw,/url\.pathname==="\/news-data\.json"/);
  assert.match(sw,/if\(response\.ok/);
 });
+
+test('Nana Patekar and Indian obituaries are India news, not Entertainment',()=>{
+ const ctx=harness({'/api/news?category=all&limit=120':[],'/news-data.json':[]});
+ assert.equal(vm.runInContext('NANA_TRIBUTE.category',ctx),'india');
+ assert.equal(vm.runInContext("newsCategory('entertainment','Nana Patekar dies at 75','')",ctx),'india');
+ assert.equal(vm.runInContext("newsCategory('entertainment','Indian actor dies at 82','Bollywood mourns')",ctx),'india');
+ assert.equal(vm.runInContext("newsCategory('entertainment','New Bollywood movie announced','')",ctx),'entertainment');
+ assert.equal(vm.runInContext("inCat(NANA_TRIBUTE,'india')",ctx),true);
+ assert.equal(vm.runInContext("inCat(NANA_TRIBUTE,'entertainment')",ctx),false);
+});
