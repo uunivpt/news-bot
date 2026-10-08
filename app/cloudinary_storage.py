@@ -62,3 +62,23 @@ def upload_video(path:str, public_id:str|None=None)->str|None:
     if last_error:
         raise last_error
     return None
+
+def upload_image(path: str, public_id: str | None = None) -> str:
+    """Store a licensed-source editorial JPG for Meta's public image URL fetch."""
+    cloud=os.getenv("CLOUDINARY_CLOUD_NAME","")
+    preset=os.getenv("CLOUDINARY_UPLOAD_PRESET","")
+    if not cloud or not preset:
+        raise RuntimeError("Cloudinary image upload is not configured")
+    endpoint=f"https://api.cloudinary.com/v1_1/{cloud}/image/upload"
+    with open(path,"rb") as file:
+        response=requests.post(endpoint,data={"upload_preset":preset,**({"public_id":public_id} if public_id else {})},
+            files={"file":(Path(path).name,file,"image/jpeg")},timeout=120)
+    if not response.ok:
+        detail=response.text[:400]
+        if public_id and response.status_code in (400,409) and "already exists" in detail.lower():
+            return f"https://res.cloudinary.com/{cloud}/image/upload/{public_id}.jpg"
+        response.raise_for_status()
+    secure=str(response.json().get("secure_url") or "")
+    if not secure.startswith("https://"):
+        raise RuntimeError("Cloudinary provided no HTTPS URL for the editorial poster")
+    return secure
