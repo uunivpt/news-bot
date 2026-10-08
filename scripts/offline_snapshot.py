@@ -67,10 +67,13 @@ def public_story(item, now):
         return None
     if not 20 <= len(title) <= 210 or not 55 <= len(summary) <= 4200:
         return None
-    # Sources supply only brief text; don't pretend the excerpt is a full article.
-    summary = summary[:460].rsplit(" ", 1)[0] if len(summary) > 460 else summary
-    if summary.endswith(("...", "…", " [+", " Read more")):
-        summary = summary.rstrip(".… ").strip()
+    # End public excerpts at a real sentence boundary; no chopped news copy.
+    excerpt = summary[:460]
+    endings = list(re.finditer(r"[.!?](?=\\s|$)", excerpt))
+    if endings:
+        summary = excerpt[:endings[-1].end()].strip()
+    elif len(summary) > 460 or not summary.endswith((".", "!", "?")):
+        return None
     if len(summary) < 55:
         return None
     source = clean_text(item.source_name)[:90] or "Original source"
@@ -113,6 +116,11 @@ def build(current, collected, now):
             continue
         key = story["url"]
         if key in indexed:
+            # Repair older incomplete emergency excerpts without duplicating stories.
+            old = indexed[key]
+            if old.get("source_type") == "newsdata" and old.get("summary") != story["summary"]:
+                indexed[key] = story
+                fresh += 1
             continue
         indexed[key] = story
         fresh += 1
