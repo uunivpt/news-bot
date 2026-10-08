@@ -684,7 +684,8 @@ def news():
   print(f"News DB unavailable; serving snapshot: {exc}")
   try:
    path=Path(app.static_folder or "public") / "news-data.json"
-   payload=json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+   if not path.exists():raise RuntimeError("Snapshot is unavailable in this runtime")
+   payload=json.loads(path.read_text(encoding="utf-8"))
    rows=[dict(x) for x in payload if isinstance(x,dict)]
    if category!="all": rows=[x for x in rows if str(x.get("category") or "general").lower()==category]
    if search:

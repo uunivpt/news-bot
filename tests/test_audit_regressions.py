@@ -47,6 +47,10 @@ class AuditRegressions(unittest.TestCase):
    health=self.client.get('/api/health')
    self.assertEqual(health.status_code,503)
    self.assertFalse(health.json['ok'])
+ def test_missing_runtime_snapshot_returns_unavailable(self):
+  with patch.object(api,'db',side_effect=DatabaseUnavailable('down')),patch.object(api.app,'_static_folder',self.tmp.name):
+   response=self.client.get('/api/news')
+  self.assertEqual(response.status_code,503)
  def test_empty_healthy_database_does_not_resurrect_snapshot(self):
   database=Mock()
   database.latest.return_value=[]
