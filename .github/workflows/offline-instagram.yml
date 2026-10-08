@@ -44,7 +44,34 @@ jobs:
         run: pip install -r requirements.txt
       - name: Install Remotion
         run: npm install --prefix reel --omit=dev --no-audit --no-fund
+      - name: Sync latest published stories and Instagram receipts
+        run: |
+          git fetch origin main
+          git show origin/main:public/news-data.json > public/news-data.json
+          if git cat-file -e origin/main:public/instagram-offline-ledger.json 2>/dev/null; then
+            git show origin/main:public/instagram-offline-ledger.json > public/instagram-offline-ledger.json
+          fi
+      - name: Check whether primary newsroom has recovered
+        id: database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          PYTHONPATH=. python - <<'PY'
+          import os
+          healthy = "false"
+          if os.getenv("DATABASE_URL"):
+              try:
+                  from app.database import NewsDatabase
+                  database = NewsDatabase()
+                  database.close()
+                  healthy = "true"
+              except Exception as exc:
+                  print("Primary database still unavailable:", type(exc).__name__)
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
+              stream.write("healthy=" + healthy + "\n")
+          PY
       - name: Publish source-backed news Reel
+        if: steps.database.outputs.healthy != 'true'
         env:
           META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
           META_INSTAGRAM_ACCOUNT_ID: ${{ secrets.META_INSTAGRAM_ACCOUNT_ID }}
@@ -56,6 +83,7 @@ jobs:
           RENDER_CONCURRENCY: "2"
         run: PYTHONPATH=. python scripts/offline_instagram.py
       - name: Save confirmed publication receipt
+        if: steps.database.outputs.healthy != 'true'
         run: |
           if [ ! -f public/instagram-offline-ledger.json ]; then
             echo "No new Reel was published."
