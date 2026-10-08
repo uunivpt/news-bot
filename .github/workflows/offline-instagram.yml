@@ -104,5 +104,16 @@ jobs:
           git config user.name "politicshub-feed-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "Record confirmed emergency Instagram Reel"
+          # Feed refreshes may have landed while the renderer was installing.
+          # Only the receipt is ours to save; discard the temporary feed copy.
+          git restore -- public/news-data.json
           git pull --rebase origin main
           git push origin HEAD:main
+      - name: Preserve publication receipt for recovery
+        if: always() && steps.database.outputs.healthy == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: instagram-publication-receipt
+          path: public/instagram-offline-ledger.json
+          if-no-files-found: ignore
+          retention-days: 14
