@@ -46,17 +46,16 @@ def main() -> None:
     db = NewsDatabase()
     changed = 0
     try:
-        rows = [dict(row) for row in db.latest(5000, category="politics", status="all")]
+        rows = [dict(row) for row in db.latest(5000, category="all", status="all")]
         for row in rows:
-            if str(row.get("source_type") or "").lower() != "newsdata":
-                continue
-            new_category = classify(
-                str(row.get("title") or ""),
-                str(row.get("summary") or ""),
-            )
-            if new_category == "politics":
-                continue
-            if new_category != str(row.get("category") or "").lower():
+            current_category = str(row.get("category") or "india").lower()
+            title = str(row.get("title") or "")
+            summary = str(row.get("bot_summary") or row.get("summary") or "")
+            new_category = normalize_category(current_category, title, summary)
+            # Preserve legacy repair for incorrectly categorized NewsData politics.
+            if new_category == current_category and current_category == "politics" and str(row.get("source_type") or "").lower() == "newsdata":
+                new_category = classify(title, summary)
+            if new_category != current_category:
                 db.update(int(row["id"]), category=new_category)
                 changed += 1
         print(f"Reclassified legacy NewsData rows: {changed}")
