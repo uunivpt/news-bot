@@ -16,20 +16,20 @@ function harness(responses){
 test('healthy API removes stale snapshot items and preserves full article',async()=>{
  const ctx=harness({'/api/news?category=all&limit=120':[{id:2,title:'Current',article:'Full article'}],'/news-data.json':[{id:1,title:'Removed'}]});
  await vm.runInContext('load()',ctx);
- assert.equal(vm.runInContext('S.items.length',ctx),1);
- assert.equal(vm.runInContext('S.items[0].body',ctx),'Full article');
+ assert.equal(vm.runInContext("S.items.filter(i=>i.id!=='nana-tribute').length",ctx),1);
+ assert.equal(vm.runInContext("S.items.find(i=>i.id==='2').body",ctx),'Full article');
  assert.equal(vm.runInContext('S.mode',ctx),'api');
 });
 test('empty successful API clears previously cached stories',async()=>{
  const ctx=harness({'/api/news?category=all&limit=120':[],'/news-data.json':[{id:1,title:'Old'}]});
  vm.runInContext("S.items=[{id:'3',title:'Cached'}]",ctx);
  await vm.runInContext('load()',ctx);
- assert.equal(vm.runInContext('S.items.length',ctx),0);
+ assert.equal(vm.runInContext("S.items.filter(i=>i.id!=='nana-tribute').length",ctx),0);
 });
 test('API outage serves snapshot with a non-live state',async()=>{
  const ctx=harness({'/api/news?category=all&limit=120':new Error('offline'),'/news-data.json':[{id:1,title:'Saved'}]});
  await vm.runInContext('load()',ctx);
- assert.equal(vm.runInContext('S.items[0].title',ctx),'Saved');
+ assert.equal(vm.runInContext("S.items.find(i=>i.id==='1').title",ctx),'Saved');
  assert.equal(vm.runInContext('S.mode',ctx),'snapshot');
 });
 test('out-of-order search responses cannot replace the newest query',async()=>{
