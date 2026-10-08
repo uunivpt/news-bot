@@ -132,7 +132,11 @@ function ticker(){
  const rows=S.items.filter(i=>i.title).slice(0,12);
  if(!rows.length){tickEl.hidden=true;return}
  const links=rows.map(i=>'<a href="'+esc(articleHref(i))+'"><b>'+esc(i.category||'NEWS')+'</b>'+esc(i.title)+'</a>').join('');
- box.innerHTML='<div>'+links+links+'</div>';const saved=S.mode!=='api'||S.apiMode==='snapshot';tickEl.classList.toggle('saved',saved);const tag=tickEl.querySelector('.tag');if(tag)tag.innerHTML='<span class="dot"></span>'+(saved?'SAVED':'LIVE');
+ box.innerHTML='<div>'+links+links+'</div>';const primaryLive=S.mode==='api'&&S.apiMode!=='snapshot';
+ const cachedOnly=S.mode==='cached'||S.mode==='cache'||S.mode==='empty';
+ tickEl.classList.toggle('saved',!primaryLive);
+ const tag=tickEl.querySelector('.tag');
+ if(tag)tag.innerHTML='<span class="dot"></span>'+(primaryLive?'LIVE':cachedOnly?'OFFLINE':'SOURCE FEED');
  tickEl.hidden=false;
 }
 function hydrateCache(){const x=cacheLoad();if(!x||!x.items.length)return false;S.items=x.items.map(norm).sort((a,b)=>ts(b.date)-ts(a.date)||0);S.mode='cache';S.api='stale';return true}
@@ -158,9 +162,15 @@ async function load(opts={}){
  const snapP=get(ENDPOINTS.snap).then(rows=>{b=rows;S.snap=b.length?'ok':'empty';paintFirst(b,'snapshot')}).catch(()=>{S.snap='bad'});
  await Promise.allSettled([apiP,snapP]);
  const existing=S.items.slice();
- S.items=apiOK?mergeFeeds(a,[]):(existing.length?mergeFeeds(existing,b):mergeFeeds([],b));
- if(S.items.length){S.mode=apiOK?(S.apiMode==='snapshot'?'snapshot':'api'):(existing.length?'cached':'snapshot');cacheSave(S.items)}
- else {S.mode=apiOK?'api':'empty'}
+ // Prefer today's published snapshot to stale browser storage when the database
+ // is unavailable; cached stories may have URLs that no longer resolve.
+ const serverRows=apiOK?a:b;
+ const hasServerFeed=apiOK||b.length>0;
+ S.items=hasServerFeed?mergeFeeds(serverRows,[]):mergeFeeds(existing,[]);
+ if(S.items.length){
+  S.mode=apiOK?(S.apiMode==='snapshot'?'snapshot':'api'):(b.length?'snapshot':'cached');
+  if(hasServerFeed)cacheSave(S.items);
+ } else {S.mode='empty'}
  updateFeedStatus();
 }
 function home(c){setActive(c);document.title=(c==='all'?'':CATS.find(x=>x[0]===c)?.[1]+' — ')+'PoliticsHub.in';
@@ -335,11 +345,15 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-share-titl
 function updateFeedStatus(){
  let box=document.getElementById('feedStatus');
  if(!box){box=document.createElement('div');box.id='feedStatus';box.className='feed-status';box.setAttribute('role','status');document.querySelector('main')?.prepend(box)}
- const fallback=S.mode!=='api';
+ const mode=S.mode;
+ const newest=S.items.reduce((best,item)=>Math.max(best,ts(item.date)),0);
+ const newestLabel=newest?' Newest report: '+ago(new Date(newest).toISOString())+'.':'';
  box.replaceChildren();
  const label=document.createElement('span');
- const newest=S.items.reduce((best,item)=>Math.max(best,ts(item.date)),0);
- label.textContent=(fallback?'Showing saved stories. Live updates are temporarily unavailable.':'Latest feed loaded.')+(newest?' Newest story: '+ago(new Date(newest).toISOString())+'.':'');
+ if(mode==='api')label.textContent='Latest news connected. Updates refresh automatically.'+newestLabel;
+ else if(mode==='snapshot')label.textContent='News source feed is active. New source reports are checked automatically (around every 30 minutes).'+newestLabel;
+ else if(mode==='cached'||mode==='cache')label.textContent='Connection unavailable. Showing previously loaded stories.'+newestLabel;
+ else label.textContent='News is temporarily unavailable. Please retry.';
  box.append(label);
  const retry=document.createElement('button');retry.type='button';retry.className='btn secondary';retry.textContent='Refresh news';retry.onclick=()=>refreshLatest(true);box.append(retry);
 }
