@@ -69,7 +69,7 @@ def public_story(item, now):
         return None
     # End public excerpts at a real sentence boundary; no chopped news copy.
     excerpt = summary[:460]
-    endings = list(re.finditer(r"[.!?](?=\\s|$)", excerpt))
+    endings = list(re.finditer(r"[.!?](?=\s|$)", excerpt))
     if endings:
         summary = excerpt[:endings[-1].end()].strip()
     elif len(summary) > 460 or not summary.endswith((".", "!", "?")):
