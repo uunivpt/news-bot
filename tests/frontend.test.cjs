@@ -43,3 +43,19 @@ test('out-of-order search responses cannot replace the newest query',async()=>{
  assert.match(elements['#sres'].innerHTML,/Second result/);
  assert.doesNotMatch(elements['#sres'].innerHTML,/First result/);
 });
+
+test('editorial homepage script is CSP compatible',()=>{
+ const html=fs.readFileSync('public/index.html','utf8');
+ const script=fs.readFileSync('public/assets/editorial-home.js','utf8');
+ assert.doesNotMatch(html,/<script id="ph-v14-script">/);
+ assert.match(html,/src="\/assets\/editorial-home\.js\?v=phui17"/);
+ assert.match(script,/home=function\(c\)/);
+ assert.match(script,/Showing saved stories/);
+ assert.doesNotMatch(script,/onerror=/);
+});
+test('service worker does not cache API, live snapshot or error responses',()=>{
+ const sw=fs.readFileSync('public/service-worker.js','utf8');
+ assert.match(sw,/politicshub-shell-v9/);
+ assert.match(sw,/url\.pathname==="\/news-data\.json"/);
+ assert.match(sw,/if\(response\.ok/);
+});

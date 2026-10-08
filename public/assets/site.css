@@ -291,3 +291,9 @@ html:not([data-theme=dark]) footer img{filter:invert(1);mix-blend-mode:normal}
 .privacy-consent p,.consent-check,.feed-status{color:var(--mut)}
 .share-pop{background:var(--card);color:var(--ink);border-color:var(--line)}
 .share-grid a{color:var(--ink);border-color:var(--line)}
+
+/* Source-only photos disappear cleanly if the original source is unreachable. */
+.ph14-status.offline i{background:#97928b;box-shadow:none}
+.ph14-status.offline span{color:var(--mut)}
+.ph14-copy h1,.ph14-brief h3,.ph14-row h3{overflow-wrap:anywhere;word-break:normal}
+@media(prefers-reduced-motion:reduce){.ph14-home *{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}

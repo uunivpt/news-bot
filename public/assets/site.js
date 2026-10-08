@@ -81,7 +81,7 @@ function img(item){
  if(!src)return'';
  const safe=src.startsWith('/')||src.startsWith('http://')||src.startsWith('https://');
  if(!safe)return'';
- return '<img src="'+esc(src)+'" alt="" loading="lazy" decoding="async" onerror="this.remove()">';
+ return '<img src="'+esc(src)+'" alt="" loading="lazy" decoding="async">';
 }
 function card(item){
  const k=ck(item),title=String(item?.title||'Untitled'),summary=String(item?.summary||'').trim();
@@ -335,5 +335,5 @@ function updateFeedStatus(){
 document.addEventListener('error',event=>{
  const image=event.target;if(!(image instanceof HTMLImageElement))return;
  const card=image.closest('.card');if(card){card.classList.remove('im');card.classList.add('tx')}
- const wrapper=image.closest('.ahero,.tile.cv');if(wrapper)wrapper.remove();else image.remove();
+ const wrapper=image.closest('.ahero,.tile.cv,.ph14-media,.ph14-thumb');if(wrapper)wrapper.remove();else image.remove();
 },true);

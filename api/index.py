@@ -104,18 +104,41 @@ def _proxy_public(path):
   print(f"Public backend proxy failed: {exc}")
   return None
 
+# Static assets live outside the Python function bundle on Vercel.
+# Read the public snapshot over HTTPS only when no bundled file is available.
+_snapshot_remote_cache={"until":0.0,"payload":[]}
+
 def _snapshot_rows(category="all", search=None):
  path=Path(app.static_folder or "public") / "news-data.json"
- if not path.exists():return []
- try:payload=json.loads(path.read_text(encoding="utf-8"))
- except Exception:return []
+ payload=[]
+ if path.is_file():
+  try:payload=json.loads(path.read_text(encoding="utf-8"))
+  except (OSError,ValueError):pass
+ elif os.getenv("VERCEL")=="1":
+  now=time.monotonic()
+  if now < _snapshot_remote_cache["until"]:
+   payload=_snapshot_remote_cache["payload"]
+  else:
+   _snapshot_remote_cache.update(until=now+15,payload=[])
+   try:
+    import requests
+    response=requests.get(SITE_ORIGIN+"/news-data.json",timeout=(2,5),headers={"Accept":"application/json"})
+    response.raise_for_status()
+    if len(response.content)<=2_000_000:
+     incoming=response.json()
+     if isinstance(incoming,list):
+      payload=incoming
+      _snapshot_remote_cache.update(until=now+90,payload=incoming)
+   except Exception:
+    pass
+ if not isinstance(payload,list):return []
  rows=[dict(x) for x in payload if isinstance(x,dict) and x.get("title")]
+ for row in rows:row.setdefault("status","published")
  if category and category!="all":rows=[x for x in rows if str(x.get("category") or "general").lower()==category]
  if search:
   q=str(search).strip().lower()
   rows=[x for x in rows if q in str(x.get("title") or "").lower() or q in str(x.get("summary") or x.get("bot_summary") or "").lower() or q in str(x.get("source_name") or x.get("source") or "").lower()]
  return rows
-
 
 def _public_timestamp(row):
  for key in ("published_at_site","published_at_iso","published_at","created_at","collected_at"):
@@ -680,26 +703,15 @@ def news():
  except ValueError:limit=100
  if not admin_ok():status,review,ig="published","all","all"
  try:database=db()
- except Exception as exc:
-  print(f"News DB unavailable; serving snapshot: {exc}")
-  try:
-   path=Path(app.static_folder or "public") / "news-data.json"
-   if not path.exists():raise RuntimeError("Snapshot is unavailable in this runtime")
-   payload=json.loads(path.read_text(encoding="utf-8"))
-   rows=[dict(x) for x in payload if isinstance(x,dict)]
-   if category!="all": rows=[x for x in rows if str(x.get("category") or "general").lower()==category]
-   if search:
-    q=search.lower()
-    rows=[x for x in rows if q in str(x.get("title") or "").lower() or q in str(x.get("summary") or x.get("bot_summary") or "").lower()]
-   rows=_rank_public(rows)
-   rows=dedupe_story_rows(rows,threshold=0.78)
-   response=jsonify(rows_json(rows[:limit],compact=compact))
-   response.headers["X-News-Mode"]="snapshot"
-   response.headers["Cache-Control"]="no-store"
-   return response
-  except Exception as snapshot_exc:
-   print(f"News snapshot fallback failed: {snapshot_exc}")
-   return jsonify({"error":"news backend unavailable"}),503
+ except Exception:
+  # When the database is unavailable, publish only a valid saved snapshot.
+  rows=_snapshot_rows(category,search)
+  if not rows:return jsonify({"error":"news backend unavailable"}),503
+  rows=dedupe_story_rows(_rank_public(rows),threshold=0.78)
+  response=jsonify(rows_json(rows[:limit],compact=compact))
+  response.headers["X-News-Mode"]="snapshot"
+  response.headers["Cache-Control"]="no-store"
+  return response
  try:
   rows=_rank_public(database.latest(max(limit*6,limit),category,status,search,review,ig))
   # A healthy database is authoritative; never resurrect removed stories.
