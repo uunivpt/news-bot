@@ -885,7 +885,13 @@ def news():
   # A healthy database is authoritative; never resurrect removed stories.
   rows=_rank_public(rows)
   rows=dedupe_story_rows(rows,threshold=0.78)
-  return jsonify(rows_json(rows[:limit],compact=compact))
+  response=jsonify(rows_json(rows[:limit],compact=compact))
+  # Public news is refreshed by a 30-minute collection cadence. CDN caching
+  # avoids waking a free-tier Postgres compute on every visitor refresh.
+  # Admin API responses remain uncacheable through the after_request policy.
+  if not admin_ok() and status=="published" and not search:
+   response.headers["Cache-Control"]="public, max-age=30, s-maxage=600, stale-while-revalidate=300"
+  return response
  finally:database.close()
 
 @app.get("/api/search")
