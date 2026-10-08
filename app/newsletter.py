@@ -232,7 +232,7 @@ def verified_story(rows):
             continue
         if len(title.split()) < 5 or len(summary) < 75 or not src or not url.startswith("https://"):
             continue
-        if row.get("public_source") is False:
+        if not bool(row.get("public_source")):
             continue
         try:
             dt = datetime.fromisoformat(str(published).replace("Z", "+00:00"))
