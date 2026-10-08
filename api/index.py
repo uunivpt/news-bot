@@ -683,7 +683,10 @@ def newsletter_subscribe():
       "If you did not request this email, you can ignore it. You will not receive any news emails."
      ],action=("Confirm subscription",confirmation_link(token)))
     except Exception:
-     # The subscriber remains pending; do not falsely report a sent confirmation.
+     # Avoid falsely claiming success or blocking retry for 30 minutes after SMTP failure.
+     ph="%s" if database._postgres else "?"
+     database.conn.execute(f"UPDATE newsletter_optins SET requested_at={ph} WHERE email={ph} AND status='pending'",((datetime.now(timezone.utc)-timedelta(hours=1)).isoformat(),email))
+     if not database._postgres:database.conn.commit()
      return jsonify({"error":"We couldn't send your confirmation email. Please try again later."}),503
   finally:database.close()
   return jsonify({"ok":True,"message":GENERIC_SIGNUP}),202
