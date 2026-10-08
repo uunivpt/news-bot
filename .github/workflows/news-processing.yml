@@ -7,6 +7,15 @@ on:
   push:
     branches:
       - main
+    paths:
+      - "app/**"
+      - "api/**"
+      - "config/sources.json"
+      - "scripts/auto_publish.py"
+      - "scripts/repair_news_categories.py"
+      - "scripts/export_public_snapshot.py"
+      - "requirements.txt"
+      - ".github/workflows/news-processing.yml"
   # The 5-minute collector triggers this workflow via workflow_run.
   # Keep only a low-frequency fallback schedule so duplicate newsroom runs
   # cannot build a stale processing queue.
