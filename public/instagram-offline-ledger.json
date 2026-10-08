@@ -1,11 +1,56 @@
 {
   "posts": [
     {
+      "id": "990008260005",
+      "url": "https://www.reuters.com/world/india/india-inflation-likely-accelerated-september-food-energy-pressures-2026-10-08/",
+      "media_id": "17954761596258220",
+      "image_url": "https://res.cloudinary.com/aoyaqrj2/image/upload/v1791445589/politicshub/editorial-990008260005-eead079bced7.jpg",
+      "permalink": "https://www.instagram.com/p/DeObiWXlVqr/",
+      "format": "editorial_4x5",
+      "published_at": "2026-10-08T07:46:44.908348+00:00"
+    },
+    {
+      "id": "990008260004",
+      "url": "https://newsonair.gov.in/iaf-marks-94th-air-force-day-with-theme-infallible-impervious-and-precise/",
+      "media_id": "18638209786032385",
+      "image_url": "https://res.cloudinary.com/aoyaqrj2/image/upload/v1791445570/politicshub/editorial-990008260004-ead53f16a60b.jpg",
+      "permalink": "https://www.instagram.com/p/DeObgBXFTJW/",
+      "format": "editorial_4x5",
+      "published_at": "2026-10-08T07:46:25.645586+00:00"
+    },
+    {
+      "id": "990008260003",
+      "url": "https://maharashtratimes.com/gadget-news/india-mobile-internet-speed-increased-10-fold-due-to-fast-5g-rollout-pm-modi-at-imc-2026/articleshow/134782725.cms",
+      "media_id": "17939334966368577",
+      "image_url": "https://res.cloudinary.com/aoyaqrj2/image/upload/v1791445551/politicshub/editorial-990008260003-6f4fbc7ba2c5.jpg",
+      "permalink": "https://www.instagram.com/p/DeObdtGlUf2/",
+      "format": "editorial_4x5",
+      "published_at": "2026-10-08T07:46:07.633546+00:00"
+    },
+    {
+      "id": "990008260002",
+      "url": "https://indianexpress.com/article/business/economy/gst-council-meeting-states-oppose-taxmens-arrest-powers-10911541/",
+      "media_id": "18017160656949236",
+      "image_url": "https://res.cloudinary.com/aoyaqrj2/image/upload/v1791445533/politicshub/editorial-990008260002-6f995140ae4e.jpg",
+      "permalink": "https://www.instagram.com/p/DeObbdBFRPm/",
+      "format": "editorial_4x5",
+      "published_at": "2026-10-08T07:45:48.438422+00:00"
+    },
+    {
+      "id": "990008260001",
+      "url": "https://www.reuters.com/world/india/india-opposition-leader-rahul-gandhi-lawmakers-detained-over-election-chief-2026-10-07/",
+      "media_id": "18124081591902422",
+      "image_url": "https://res.cloudinary.com/aoyaqrj2/image/upload/v1791445514/politicshub/editorial-990008260001-d65e919d99a8.jpg",
+      "permalink": "https://www.instagram.com/p/DeObZKolWfW/",
+      "format": "editorial_4x5",
+      "published_at": "2026-10-08T07:45:30.077705+00:00"
+    },
+    {
       "id": "8306436597596",
       "url": "https://gyanhigyan.com/sports/cricket/bcci-honors-ajit-agarkar-for-his-tenure-as-mens-selection/cid19354490.htm",
       "media_id": "18114774383010232",
       "published_at": "2026-10-08T07:04:59+00:00"
     }
   ],
-  "last_published_at": "2026-10-08T07:04:59+00:00"
+  "last_published_at": "2026-10-08T07:46:44.908348+00:00"
 }
