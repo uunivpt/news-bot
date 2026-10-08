@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 from app.database import NewsDatabase
+from app.category_routing import normalize_category
 
 SITE = "https://politicshub.in"
 PUBLIC_LIMIT = 100
@@ -47,7 +48,7 @@ def main():
             "summary":row.get("summary") or "",
             "bot_summary":row.get("bot_summary") or row.get("summary") or "",
             "bot_article":row.get("bot_article") or "",
-            "category":row.get("category") or "general",
+            "category":normalize_category(row.get("category") or "general", row.get("title") or "", row.get("bot_summary") or row.get("summary") or ""),
             "image_url":row.get("image_url"),
             "public_source":bool(row.get("public_source")),
             "published_at_site":row.get("published_at_site") or row.get("published_at"),
@@ -68,7 +69,7 @@ def main():
         if not row.get("id") or not row.get("title"):
             continue
         urls.append("<url><loc>"+esc_xml(
-            SITE+"/"+section(row.get("category"))+"/"+str(int(row["id"]))+"-"+slug(row.get("title"))
+            SITE+"/"+section(normalize_category(row.get("category"), row.get("title"), ""))+"/"+str(int(row["id"]))+"-"+slug(row.get("title"))
         )+"</loc></url>")
 
     for old in Path("public").glob("news-sitemap-*.xml"):
