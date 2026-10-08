@@ -22,6 +22,12 @@ from app.phase_system import phase_analytics, cluster_stories, cluster_summary, 
 from app.reporting import operations_pdf
 from app.advanced_ops import ensure_advanced_schema, live_dashboard, detailed_report, record_verification, audit_stage
 from app.advanced_system import admin_snapshot, historical_analytics, event_timeline, ensure_schema as ensure_upgrade_schema
+from app.newsletter import (
+    OWNER as NEWSLETTER_OWNER, GENERIC_SIGNUP, mail_configured, valid_email,
+    request_optin, confirmation_link, send_mail, confirm_optin, send_welcome,
+    send_owner_alert, verified_story, lookup_unsubscribe, unsubscribe as unsubscribe_token,
+    email_unsubscribe_link, ensure_tables as ensure_newsletter_tables, send_daily, iso,
+)
 
 app=Flask(__name__, static_folder="../public", static_url_path="")
 _secret=os.getenv("FLASK_SECRET_KEY") or os.getenv("ADMIN_TOKEN") or os.getenv("ADMIN_SETUP_KEY")
@@ -637,39 +643,160 @@ def og_image(item_id):
  return Response(payload,mimetype="image/png",headers={"Cache-Control":"public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800"})
 
 @app.get("/api/newsletter")
-def newsletter_status(): return jsonify({"ok":True,"available":True})
+def newsletter_status():
+ return jsonify({"ok":True, "available":mail_configured(), "double_opt_in":True, "daily_brief":True})
+
+def _newsletter_page(title, lead, form="", notice=""):
+ """Unsubscribe and confirmation links never activate on a GET from a mail scanner."""
+ body = ('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+ '<meta name="robots" content="noindex,nofollow"><title>'+html.escape(title)+' — PoliticsHub.in</title>'
+ '<link rel="stylesheet" href="/assets/site.css?v=phui18"></head><body><main class="wrap" style="max-width:690px;padding:70px 24px">'
+ '<a href="/" class="lbl">PoliticsHub.in</a><article class="art"><div class="ah"><span class="lbl red">PoliticsHub Brief</span>'
+ '<h1>'+html.escape(title)+'</h1><p class="dek">'+html.escape(lead)+'</p></div><div class="body">'+form+
+ '<p style="margin-top:25px"><a href="/newsletter.html">Newsletter</a> · <a href="/privacy.html">Privacy Policy</a></p></div></article></main></body></html>')
+ return Response(body, mimetype="text/html",headers={"Cache-Control":"no-store","Referrer-Policy":"no-referrer","X-Robots-Tag":"noindex, nofollow"})
+
+def _newsletter_current_story():
+ try:return verified_story(_public_rows_for_section("all",80))
+ except Exception:return None
 
 @app.post("/api/newsletter")
 def newsletter_subscribe():
- if not _public_rate_allowed(20,3600):return jsonify({"error":"too many requests"}),429
- body=request.get_json(silent=True) or request.form.to_dict() or {}; email=str(body.get("email","")).strip().lower()
- consent=str(body.get("consent","")).strip().lower() in {"1","true","yes","on"}
- adult=str(body.get("adult","")).strip().lower() in {"1","true","yes","on"}
- if not re.fullmatch(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",email):return jsonify({"error":"Enter a valid email address"}),400
- if not consent:return jsonify({"error":"Please agree to receive the newsletter and to the Privacy Policy."}),400
- if not adult:return jsonify({"error":"Newsletter signup is currently limited to people aged 18 or older."}),400
+ if not _public_rate_allowed(8,3600):return jsonify({"error":"Too many attempts. Please try again later."}),429
+ if not mail_configured():return jsonify({"error":"Newsletter delivery is being configured. Please try again later."}),503
+ body=request.get_json(silent=True) or request.form.to_dict() or {}
+ email=str(body.get("email") or "").strip().lower()
+ if not valid_email(email):return jsonify({"error":"Enter a valid email address."}),400
+ if str(body.get("consent","")).lower() not in {"1","true","on","yes"}:
+  return jsonify({"error":"Please agree to newsletter email delivery and the Privacy Policy."}),400
+ if str(body.get("adult","")).lower() not in {"1","true","on","yes"}:
+  return jsonify({"error":"Newsletter signup is available only to adults aged 18 and older."}),400
  try:
   database=db()
-  try: database.subscribe_newsletter(email,confirmed=True); return jsonify({"ok":True,"message":"You are on the PoliticsHub newsletter list. You can unsubscribe at any time."})
-  finally: database.close()
- except RuntimeError:
   try:
-   import requests
-   response=requests.post(PUBLIC_BACKEND_ORIGIN+"/api/newsletter",json={"email":email,"consent":True,"adult":True},timeout=_PUBLIC_API_TIMEOUT,headers={"Accept":"application/json","X-PoliticsHub-Proxy":"1"})
-   return app.response_class(response.content,status=response.status_code,content_type=response.headers.get("Content-Type","application/json"))
-  except Exception: return jsonify({"error":"newsletter service unavailable"}),503
+   token=request_optin(database,email)
+   if token:
+    try:
+     send_mail(email,"Confirm your PoliticsHub Brief subscription","Confirm your email address",[
+      "You requested the free PoliticsHub Brief newsletter.",
+      "Click the button to confirm your subscription. We will send one sourced news briefing a day. This link expires in 48 hours.",
+      "If you did not request this email, you can ignore it. You will not receive any news emails."
+     ],action=("Confirm subscription",confirmation_link(token)))
+    except Exception:
+     # The subscriber remains pending; do not falsely report a sent confirmation.
+     return jsonify({"error":"We couldn't send your confirmation email. Please try again later."}),503
+  finally:database.close()
+  return jsonify({"ok":True,"message":GENERIC_SIGNUP}),202
+ except RuntimeError:
+  return jsonify({"error":"Newsletter database is temporarily unavailable. No subscription was recorded."}),503
+
+@app.route("/newsletter/confirm",methods=["GET","POST"])
+def newsletter_confirm():
+ token=str(request.values.get("token") or "")
+ if request.method=="GET":
+  if not token or len(token)>256:
+   return _newsletter_page("Invalid confirmation link","Request a new confirmation email on the newsletter page."),400
+  form='<form method="post" action="/newsletter/confirm"><input type="hidden" name="token" value="'+html.escape(token,quote=True)+'"><button class="btn" type="submit">Confirm my subscription</button></form>'
+  return _newsletter_page("Confirm subscription","Confirm that you want a daily source-linked news briefing from PoliticsHub.in.",form)
+ try:
+  database=db()
+  try:
+   reader=confirm_optin(database,token)
+   if not reader:return _newsletter_page("Link invalid or expired","Please subscribe again to request a new confirmation link."),400
+   story=_newsletter_current_story()
+   for sender in (lambda:send_welcome(database,reader,story,app.secret_key),
+                  lambda:send_owner_alert(database,reader)):
+    try:sender()
+    except Exception as exc:app.logger.warning("Newsletter follow-up delivery delayed (%s)",type(exc).__name__)
+   return _newsletter_page("You're subscribed!","Thank you for joining PoliticsHub Brief. Your welcome email and daily news briefings will follow.")
+  finally:database.close()
+ except RuntimeError:
+  return _newsletter_page("Please try again later","The subscription service is temporarily unavailable."),503
+
+@app.route("/newsletter/unsubscribe",methods=["GET","POST"])
+def newsletter_unsubscribe_page():
+ token=str(request.values.get("token") or "")
+ if request.method=="GET":
+  form='<form method="post" action="/newsletter/unsubscribe"><input type="hidden" name="token" value="'+html.escape(token[:1000],quote=True)+'"><button class="btn" type="submit">Unsubscribe from emails</button></form>'
+  return _newsletter_page("Unsubscribe","Stop receiving PoliticsHub Brief emails immediately, without logging in.",form)
+ try:
+  database=db()
+  try:unsubscribe_token(database,token,app.secret_key)
+  finally:database.close()
+ except RuntimeError:return _newsletter_page("Please try again later","We could not process this right now."),503
+ return _newsletter_page("Unsubscribed","This subscription has been stopped. No further PoliticsHub Brief emails will be sent.")
+
+@app.post("/api/newsletter/one-click")
+def newsletter_one_click():
+ # Mailbox providers send this explicit POST. GET requests never unsubscribe.
+ if request.form.get("List-Unsubscribe")!="One-Click":
+  return jsonify({"error":"Invalid unsubscribe request"}),400
+ try:
+  database=db()
+  try:unsubscribe_token(database,str(request.args.get("token") or ""),app.secret_key)
+  finally:database.close()
+ except RuntimeError:return jsonify({"error":"Temporary error"}),503
+ return Response(status=204)
 
 @app.delete("/api/newsletter")
-def newsletter_unsubscribe():
- if not _public_rate_allowed(20,3600):return jsonify({"error":"too many requests"}),429
- body=request.get_json(silent=True) or request.form.to_dict() or {}; email=str(body.get("email","")).strip().lower()
- if not re.fullmatch(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",email):return jsonify({"error":"Enter a valid email address"}),400
+def newsletter_unsubscribe_by_email():
+ """No third party may remove an account by merely knowing its email address."""
+ if not _public_rate_allowed(8,3600):return jsonify({"error":"Too many requests."}),429
+ email=str((request.get_json(silent=True) or {}).get("email") or "").strip().lower()
+ if not valid_email(email):return jsonify({"error":"Enter a valid email address."}),400
+ if not mail_configured():return jsonify({"error":"Email service temporarily unavailable"}),503
  try:
   database=db()
-  try: database.unsubscribe_newsletter(email); return jsonify({"ok":True,"message":"If that address was subscribed, it has been removed."})
-  finally: database.close()
- except RuntimeError:
-  return jsonify({"error":"newsletter service unavailable"}),503
+  try:
+   ensure_newsletter_tables(database)
+   ph="%s" if database._postgres else "?"
+   row=database.conn.execute(f"SELECT * FROM newsletter_optins WHERE email={ph} AND status='active'",(email,)).fetchone()
+   if row:
+    row=dict(row)
+    last=row.get("last_manage_mail_at")
+    can_send=True
+    if last:
+     try:can_send=datetime.now(timezone.utc)-datetime.fromisoformat(last.replace("Z","+00:00"))>timedelta(minutes=30)
+     except ValueError:pass
+    if can_send:
+     send_mail(email,"Manage your PoliticsHub Brief subscription","Unsubscribe confirmation link",[
+      "We received a request to stop PoliticsHub Brief emails for this address.",
+      "Use the secure button to confirm. If you didn't request this, simply ignore this message."
+     ],action=("Unsubscribe",email_unsubscribe_link(row["subscriber_id"],app.secret_key)))
+     database.conn.execute(f"UPDATE newsletter_optins SET last_manage_mail_at={ph} WHERE email={ph}",(iso(),email))
+     if not database._postgres:database.conn.commit()
+  finally:database.close()
+  return jsonify({"ok":True,"message":"If this email is subscribed, we've sent a secure unsubscribe link."})
+ except Exception:return jsonify({"error":"Could not send the link right now. Please try again later."}),503
+
+@app.get("/api/newsletter/daily")
+def newsletter_daily():
+ expected=os.getenv("CRON_SECRET","")
+ supplied=request.headers.get("Authorization","")
+ if not expected or not secrets.compare_digest(supplied,"Bearer "+expected):
+  return jsonify({"error":"Unauthorized"}),401
+ if not mail_configured():return jsonify({"error":"Gmail delivery is not configured"}),503
+ story=_newsletter_current_story()
+ if not story:return jsonify({"ok":True,"sent":0,"reason":"No recent source-linked story"}),200
+ try:
+  database=db()
+  try:
+   # Retry delayed welcome and owner mail before sending new daily briefs.
+   ensure_newsletter_tables(database)
+   pending=database.conn.execute("""SELECT * FROM newsletter_optins WHERE status='active'
+     AND (welcome_sent_at IS NULL OR owner_sent_at IS NULL) ORDER BY confirmed_at LIMIT 5""").fetchall()
+   for row in pending:
+    record=dict(row)
+    if not record.get("welcome_sent_at"):
+     try:send_welcome(database,record,story,app.secret_key)
+     except Exception:pass
+    if not record.get("owner_sent_at"):
+     try:send_owner_alert(database,record)
+     except Exception:pass
+   sent=send_daily(database,story,app.secret_key)
+   return jsonify({"ok":True,"sent":sent,"story":story["title"]}),200
+  finally:database.close()
+ except RuntimeError:return jsonify({"error":"Newsletter database unavailable"}),503
 
 @app.get("/api/seo-section/<category>")
 @app.get("/<category>/")
