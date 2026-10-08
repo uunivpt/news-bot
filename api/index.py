@@ -6,10 +6,12 @@ import json, os, re, secrets, time, html, io
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+from email.utils import parsedate_to_datetime
+from urllib.parse import quote
 from flask import Flask, jsonify, request, session, send_from_directory, redirect, Response
 from werkzeug.security import check_password_hash, generate_password_hash
 from app.article_fetcher import enrich_source_text
-from app.database import NewsDatabase
+from app.database import NewsDatabase, DatabaseUnavailable
 from app.models import NewsItem
 from app.factcheck import run_cross_source_check
 from app.newsroom import process_news, story_score, is_breaking, dedupe_story_rows, quality_headline, is_telegram_image
@@ -81,7 +83,10 @@ def _public_rate_key():
  return (request.remote_addr or "unknown")[:128]
 
 def _public_rate_allowed(limit=120,window=60):
- key=_public_rate_key(); now=time.time(); bucket=_PUBLIC_RATE.get(key)
+ key=(_public_rate_key(),request.endpoint,limit,window); now=time.time(); bucket=_PUBLIC_RATE.get(key)
+ if len(_PUBLIC_RATE)>5000:
+  for old_key,old_bucket in list(_PUBLIC_RATE.items()):
+   if now-old_bucket[0]>=old_key[3]:_PUBLIC_RATE.pop(old_key,None)
  if not bucket or now-bucket[0]>=window:
   _PUBLIC_RATE[key]=[now,1]; return True
  if bucket[1]>=limit:return False
@@ -122,6 +127,11 @@ def _public_timestamp(row):
    if not dt.tzinfo:dt=dt.replace(tzinfo=timezone.utc)
    return dt.timestamp()
   except ValueError:
+   pass
+  try:
+   dt=parsedate_to_datetime(normalized)
+   if dt.tzinfo is not None:return dt.timestamp()
+  except (ValueError,TypeError,OverflowError):
    pass
   for fmt in ("%d %b %Y %H:%M","%d %b %Y"):
    try:
@@ -199,8 +209,21 @@ def _section_html(category="all"):
  body+='<div class="sh"><h2>Latest stories</h2><span class="lbl">'+str(len(rows))+' stories</span></div><div class="grid">'+"".join(cards)+'</div>'
  return '<!doctype html><html lang="en" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home"><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui13"></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="#/settings">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=phui13"></script></body></html>'
 
+_db_retry_after=0.0
+
 def db():
- database=NewsDatabase(); _ensure_admin_users(database); _bootstrap_news_snapshot(database); return database
+ global _db_retry_after
+ if time.monotonic() < _db_retry_after:
+  raise DatabaseUnavailable("Database temporarily unavailable")
+ try:
+  database=NewsDatabase()
+ except DatabaseUnavailable:
+  _db_retry_after=time.monotonic()+30
+  raise
+ # Public reads must never seed old snapshots into a production database.
+ if request.path.startswith("/api/admin/"):
+  _ensure_admin_users(database)
+ return database
 
 def admin_ok():
  if session.get("admin_user"):return True
@@ -368,14 +391,14 @@ def _public_row_by_id(item_id):
   database=db()
   try:
    row=database.get_by_id(int(item_id),"published")
-   if row:return _publicize(row)
+   return _publicize(row) if row else None
   finally: database.close()
  except RuntimeError:
   pass
  for item in _snapshot_rows("all"):
   if str(item.get("id"))==str(item_id):return _publicize(item)
  proxied=_proxy_public("/api/news/"+str(int(item_id)))
- return proxied.json() if proxied is not None and getattr(proxied,"status_code",500)<400 else None
+ return proxied.get_json(silent=True) if proxied is not None and proxied.status_code<400 else None
 
 def _article_html(row):
  row=dict(row); title=str(row.get("title") or "PoliticsHub.in"); category=str(row.get("category") or "India")
@@ -386,6 +409,7 @@ def _article_html(row):
  body=str(row.get("article") or row.get("bot_article") or row.get("body") or summary)
  source=str(row.get("source_name") or "PoliticsHub.in")
  image=SITE_ORIGIN+"/api/og/"+str(row.get("id"))
+ share_title=quote(title,safe=""); share_url=quote(canonical,safe="")
  pub_iso=str(published or datetime.now(timezone.utc).isoformat())
  if pub_iso and not re.search(r"[+-]\d\d:\d\d|Z$",pub_iso): pub_iso=pub_iso+"Z"
  data={
@@ -395,6 +419,7 @@ def _article_html(row):
   "publisher":{"@type":"Organization","name":"PoliticsHub.in","url":SITE_ORIGIN},
   "mainEntityOfPage":{"@type":"WebPage","@id":canonical},"isAccessibleForFree":True
  }
+ json_ld=json.dumps(data,ensure_ascii=False).replace("<", "\\u003c")
  paras="".join(f"<p>{html.escape(p.strip())}</p>" for p in re.split(r"\n+",body) if p.strip())
  return f"""<!doctype html>
 <html lang="en"><head>
@@ -408,7 +433,7 @@ def _article_html(row):
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="{html.escape(title)}"><meta name="twitter:description" content="{html.escape(summary[:200])}"><meta name="twitter:image" content="{html.escape(image)}">
 <meta property="article:section" content="{html.escape(category)}"><meta property="article:published_time" content="{html.escape(pub_iso)}">
 <link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui13">
-<script type="application/ld+json">{json.dumps(data,ensure_ascii=False)}</script>
+<script type="application/ld+json">{json_ld}</script>
 </head><body>
 <header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><div class="acts"><a class="ib" href="/" aria-label="Home">⌂</a><a class="ib" href="/about.html" aria-label="About">i</a></div></div></header>
 <main class="wrap"><article class="art" data-k="{html.escape(category.lower())}">
@@ -418,10 +443,10 @@ def _article_html(row):
 <div class="body">{paras}</div>
 <div class="src"><strong>Source transparency:</strong> This is a source-linked brief prepared from the originating report. When multiple independent sources are available, PoliticsHub compares their reported details; otherwise no independent reporting claim is made.</div>
 <div class="src">Source: {html.escape(source)}. {"<a href='"+html.escape(str(row.get("url")))+"' rel='nofollow noopener' target='_blank'>Read the original report</a>" if row.get("url") else ""}</div>
-<div class="article-share"><span>SHARE</span><a href="https://wa.me/?text={html.escape(title)}%20{html.escape(canonical)}">WhatsApp</a><a href="https://t.me/share/url?url={html.escape(canonical)}&text={html.escape(title)}">Telegram</a><a href="https://www.facebook.com/sharer/sharer.php?u={html.escape(canonical)}">Facebook</a><a href="https://twitter.com/intent/tweet?text={html.escape(title)}&url={html.escape(canonical)}">X</a></div>
+<div class="article-share"><span>SHARE</span><a href="https://wa.me/?text={share_title}%20{share_url}">WhatsApp</a><a href="https://t.me/share/url?url={share_url}&amp;text={share_title}">Telegram</a><a href="https://www.facebook.com/sharer/sharer.php?u={share_url}">Facebook</a><a href="https://twitter.com/intent/tweet?text={share_title}&amp;url={share_url}">X</a></div>
 </article></main>
 <footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><p class="ser">Source-linked news. Clearly.</p></div><div><h4>Navigate</h4><ul><li><a href="/">Home</a></li><li><a href="/about.html">About</a></li><li><a href="/editorial-policy.html">Editorial Policy</a></li><li><a href="/corrections.html">Corrections</a></li><li><a href="/contact.html">Contact</a></li><li><a href="/disclaimer.html">Disclaimer</a></li><li><a href="/privacy.html">Privacy</a></li><li><a href="/cookies.html">Cookies</a></li><li><a href="/terms.html">Terms</a></li><li><a href="/newsletter.html">Newsletter</a></li><li><a href="/settings.html">Settings</a></li><li><a href="/debug.html">System Status</a></li></ul></div><div><h4>Contact</h4><ul><li><a href="mailto:politicshub.in@gmail.com">politicshub.in@gmail.com</a></li></ul></div></div></footer>
-<script src="/assets/site.js?v=phui13"></script>
+<script src="/assets/story-page.js"></script>
 </body></html>"""
 
 def _og_image(item_id):
@@ -492,7 +517,9 @@ def security_headers(response):
  response.headers["X-Permitted-Cross-Domain-Policies"]="none"
  if request.path.startswith("/api/admin") or (request.path.startswith("/api/") and admin_ok()):
   response.headers["Cache-Control"]="no-store, no-cache, must-revalidate, max-age=0"
- elif request.method=="GET" and request.path.startswith("/api/"):
+ elif request.path=="/api/health" or response.status_code>=400:
+  response.headers["Cache-Control"]="no-store"
+ elif request.method=="GET" and request.path.startswith("/api/") and "Cache-Control" not in response.headers:
   response.headers["Cache-Control"]="public, max-age=10, s-maxage=10, stale-while-revalidate=20"
  return response
 
@@ -631,9 +658,17 @@ def me():return jsonify({"authenticated":bool(session.get("admin_user")),"userna
 
 @app.get("/api/health")
 def health():
- database=db()
- try:return jsonify({"ok":True})
- finally:database.close()
+ try:
+  database=db()
+  try:
+   rows=database.latest(1,"all","published")
+   newest=_public_timestamp(dict(rows[0])) if rows else None
+  finally:database.close()
+  return jsonify({"ok":True,"mode":"live","latest_published_at":datetime.fromtimestamp(newest,timezone.utc).isoformat() if newest else None})
+ except RuntimeError:
+  rows=_snapshot_rows()
+  newest=max((_public_timestamp(r) for r in rows),default=0)
+  return jsonify({"ok":False,"mode":"snapshot" if rows else "unavailable","latest_published_at":datetime.fromtimestamp(newest,timezone.utc).isoformat() if newest else None}),503
 
 @app.get("/api/news")
 def news():
@@ -657,14 +692,16 @@ def news():
     rows=[x for x in rows if q in str(x.get("title") or "").lower() or q in str(x.get("summary") or x.get("bot_summary") or "").lower()]
    rows=_rank_public(rows)
    rows=dedupe_story_rows(rows,threshold=0.78)
-   return jsonify(rows_json(rows[:limit],compact=compact))
+   response=jsonify(rows_json(rows[:limit],compact=compact))
+   response.headers["X-News-Mode"]="snapshot"
+   response.headers["Cache-Control"]="no-store"
+   return response
   except Exception as snapshot_exc:
    print(f"News snapshot fallback failed: {snapshot_exc}")
    return jsonify({"error":"news backend unavailable"}),503
  try:
   rows=_rank_public(database.latest(max(limit*6,limit),category,status,search,review,ig))
-  if not admin_ok():
-   rows.extend(_snapshot_rows(category,search))
+  # A healthy database is authoritative; never resurrect removed stories.
   rows=_rank_public(rows)
   rows=dedupe_story_rows(rows,threshold=0.78)
   return jsonify(rows_json(rows[:limit],compact=compact))
@@ -682,7 +719,7 @@ def public_search():
   return jsonify(rows_json(_rank_public(_snapshot_rows("all",q))[:limit]))
  try:
   rows=_rank_public(database.latest(min(limit*8,400),"all","published",q))
-  rows.extend(_snapshot_rows("all",q))
+  # Snapshot is only used when the database is unavailable.
   rows=_rank_public(rows)
   rows=dedupe_story_rows(rows,threshold=0.78)
   return jsonify(rows_json(rows[:limit]))
@@ -727,13 +764,13 @@ def article_view(item_id):
 def article(item_id):
  try:database=db()
  except RuntimeError:
+  snapshot=next((x for x in _snapshot_rows("all") if str(x.get("id"))==str(item_id)),None)
+  if snapshot:return jsonify(_publicize(snapshot))
   proxied=_proxy_public("/api/news/"+str(item_id))
   return proxied or (jsonify({"error":"news backend unavailable"}),503)
  try:
   row=database.get_by_id(item_id,"all")
   if row and (row["status"]=="published" or admin_ok()):return jsonify(_publicize(row))
-  snapshot=next((x for x in _snapshot_rows("all") if str(x.get("id"))==str(item_id)),None)
-  if snapshot:return jsonify(_publicize(snapshot))
   return jsonify({"error":"not found"}),404
  finally:database.close()
 

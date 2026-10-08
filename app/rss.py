@@ -28,8 +28,8 @@ def collect_rss(source: dict[str, Any]) -> list[NewsItem]:
     response = requests.get(url, headers=HEADERS, timeout=timeout)
     response.raise_for_status()
     feed = feedparser.parse(response.content)
-    if getattr(feed, "bozo", False) and not feed.entries:
-        return []
+    if not feed.entries and (getattr(feed, "bozo", False) or not getattr(feed, "version", "")):
+        raise ValueError("Source did not return a valid RSS or Atom feed")
 
     items: list[NewsItem] = []
     max_items = min(max(int(source.get("max_items", 50)), 1), 200)

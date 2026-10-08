@@ -79,6 +79,9 @@ MIGRATIONS = {
 }
 DEFAULT_SETTINGS={"instagram_enabled":"true","instagram_daily_limit":"5","instagram_selection_mode":"auto","instagram_interval_minutes":"0","website_enabled":"true","instagram_paused":"false","instagram_priority_id":""}
 
+class DatabaseUnavailable(RuntimeError):
+ """Safe, actionable connection failure without credentials or host details."""
+
 class NewsDatabase:
  _schema_initialized=set()
  def __init__(self,path="data/news.db",database_url=None):
@@ -101,9 +104,14 @@ class NewsDatabase:
      break
     except psycopg.OperationalError as exc:
      last_error = exc
-     print(f"Database connection attempt {attempt}/4 failed; retrying: {exc}")
+     detail=str(exc).lower()
+     if "exceeded the quota" in detail or "quota exceeded" in detail:
+      raise DatabaseUnavailable("Database quota exhausted; restore capacity in the database provider console.") from None
+     if "password authentication failed" in detail:
+      raise DatabaseUnavailable("Database credentials rejected; check DATABASE_URL.") from None
+     print(f"Database connection attempt {attempt}/3 failed")
    else:
-    raise last_error
+    raise DatabaseUnavailable("Database connection unavailable after three attempts") from None
    self.conn.autocommit=True
    schema_key="postgres:"+self.database_url
    if schema_key not in self._schema_initialized:
@@ -112,6 +120,7 @@ class NewsDatabase:
     self._migrate_postgres()
     for statement in INDEXES.split(";"):
      if statement.strip(): self.conn.execute(statement.strip())
+    self._seed_settings()
     self._schema_initialized.add(schema_key)
   else:
    # Vercel's filesystem is read-only. SQLite is only a local-development fallback.
@@ -121,8 +130,8 @@ class NewsDatabase:
    schema_key="sqlite:"+str(self.path.resolve())
    if schema_key not in self._schema_initialized:
     self.conn.executescript(SCHEMA.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")); self.conn.executescript(ADMIN_SCHEMA); self.conn.executescript(ACTIVITY_SCHEMA.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")); self.conn.executescript(NEWSLETTER_SCHEMA); self.conn.executescript(AUTH_SCHEMA.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")); self._migrate_sqlite(); self.conn.executescript(INDEXES); self.conn.commit()
+    self._seed_settings()
     self._schema_initialized.add(schema_key)
-  self._seed_settings()
  def _migrate_postgres(self):
   for sql in MIGRATIONS.values():
    try:self.conn.execute(sql)
@@ -144,7 +153,7 @@ class NewsDatabase:
  def set_settings(self,values):
   now=NewsItem.now_iso()
   for key,value in values.items():
-   if key not in DEFAULT_SETTINGS:continue
+   if key not in DEFAULT_SETTINGS and not key.startswith("collector_last:"):continue
    value=str(value)
    if self._postgres:self.conn.execute("INSERT INTO admin_settings (key,value,updated_at) VALUES (%s,%s,%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value,updated_at=EXCLUDED.updated_at",(key,value,now))
    else:self.conn.execute("INSERT INTO admin_settings (key,value,updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at",(key,value,now))

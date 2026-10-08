@@ -9,6 +9,9 @@ concurrency:
   group: news-collector
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   collect:
     runs-on: ubuntu-latest
@@ -20,6 +23,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
       - name: Install dependencies
         run: pip install -r requirements.txt
       - name: Run collector once
@@ -27,4 +31,6 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
           NEWSDATA_API_KEY: ${{ secrets.NEWSDATA_API_KEY }}
-        run: python run.py --once
+        run: |
+          test -n "$DATABASE_URL" || { echo "::error::DATABASE_URL is missing; refusing to collect into ephemeral SQLite."; exit 1; }
+          python run.py --once
