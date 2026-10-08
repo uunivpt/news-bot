@@ -121,7 +121,7 @@ def build_story_props(news: dict) -> dict:
         "AUDIO": False,
         "LOGO": None,
         "DEBUG_SAFE": False,
-        "TEMPLATE": "nana-tribute" if re.search(r"\\bnana patekar dies at 75\\b", _reel_headline(news), re.I) else None,
+        "TEMPLATE": "nana-tribute" if "nana patekar dies at 75" in _reel_headline(news).lower() else None,
     }
 
 
