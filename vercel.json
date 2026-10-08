@@ -178,5 +178,11 @@
       "source": "/hindi/",
       "destination": "/api/seo-section/hindi"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/newsletter/daily",
+      "schedule": "0 4 * * *"
+    }
   ]
 }

@@ -311,3 +311,23 @@ html{font-synthesis:none}
  .ph14-datebar{gap:10px!important;flex-wrap:wrap}
  .ph14-lead{min-width:0!important}
 }
+
+/* PoliticsHub Brief: high-contrast, accessible signup surfaces */
+.ph-subscribe-top{background:#ed2939;color:white!important;border-radius:7px;padding:10px 15px;font:700 12px/1.2 Inter,sans-serif;letter-spacing:.02em;white-space:nowrap;text-decoration:none}
+.ph-subscribe-top:hover{background:#c8172b;color:#fff}
+.ph14-newsletter{margin:30px 0 38px;padding:clamp(22px,4vw,48px);border:1px solid var(--line);border-radius:16px;background:var(--card);display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:center}
+.ph14-newsletter-eyebrow{display:block;color:#e11d30;font:800 11px/1.5 Inter,sans-serif;letter-spacing:.18em}
+.ph14-newsletter h2{font:800 clamp(25px,3.3vw,46px)/1.06 'Bricolage Grotesque',sans-serif;letter-spacing:-.04em;margin:14px 0 16px;color:var(--ink)}
+.ph14-newsletter p{color:var(--mut);font-size:14px;line-height:1.6}
+.ph14-newsletter form{display:flex;flex-direction:column;gap:10px}
+.ph14-newsletter-label{font:700 13px/1.4 Inter,sans-serif;color:var(--ink)}
+.ph14-newsletter-fields{display:flex;gap:8px}
+.ph14-newsletter-fields input{flex:1;min-width:0;padding:14px 15px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:15px}
+.ph14-newsletter-fields .btn{border-radius:8px;white-space:nowrap;background:#e11d30;color:#fff}
+.ph14-newsletter-check{display:flex;align-items:flex-start;gap:8px;color:var(--mut);font-size:12px;line-height:1.5}
+.ph14-newsletter-check input{accent-color:#e11d30;margin-top:3px;flex:none}
+.ph14-newsletter-check a{text-decoration:underline}
+.ph14-newsletter-message{font-weight:700;min-height:18px}
+.ph14-newsletter-hint{font-size:11px!important}
+@media(max-width:800px){.ph14-newsletter{grid-template-columns:1fr;gap:20px}}
+@media(max-width:480px){.ph14-newsletter-fields{flex-direction:column}.ph14-newsletter-fields .btn{width:100%}.ph-subscribe-top{padding:8px 10px;font-size:11px}}
