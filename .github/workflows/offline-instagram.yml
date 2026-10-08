@@ -1,0 +1,73 @@
+name: Emergency Instagram News (No Database)
+
+on:
+  schedule:
+    - cron: "23 */2 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/offline_instagram.py"
+      - ".github/workflows/offline-instagram.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: emergency-instagram-news
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout production main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install media utilities
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Install Chrome for Remotion
+        uses: browser-actions/setup-chrome@v2
+        with:
+          chrome-version: stable
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+      - name: Install Remotion
+        run: npm install --prefix reel --omit=dev --no-audit --no-fund
+      - name: Publish source-backed news Reel
+        env:
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          META_INSTAGRAM_ACCOUNT_ID: ${{ secrets.META_INSTAGRAM_ACCOUNT_ID }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_UPLOAD_PRESET: ${{ secrets.CLOUDINARY_UPLOAD_PRESET }}
+          FIXED_AUDIO_PATH: ${{ secrets.FIXED_AUDIO_PATH }}
+          FIXED_AUDIO_URL: ${{ secrets.FIXED_AUDIO_URL }}
+          REMOTION_RENDER_TIMEOUT: "900"
+          RENDER_CONCURRENCY: "2"
+        run: PYTHONPATH=. python scripts/offline_instagram.py
+      - name: Save confirmed publication receipt
+        run: |
+          if [ ! -f public/instagram-offline-ledger.json ]; then
+            echo "No new Reel was published."
+            exit 0
+          fi
+          if git diff --quiet -- public/instagram-offline-ledger.json; then
+            echo "No new publication receipt."
+            exit 0
+          fi
+          git config user.name "politicshub-feed-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/instagram-offline-ledger.json
+          git commit -m "Record confirmed emergency Instagram Reel"
+          git pull --rebase origin main
+          git push origin HEAD:main
