@@ -17,6 +17,7 @@ from urllib.parse import urlsplit
 
 from app.collector import load_sources
 from app.news_api import collect_newsdata
+from app.category_routing import normalize_category
 from app.rss import collect_rss
 
 OUTPUT = Path("public/news-data.json")
@@ -90,7 +91,7 @@ def public_story(item, now):
         "summary": summary,
         "bot_summary": summary,
         "bot_article": "",
-        "category": str(item.category or "india").lower(),
+        "category": normalize_category(item.category or "india", title, summary),
         "image_url": None,
         "public_source": True,
     }
@@ -106,6 +107,7 @@ def build(current, collected, now):
         if not published or published > now + timedelta(minutes=30) or now - published > ARCHIVE_AGE:
             continue
         key = str(row["url"]).strip()
+        row["category"] = normalize_category(row.get("category"), row.get("title"), row.get("summary") or row.get("bot_summary"))
         indexed[key] = row
         old_keys.add(key)
 
@@ -169,8 +171,14 @@ def main():
         raise SystemExit(1)
 
     result, fresh = build(current, collected, now)
-    if fresh == 0:
-        log.info("No newly eligible stories; current public snapshot unchanged")
+    # Apply editorial recategorization even when the source offers no fresh item.
+    changed_categories = any(
+        isinstance(row, dict)
+        and normalize_category(row.get("category"), row.get("title"), row.get("summary") or row.get("bot_summary")) != str(row.get("category") or "india").strip().lower()
+        for row in current
+    )
+    if fresh == 0 and not changed_categories:
+        log.info("No newly eligible stories or editorial changes; public snapshot unchanged")
         return
 
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
