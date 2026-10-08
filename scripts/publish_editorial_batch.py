@@ -12,6 +12,7 @@ import os
 import re
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -21,14 +22,22 @@ from app.cloudinary_storage import upload_image
 from app.image_acquisition import prepare_story_image
 from app.meta_instagram import _cfg, _resolve_instagram_user, publish_photo, InstagramRateLimitError
 from scripts.offline_snapshot import parse_date, valid_url
+from scripts.offline_instagram import COOLDOWN, MAX_DAILY_POSTS
 
 FEED = Path("public/news-data.json")
 LEDGER = Path("public/instagram-offline-ledger.json")
 OUTPUT = Path("data/editorial_batch")
-BATCH_SIZE = 5
+BATCH_SIZE = 1
 
 def select_stories(rows, ledger, now, posted_titles=None, limit=BATCH_SIZE):
-    seen_urls = {str(p.get("url") or "") for p in ledger.get("posts", []) if isinstance(p, dict)}
+    receipts = [p for p in ledger.get("posts", []) if isinstance(p, dict)]
+    seen_urls = {str(p.get("url") or "") for p in receipts}
+    posted = [date for p in receipts if (date := parse_date(p.get("published_at")))]
+    local_date = now.astimezone(ZoneInfo("Asia/Kolkata")).date()
+    count_today = sum(date.astimezone(ZoneInfo("Asia/Kolkata")).date() == local_date for date in posted)
+    if count_today >= MAX_DAILY_POSTS or (posted and now - max(posted) < COOLDOWN):
+        return []
+    slots_today = MAX_DAILY_POSTS - count_today
     posted_titles = posted_titles or set()
     eligible = []
     for row in rows:
@@ -50,7 +59,7 @@ def select_stories(rows, ledger, now, posted_titles=None, limit=BATCH_SIZE):
         if any(title.lower() in caption.lower() for caption in posted_titles):
             continue
         eligible.append(row)
-    return eligible[:max(0, min(5, limit))]
+    return eligible[:max(0, min(BATCH_SIZE, limit, slots_today))]
 
 def instagram_recent_captions():
     token, configured, version, host = _cfg()
