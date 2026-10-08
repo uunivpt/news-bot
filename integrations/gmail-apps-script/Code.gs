@@ -12,6 +12,18 @@ function relayJson_(value) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+
+/** Run this once from the Apps Script editor to grant Mail permission.
+ * This does not send any email.
+ */
+function authorizeMail() {
+  const identity = String(Session.getEffectiveUser().getEmail() || '').toLowerCase();
+  if (identity !== POLITICSHUB_SENDER) {
+    throw new Error('Use the PoliticsHub sender Gmail account for authorization.');
+  }
+  return MailApp.getRemainingDailyQuota();
+}
+
 function doPost(e) {
   const props = PropertiesService.getScriptProperties();
   const secret = props.getProperty('PH_RELAY_TOKEN');
