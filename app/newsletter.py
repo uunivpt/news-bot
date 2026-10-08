@@ -132,7 +132,7 @@ def _text_only(value, limit=500):
 
 
 def send_mail(to, subject, title, paragraphs, action=None, unsubscribe=None, one_click=False):
-    """Send authenticated mail from the exact PoliticsHub Gmail identity."""
+    """Submit mail through the configured provider; acceptance is not delivery."""
     host, port, username, password, sender = _outbound_settings()
     recipient = to.strip().lower()
     if not valid_email(recipient):
@@ -146,12 +146,19 @@ def send_mail(to, subject, title, paragraphs, action=None, unsubscribe=None, one
     msg = EmailMessage()
     msg["From"] = "PoliticsHub.in <" + sender + ">"
     msg["Date"] = format_datetime(now_utc())
-    msg["Message-ID"] = make_msgid(domain="politicshub.in")
+    # The Message-ID domain must not imply this personal Gmail SMTP account
+    # has authenticated mail for politicshub.in. Gmail itself may replace or
+    # supply a Message-ID during submission; custom SMTP gets its own domain.
+    if host != "smtp.gmail.com":
+        msg["Message-ID"] = make_msgid(domain=sender.rsplit("@", 1)[-1])
     msg["To"] = recipient
     msg["Subject"] = subject
     msg["Reply-To"] = OWNER
     if unsubscribe:
-        msg["List-ID"] = "PoliticsHub Brief <brief.politicshub.in>"
+        # Newsletter List-ID should not impersonate a domain that is not
+        # authenticated by the active Gmail sender. Preserve one-click unsubscribe.
+        if host != "smtp.gmail.com":
+            msg["List-ID"] = "PoliticsHub Brief <brief.politicshub.in>"
         msg["List-Unsubscribe"] = "<" + unsubscribe.replace("/newsletter/unsubscribe?", "/api/newsletter/one-click?") + ">"
         msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
     msg.set_content(title + "\n\n" + body_text + footer)
