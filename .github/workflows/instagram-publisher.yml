@@ -16,13 +16,13 @@ on:
     paths:
       - ".github/workflows/instagram-publisher.yml"
 
-concurrency:
-  group: instagram-reel-worker-production
-  cancel-in-progress: false
-
 jobs:
   publish:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    # Skipped jobs must not replace a pending outage worker in this group.
+    concurrency:
+      group: instagram-reel-worker-production
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
