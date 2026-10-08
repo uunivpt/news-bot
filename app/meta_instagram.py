@@ -148,3 +148,33 @@ def publish_existing_container(container):
             raise RuntimeError(f"Instagram media container ERROR: container={container}; status={data}")
         time.sleep(min(15,8+attempt))
     raise TimeoutError(f"Instagram existing container timeout: container={container}; last_status={last}")
+
+def publish_photo(image_url: str, caption: str) -> dict:
+    """Publish a single 4:5 editorial photo on a connected Instagram account."""
+    token,configured,version,host=_cfg()
+    if not token:
+        raise RuntimeError("Instagram access token is missing")
+    if not image_url.startswith("https://"):
+        raise ValueError("Instagram photo must have an HTTPS URL")
+    base=f"{host}/{version}"
+    account=_resolve_instagram_user(base,token,configured)
+    response=requests.post(
+        f"{base}/{account}/media",
+        data={"image_url":image_url,"caption":caption,"access_token":token},
+        timeout=60,
+    )
+    _raise_meta(response,"editorial image container creation")
+    container=str(response.json().get("id") or "")
+    if not container:
+        raise RuntimeError("Meta returned no Instagram image container id")
+    for attempt in range(12):
+        result=_container_status(base,token,container)
+        status=str(result.get("status_code") or "").upper()
+        if status in {"FINISHED","PUBLISHED"}:
+            break
+        if status=="ERROR":
+            raise RuntimeError("Meta rejected editorial image container")
+        time.sleep(min(8+attempt,15))
+    else:
+        raise TimeoutError("Instagram photo container processing timed out")
+    return _publish_existing_container(base,token,account,container)
