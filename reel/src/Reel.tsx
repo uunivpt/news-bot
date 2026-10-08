@@ -2,8 +2,9 @@ import React, {useEffect, useMemo, useState} from 'react';
 import '@fontsource/barlow-condensed/700.css';
 import {AbsoluteFill, Audio, Img, continueRender, cancelRender, delayRender, staticFile, useCurrentFrame} from 'remotion';
 import {fitText} from './layout.mjs';
+import {NanaTribute} from './NanaTribute';
 
-export type Story = {HEADLINE:string; IMAGE?:string|null; CATEGORY:string; DATE:string; LOCATION:string; SOURCE:string; SUMMARY:string; AUDIO?:boolean; LOGO?:string|null; DEBUG_SAFE?:boolean};
+export type Story = {HEADLINE:string; IMAGE?:string|null; CATEGORY:string; DATE:string; LOCATION:string; SOURCE:string; SUMMARY:string; AUDIO?:boolean; LOGO?:string|null; DEBUG_SAFE?:boolean; TEMPLATE?:string};
 const W=936, LEFT=72, WHITE='#FFFFFF', GREY='#A0A0A0', RED='#FF2D2D';
 const asset=(path:string)=>/^(https?:|data:|blob:)/.test(path)?path:staticFile(path.replace(/^\//,''));
 const clamp=(n:number)=>Math.min(1,Math.max(0,n));
@@ -63,6 +64,7 @@ export const Reel:React.FC<Story>=(p)=>{
   const f=useCurrentFrame();
   const a=useAssets(p.IMAGE,p.LOGO);
   if(!a.ready)return <AbsoluteFill style={{background:'#000'}}/>;
+  if(p.TEMPLATE==='nana-tribute')return <NanaTribute DATE={p.DATE} SOURCE={p.SOURCE}/>;
   const intro=f<45, category=f>=45&&f<120, headline=f>=120&&f<300, summary=f>=300&&f<450, credit=f>=450&&f<480, outro=f>=480;
   const glitch=[45,120,300,450,480].some(at=>f>=at&&f<at+2);
   const shake=intro&&f>=8&&f<20?Math.sin(f*2.3)*6*(1-ramp(f,8,12)):outro&&f<488?Math.sin(f*2)*4*(1-ramp(f,480,8)):0;
