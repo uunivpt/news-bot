@@ -7,6 +7,7 @@ from typing import Any
 import requests
 
 from .models import NewsItem
+from .category_routing import normalize_category
 
 _TIMEOUT = max(5, int(os.getenv("NEWS_API_TIMEOUT_SECONDS", "12")))
 
@@ -62,7 +63,7 @@ def collect_newsapi(source: dict[str, Any]) -> list[NewsItem]:
             published_at=published,
             summary=str(article.get("description") or article.get("content") or "").strip(),
             external_id=external_id,
-            category=source.get("route_category") or ("india" if str(source.get("country") or "").lower() == "in" else source.get("category", "general")),
+            category=normalize_category(source.get("route_category") or ("india" if str(source.get("country") or "").lower() == "in" else source.get("category", "general")), title, str(article.get("description") or article.get("content") or "")),
             image_url=str(article.get("urlToImage") or "").strip() or None,
             public_source=True,
         ))
@@ -128,6 +129,7 @@ def collect_newsdata(source: dict[str, Any]) -> list[NewsItem]:
             "world": "world",
         }
         category = next((category_map[value] for value in normalized_categories if value in category_map), "india")
+        category = normalize_category(category, title, description)
 
         items.append(NewsItem(
             source_name=source_name,
