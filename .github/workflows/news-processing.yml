@@ -16,11 +16,11 @@ on:
       - "scripts/export_public_snapshot.py"
       - "requirements.txt"
       - ".github/workflows/news-processing.yml"
-  # The 5-minute collector triggers this workflow via workflow_run.
+  # The 30-minute collector triggers this workflow via workflow_run.
   # Keep only a low-frequency fallback schedule so duplicate newsroom runs
   # cannot build a stale processing queue.
   schedule:
-    - cron: "17,47 * * * *"
+    - cron: "17 */3 * * *"
   workflow_run:
     workflows: ["News Collector"]
     types: [completed]
@@ -82,8 +82,8 @@ jobs:
           PYTHONPATH: .
           PUBLISH_WEBSITE: "true"
           PUBLISH_TO_INSTAGRAM: "false"
-          MAX_ITEMS: "15"
-          BOT_REPAIR_ITEMS: "10"
+          MAX_ITEMS: "10"
+          BOT_REPAIR_ITEMS: "3"
         run: python scripts/auto_publish.py
       - name: Export public snapshot and sitemaps
         env:
