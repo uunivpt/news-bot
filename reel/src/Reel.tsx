@@ -84,7 +84,8 @@ export const Reel:React.FC<Story>=(p)=>{
         <div style={{height:4,width:145,background:RED,marginTop:32}}/>
       </div>
       <div style={{position:'absolute',left:LEFT,top:1540,width:W,fontSize:25,color:GREY,letterSpacing:4}}>THE STORY. THE FACTS. THE SOURCE.</div>
-    </>}    {(category||headline||summary)&&<>
+    </>}
+    {(category||headline||summary)&&<>
       <div style={{position:'absolute',left:LEFT,top:292,width:W,transform:category?`translateY(${-28*(1-ease(ramp(f,45,7)))}px) scale(${1+.12*(1-ease(ramp(f,45,7)))})`:'none',transformOrigin:'left top'}}>
         <div style={{display:'inline-block',background:RED,padding:'10px 24px 13px',maxWidth:W}}><TextBlock text={p.CATEGORY.toUpperCase()} width={W-48} height={98} maxSize={38} maxLines={2}/></div>
         <div style={{marginTop:24,color:GREY,opacity:ramp(f,53,10),transform:`translateX(${40*(1-ease(ramp(f,53,10)))}px)`}}><TextBlock text={`${p.DATE}  /  ${p.LOCATION}`} width={W} height={112} maxSize={29} maxLines={3} color={GREY}/></div>
