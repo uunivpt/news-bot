@@ -61,13 +61,13 @@ jobs:
             echo "No new Reel was published."
             exit 0
           fi
-          if git diff --quiet -- public/instagram-offline-ledger.json; then
+          git add public/instagram-offline-ledger.json
+          if git diff --cached --quiet -- public/instagram-offline-ledger.json; then
             echo "No new publication receipt."
             exit 0
           fi
           git config user.name "politicshub-feed-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/instagram-offline-ledger.json
           git commit -m "Record confirmed emergency Instagram Reel"
           git pull --rebase origin main
           git push origin HEAD:main
