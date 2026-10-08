@@ -79,6 +79,8 @@ class SEOIndexingTests(unittest.TestCase):
     def test_static_pages_canonical_match_sitemap(self):
         from app.seo_indexing import STATIC_PAGES
         for path in STATIC_PAGES:
+            if path=="/archive/":
+                continue  # Server-rendered dynamic archive, not a static HTML file.
             source=Path("public/index.html" if path=="/" else "public"+path).read_text(encoding="utf-8")
             expected='<link rel="canonical" href="'+SITE_ORIGIN+path+'">'
             with self.subTest(path=path):
@@ -100,6 +102,25 @@ class SEOIndexingTests(unittest.TestCase):
             page=api.app.test_client().get("/api/seo-article"+canonical_path(displayed))
             self.assertEqual(page.status_code,200)
             self.assertIn('<link rel="canonical" href="'+expected+'">',page.get_data(as_text=True))
+
+    def test_archive_discovery_links_match_article_canonicals(self):
+        one=example()
+        second=dict(one,id=45,url="https://example.org/news/45",title="India announces public school infrastructure investment for rural districts")
+        with patch.object(api,"_published_sitemap_rows",return_value=[one,second,dict(one,id=46,url="https://example.org/news/46",bot_article="short")]):
+            response=api.app.test_client().get("/api/seo-archive")
+            self.assertEqual(response.status_code,200)
+            html_text=response.get_data(as_text=True)
+            self.assertIn('<link rel="canonical" href="'+SITE_ORIGIN+'/archive/">',html_text)
+            self.assertIn('<h1>News Archive</h1>',html_text)
+            self.assertIn('href="'+canonical_path(one)+'"',html_text)
+            self.assertIn('href="'+canonical_path(second)+'"',html_text)
+            self.assertNotIn("/46-",html_text)
+            self.assertEqual(api.app.test_client().get("/api/seo-archive?page=2").status_code,404)
+        self.assertIn("href=\"/archive/\"",Path("public/index.html").read_text())
+        config=json.loads(Path("vercel.json").read_text())
+        self.assertIn({"source":"/archive/","destination":"/api/seo-archive"},config["rewrites"])
+        sm=static_sitemap_xml()
+        self.assertIn(SITE_ORIGIN+"/archive/",sm)
 
     def test_production_routes_and_snapshot_sitemap(self):
         config=json.loads(Path("vercel.json").read_text())

@@ -43,6 +43,14 @@
   ],
   "rewrites": [
     {
+      "source": "/archive",
+      "destination": "/api/seo-archive"
+    },
+    {
+      "source": "/archive/",
+      "destination": "/api/seo-archive"
+    },
+    {
       "source": "/news-sitemap.xml",
       "destination": "/api/seo-news-sitemap"
     },

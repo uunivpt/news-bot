@@ -236,7 +236,7 @@ def _section_html(category="all"):
  body+='<div class="tile sc"><span class="lbl">Jump to a desk</span><div class="pills">'+"".join(jump)+'</div></div>'
  body+='<div class="tile lt"><span class="lbl">Just in</span>'+"".join(just_in)+'</div></section>'
  body+='<div class="sh"><h2>Latest stories</h2><span class="lbl">'+str(len(rows))+' stories</span></div><div class="grid">'+"".join(cards)+'</div>'
- return '<!doctype html><html lang="en" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home"><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui18"></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="#/settings">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=phui13"></script></body></html>'
+ return '<!doctype html><html lang="en" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home"><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui18"></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/archive/">All News Archive</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="#/settings">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=phui13"></script></body></html>'
 
 _db_retry_after=0.0
 
@@ -477,7 +477,7 @@ def _article_html(row):
 <div class="src">Source: {html.escape(source)}. {"<a href='"+html.escape(str(row.get("url")))+"' rel='nofollow noopener' target='_blank'>Read the original report</a>" if row.get("url") else ""}</div>
 <div class="article-share"><span>SHARE</span><a href="https://wa.me/?text={share_title}%20{share_url}">WhatsApp</a><a href="https://t.me/share/url?url={share_url}&amp;text={share_title}">Telegram</a><a href="https://www.facebook.com/sharer/sharer.php?u={share_url}">Facebook</a><a href="https://twitter.com/intent/tweet?text={share_title}&amp;url={share_url}">X</a></div>
 </article></main>
-<footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><p class="ser">Source-linked news. Clearly.</p></div><div><h4>Navigate</h4><ul><li><a href="/">Home</a></li><li><a href="/about.html">About</a></li><li><a href="/editorial-policy.html">Editorial Policy</a></li><li><a href="/corrections.html">Corrections</a></li><li><a href="/contact.html">Contact</a></li><li><a href="/disclaimer.html">Disclaimer</a></li><li><a href="/privacy.html">Privacy</a></li><li><a href="/cookies.html">Cookies</a></li><li><a href="/terms.html">Terms</a></li><li><a href="/newsletter.html">Newsletter</a></li><li><a href="/settings.html">Settings</a></li><li><a href="/debug.html">System Status</a></li></ul></div><div><h4>Contact</h4><ul><li><a href="mailto:politicshub.in@gmail.com">politicshub.in@gmail.com</a></li></ul></div></div></footer>
+<footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><p class="ser">Source-linked news. Clearly.</p></div><div><h4>Navigate</h4><ul><li><a href="/">Home</a></li><li><a href="/archive/">News Archive</a></li><li><a href="/about.html">About</a></li><li><a href="/editorial-policy.html">Editorial Policy</a></li><li><a href="/corrections.html">Corrections</a></li><li><a href="/contact.html">Contact</a></li><li><a href="/disclaimer.html">Disclaimer</a></li><li><a href="/privacy.html">Privacy</a></li><li><a href="/cookies.html">Cookies</a></li><li><a href="/terms.html">Terms</a></li><li><a href="/newsletter.html">Newsletter</a></li><li><a href="/settings.html">Settings</a></li><li><a href="/debug.html">System Status</a></li></ul></div><div><h4>Contact</h4><ul><li><a href="mailto:politicshub.in@gmail.com">politicshub.in@gmail.com</a></li></ul></div></div></footer>
 <script src="/assets/story-page.js"></script>
 </body></html>"""
 
@@ -1289,6 +1289,43 @@ def _published_sitemap_rows():
  except RuntimeError:
   return _snapshot_rows("all")
 
+
+@app.get("/api/seo-archive")
+@app.get("/archive/")
+def seo_archive():
+ # Only genuinely index-eligible, available stories receive discovery links.
+ raw=request.args.get("page","1")
+ if not raw.isdigit() or len(raw)>5 or int(raw)<1:
+  return Response("Not found",status=404)
+ page=int(raw)
+ try:
+  stories=eligible_articles([_publicize(r) for r in _published_sitemap_rows()])
+ except RuntimeError:
+  return Response("Archive temporarily unavailable",status=503,headers={"Retry-After":"300"})
+ if not stories:
+  return Response("Archive temporarily unavailable",status=503,headers={"Retry-After":"300"})
+ per_page=100
+ start=(page-1)*per_page
+ if start>=len(stories):return Response("Not found",status=404)
+ shown=stories[start:start+per_page]
+ canonical=SITE_ORIGIN+"/archive/"+("?page="+str(page) if page>1 else "")
+ items=[]
+ for item in shown:
+  title=html.escape(str(item.get("title") or "Latest report"))
+  href=html.escape(article_path(item),quote=True)
+  source=html.escape(str(item.get("source_name") or "PoliticsHub.in"))
+  category=html.escape(str(item.get("category") or "news").title())
+  date=html.escape(str(item.get("published_at_iso") or item.get("published_at") or ""))
+  summary=html.escape(str(item.get("bot_summary") or item.get("summary") or "")[:220])
+  items.append('<li><article><a href="'+href+'"><h2>'+title+'</h2></a><p>'+category+' · '+source+' · '+date+'</p><p>'+summary+'</p></article></li>')
+ pager=""
+ if page>1:
+  prev="/archive/" if page==2 else "/archive/?page="+str(page-1)
+  pager+='<a href="'+prev+'">← Newer stories</a> '
+ if start+per_page<len(stories):
+  pager+='<a href="/archive/?page='+str(page+1)+'">Older stories →</a>'
+ page_html='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>News Archive'+(" · Page "+str(page) if page>1 else "")+' — PoliticsHub.in</title><meta name="description" content="Browse the source-linked, published news reports from PoliticsHub.in."><link rel="canonical" href="'+html.escape(canonical,quote=True)+'"><link rel="stylesheet" href="/assets/site.css?v=phui18"><link rel="icon" href="/favicon.svg"></head><body><header id="hd"><div class="top"><a class="logo" href="/"><img src="/favicon.svg" alt="PoliticsHub.in"></a><nav><a href="/">Home</a> · <a href="/india/">India</a> · <a href="/politics/">Politics</a> · <a href="/world/">World</a></nav></div></header><main class="wrap" style="max-width:1000px;padding:38px 22px"><h1>News Archive</h1><p>Browse individual published reports. Every headline opens its dedicated article page.</p><ol style="list-style:none;padding:0">'+''.join(items)+'</ol><nav aria-label="Archive pages">'+pager+'</nav></main><footer><div class="wrap"><p>PoliticsHub.in · <a href="/">Home</a> · <a href="/editorial-policy.html">Editorial policy</a> · <a href="/contact.html">Contact</a></p></div></footer></body></html>'
+ return Response(page_html,mimetype="text/html",headers={"Cache-Control":"public,max-age=60,s-maxage=180"})
 
 @app.get("/sitemap.xml")
 def sitemap_index():

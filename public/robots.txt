@@ -8,5 +8,6 @@ Disallow: /debug.html
 Disallow: /api/seo-article/
 Disallow: /api/seo-section/
 Disallow: /api/seo-news-sitemap
+Disallow: /api/seo-archive
 
 Sitemap: https://www.politicshub.in/sitemap.xml

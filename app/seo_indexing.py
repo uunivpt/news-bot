@@ -19,7 +19,7 @@ CATEGORIES = {
     "entertainment": "entertainment", "science": "science", "health": "health", "hindi": "hindi"
 }
 STATIC_PAGES = (
-    "/", "/about.html", "/contact.html", "/editorial-policy.html",
+    "/", "/archive/", "/about.html", "/contact.html", "/editorial-policy.html",
     "/corrections.html", "/privacy.html", "/cookies.html", "/terms.html",
     "/disclaimer.html", "/newsletter.html", "/data-rights.html",
     "/licenses.html"
