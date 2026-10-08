@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "12,42 * * * *"
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/collector.yml"
+      - "config/sources.json"
 
 concurrency:
   group: news-collector
@@ -26,6 +31,23 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: pip install -r requirements.txt
+      - name: Verify Neon production database target
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          from urllib.parse import urlsplit
+          url = urlsplit(os.environ.get("DATABASE_URL") or "")
+          allowed_hosts = {
+              "ep-steep-rice-b5dvvhhb-pooler.c-7.us-east-2.aws.neon.tech",
+              "ep-steep-rice-b5dvvhhb.c-7.us-east-2.aws.neon.tech",
+          }
+          if url.scheme not in {"postgres", "postgresql"} or url.hostname not in allowed_hosts:
+              raise SystemExit("DATABASE_URL does not target the new PoliticsHub Neon project. Update the GitHub Actions secret.")
+          print("Database target verified (connection credentials concealed).")
+          PY
       - name: Run collector once
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
