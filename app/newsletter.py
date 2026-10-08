@@ -15,7 +15,9 @@ import ssl
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from email.utils import format_datetime, make_msgid
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
+
+import requests
 from zoneinfo import ZoneInfo
 
 from itsdangerous import BadSignature, URLSafeSerializer
@@ -72,8 +74,29 @@ def _outbound_settings():
     return "smtp.gmail.com", 465, OWNER, password, OWNER
 
 
+def _gmail_relay_settings():
+    """Optional Google Apps Script relay authenticated with a high-entropy token.
+
+    Gmail must authorize/deploy the script under the real sender account.
+    Never fall back to failing SMTP if the relay has been partially configured.
+    """
+    url = os.getenv("NEWSLETTER_GMAIL_RELAY_URL", "").strip()
+    if not url:
+        return None
+    token = os.getenv("NEWSLETTER_GMAIL_RELAY_TOKEN", "").strip()
+    parts = urlsplit(url)
+    if (parts.scheme != "https" or parts.hostname != "script.google.com"
+            or not parts.path.startswith("/macros/s/")
+            or not parts.path.endswith("/exec") or parts.username
+            or parts.password or parts.query or parts.fragment or len(token) < 32):
+        raise RuntimeError("Secure Google Apps Script newsletter relay is not fully configured")
+    return url, token
+
+
 def mail_configured():
     try:
+        if _gmail_relay_settings():
+            return True
         _outbound_settings()
         return True
     except RuntimeError:
@@ -133,7 +156,13 @@ def _text_only(value, limit=500):
 
 def send_mail(to, subject, title, paragraphs, action=None, unsubscribe=None, one_click=False):
     """Submit mail through the configured provider; acceptance is not delivery."""
-    host, port, username, password, sender = _outbound_settings()
+    relay = _gmail_relay_settings()
+    if relay:
+        # The script owner is the Gmail sender; sender identity is not
+        # controlled by recipient-supplied fields.
+        host, port, username, password, sender = "apps-script", 0, "", "", OWNER
+    else:
+        host, port, username, password, sender = _outbound_settings()
     recipient = to.strip().lower()
     if not valid_email(recipient):
         raise ValueError("Invalid email recipient")
@@ -149,7 +178,7 @@ def send_mail(to, subject, title, paragraphs, action=None, unsubscribe=None, one
     # The Message-ID domain must not imply this personal Gmail SMTP account
     # has authenticated mail for politicshub.in. Gmail itself may replace or
     # supply a Message-ID during submission; custom SMTP gets its own domain.
-    if host != "smtp.gmail.com":
+    if not relay and host != "smtp.gmail.com":
         msg["Message-ID"] = make_msgid(domain=sender.rsplit("@", 1)[-1])
     msg["To"] = recipient
     msg["Subject"] = subject
@@ -157,7 +186,7 @@ def send_mail(to, subject, title, paragraphs, action=None, unsubscribe=None, one
     if unsubscribe:
         # Newsletter List-ID should not impersonate a domain that is not
         # authenticated by the active Gmail sender. Preserve one-click unsubscribe.
-        if host != "smtp.gmail.com":
+        if not relay and host != "smtp.gmail.com":
             msg["List-ID"] = "PoliticsHub Brief <brief.politicshub.in>"
         msg["List-Unsubscribe"] = "<" + unsubscribe.replace("/newsletter/unsubscribe?", "/api/newsletter/one-click?") + ">"
         msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
@@ -177,6 +206,29 @@ def send_mail(to, subject, title, paragraphs, action=None, unsubscribe=None, one
         "</div><div style='background:#111;color:#aab1bb;padding:22px 30px;font-size:12px'>PoliticsHub.in — Independent, source-linked news.<br>" +
         unsub_html + "</div></div></body></html>")
     msg.add_alternative(page, subtype="html")
+    if relay:
+        text_part = msg.get_body(preferencelist=("plain",)).get_content()
+        html_part = msg.get_body(preferencelist=("html",)).get_content()
+        digest = hashlib.sha256(
+            (recipient + "\n" + subject + "\n" + text_part).encode("utf-8")
+        ).hexdigest()
+        response = requests.post(
+            relay[0],
+            json={
+                "token": relay[1], "to": recipient, "subject": subject,
+                "text": text_part, "html": html_part,
+                "idempotency_key": digest,
+            },
+            timeout=25,
+        )
+        response.raise_for_status()
+        try:
+            accepted = response.json()
+        except ValueError:
+            raise RuntimeError("Gmail relay returned an invalid response") from None
+        if not isinstance(accepted, dict) or accepted.get("ok") is not True:
+            raise RuntimeError("Gmail relay rejected the message")
+        return
     context = ssl.create_default_context()
     if port == 465:
         with smtplib.SMTP_SSL(host, port, timeout=12, context=context) as server:
