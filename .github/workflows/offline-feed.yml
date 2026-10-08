@@ -1,0 +1,50 @@
+name: Emergency Public News Feed (No Database)
+
+on:
+  schedule:
+    - cron: "11,41 * * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/offline_snapshot.py"
+      - ".github/workflows/offline-feed.yml"
+
+concurrency:
+  group: emergency-public-feed
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout production branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install feed dependencies
+        run: pip install -r requirements.txt
+      - name: Update safe public source snapshot
+        env:
+          NEWSDATA_API_KEY: ${{ secrets.NEWSDATA_API_KEY }}
+        run: PYTHONPATH=. python scripts/offline_snapshot.py
+      - name: Publish snapshot to production branch (only when changed)
+        run: |
+          if git diff --quiet -- public/news-data.json; then
+            echo "No newly eligible stories. No deployment needed."
+            exit 0
+          fi
+          git config user.name "politicshub-feed-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/news-data.json
+          git commit -m "Refresh PoliticsHub public news snapshot"
+          git push origin HEAD:main
