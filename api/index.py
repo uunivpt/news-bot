@@ -12,6 +12,7 @@ from flask import Flask, jsonify, request, session, send_from_directory, redirec
 from werkzeug.security import check_password_hash, generate_password_hash
 from app.article_fetcher import enrich_source_text
 from app.database import NewsDatabase, DatabaseUnavailable
+from app.category_routing import normalize_category
 from app.models import NewsItem
 from app.factcheck import run_cross_source_check
 from app.newsroom import process_news, story_score, is_breaking, dedupe_story_rows, quality_headline, is_telegram_image
@@ -133,7 +134,9 @@ def _snapshot_rows(category="all", search=None):
     pass
  if not isinstance(payload,list):return []
  rows=[dict(x) for x in payload if isinstance(x,dict) and x.get("title")]
- for row in rows:row.setdefault("status","published")
+ for row in rows:
+  row.setdefault("status","published")
+  row["category"]=normalize_category(row.get("category"), row.get("title"), row.get("bot_summary") or row.get("summary") or "")
  if category and category!="all":rows=[x for x in rows if str(x.get("category") or "general").lower()==category]
  if search:
   q=str(search).strip().lower()
@@ -168,6 +171,7 @@ def _public_timestamp(row):
 def _rank_public(rows):
  items=[dict(r) for r in rows]
  for item in items:
+  item["category"]=normalize_category(item.get("category"),item.get("title"),item.get("bot_summary") or item.get("summary") or "")
   item["news_score"]=story_score(item.get("title",""),item.get("bot_summary") or item.get("summary") or "",item.get("category") or "general",item.get("source_name") or "")
   item["is_breaking"]=is_breaking(item.get("title",""),item.get("bot_summary") or item.get("summary") or "",item["news_score"])
  items.sort(key=lambda item:(_public_timestamp(item),int(item.get("id") or 0)),reverse=True)
@@ -176,8 +180,9 @@ def _public_rows_for_section(category="all",limit=200):
  try:
   database=db()
   try:
-   rows=[dict(x) for x in database.latest(max(limit*3,limit),category,"published")]
-   return _rank_public(rows)[:limit]
+   rows=[dict(x) for x in database.latest(max(limit*6,limit),"all" if category in ("india","entertainment") else category,"published")]
+   rows=_rank_public(rows)
+   return [x for x in rows if category=="all" or x.get("category")==category][:limit]
   finally:database.close()
  except RuntimeError:
   return _rank_public(_snapshot_rows(category))[:limit]
@@ -305,6 +310,7 @@ def _publicize(row):
   r.pop("editorial_context",None)
   if "editorial_value" in r: r["editorial_value"]=bool(r.get("editorial_value"))
   if "source_count" in r: r["source_count"]=int(r.get("source_count") or 0)
+ r["category"]=normalize_category(r.get("category"), r.get("title"), r.get("summary") or r.get("bot_summary") or "")
  score=story_score(r.get("title",""),r.get("summary",""),r.get("category") or "general",r.get("source_name") or "")
  r["news_score"]=score; r["is_breaking"]=is_breaking(r.get("title",""),r.get("summary",""),score)
  return r
@@ -405,7 +411,7 @@ def _slugify(value):
  return value[:110] or "story"
 
 def article_path(row):
- category=str(row.get("category") or "general").lower()
+ category=normalize_category(row.get("category"),row.get("title"),row.get("bot_summary") or row.get("summary") or "")
  category=CATEGORY_SLUGS.get(category,"india")
  return f"/{category}/{int(row['id'])}-{_slugify(row.get('title'))}"
 
@@ -719,7 +725,8 @@ def news():
   response.headers["Cache-Control"]="no-store"
   return response
  try:
-  rows=_rank_public(database.latest(max(limit*6,limit),category,status,search,review,ig))
+  rows=_rank_public(database.latest(max(limit*6,limit),"all" if category in ("india","entertainment") else category,status,search,review,ig))
+  if category!="all":rows=[x for x in rows if x.get("category")==category]
   # A healthy database is authoritative; never resurrect removed stories.
   rows=_rank_public(rows)
   rows=dedupe_story_rows(rows,threshold=0.78)
