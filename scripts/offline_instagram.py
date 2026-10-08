@@ -10,6 +10,7 @@ import os
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from app.cloudinary_storage import upload_image, upload_video
 from app.meta_instagram import publish_photo, publish_reel
@@ -24,13 +25,26 @@ from scripts.offline_snapshot import parse_date, valid_url
 FEED = Path("public/news-data.json")
 LEDGER = Path("public/instagram-offline-ledger.json")
 POSTER_DIR = Path("data/editorial_posters")
-COOLDOWN = timedelta(minutes=30)
+COOLDOWN = timedelta(hours=3)
+MAX_DAILY_POSTS = 4
+INDIA_TZ = ZoneInfo("Asia/Kolkata")
 ELIGIBLE_CATEGORIES = ("india", "politics", "business", "world", "technology", "sports", "science", "health", "entertainment")
 
 
 def choose_story(rows, ledger, now):
     receipts = ledger.get("posts", [])
     seen = {str(row.get("url", "")) for row in receipts if isinstance(row, dict)}
+    # Apply the same daily ceiling while the primary database is offline.
+    today = now.astimezone(INDIA_TZ).date()
+    posted_today = 0
+    for receipt in receipts:
+        if not isinstance(receipt, dict):
+            continue
+        stamped = parse_date(receipt.get("published_at"))
+        if stamped and stamped.astimezone(INDIA_TZ).date() == today:
+            posted_today += 1
+    if posted_today >= MAX_DAILY_POSTS:
+        return None
     last = parse_date(ledger.get("last_published_at"))
     if last and now - last < COOLDOWN:
         return None
