@@ -75,7 +75,40 @@ class NewsletterTests(unittest.TestCase):
                 self.assertIn("politicshub.in@gmail.com",msg["From"])
                 self.assertIn("List-Unsubscribe",msg)
                 self.assertIn("List-Unsubscribe-Post",msg)
+                self.assertIn("List-ID", msg)
+                self.assertIsNotNone(msg["Date"])
+                self.assertIsNotNone(msg["Message-ID"])
                 self.assertTrue(msg.is_multipart())
+
+    def test_verified_custom_domain_smtp_uses_starttls_and_sender(self):
+        settings = {
+            "NEWSLETTER_SMTP_HOST": "smtp.mail-provider.example",
+            "NEWSLETTER_SMTP_PORT": "587",
+            "NEWSLETTER_SMTP_USER": "mailer",
+            "NEWSLETTER_SMTP_PASSWORD": "provider-app-password",
+            "NEWSLETTER_FROM_EMAIL": "news@politicshub.in",
+        }
+        with patch.dict(os.environ, settings, clear=True):
+            with patch("app.newsletter.smtplib.SMTP") as mock_smtp:
+                send_mail("reader@example.com", "Your news", "News digest", ["Verified updates"],
+                          unsubscribe="https://www.politicshub.in/newsletter/unsubscribe?token=valid")
+                server = mock_smtp.return_value.__enter__.return_value
+                msg = server.send_message.call_args.args[0]
+                self.assertIn("news@politicshub.in", msg["From"])
+                self.assertIn("List-ID", msg)
+                self.assertIn("api/newsletter/one-click?", msg["List-Unsubscribe"])
+                server.starttls.assert_called_once()
+                server.login.assert_called_once_with("mailer", "provider-app-password")
+
+    def test_partial_domain_mail_config_fails_closed_without_gmail_fallback(self):
+        from app.newsletter import mail_configured
+        with patch.dict(os.environ, {
+            "NEWSLETTER_SMTP_HOST": "smtp.mail-provider.example",
+            "GMAIL_APP_PASSWORD": "working-gmail-app-password",
+        }, clear=True):
+            self.assertFalse(mail_configured())
+            with self.assertRaisesRegex(RuntimeError, "not fully configured"):
+                send_mail("reader@example.com", "News", "Hello", ["Test"])
 
 
 if __name__ == "__main__":
