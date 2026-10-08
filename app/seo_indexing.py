@@ -106,6 +106,64 @@ def static_sitemap_xml():
     return '<?xml version="1.0" encoding="UTF-8"?>' + '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + entries + "</urlset>"
 
 
+# Manually reviewed, independently sourced editorial page already published on-site.
+# Never add a new page without a real published HTML article and verified sources.
+STANDALONE_NEWS = (
+    {
+        "path": "/nana-patekar-tribute.html",
+        "title": "Nana Patekar dies at 75 in Goa, leaving a lasting cinema legacy",
+        "published_at": "2026-10-08T06:00:00+05:30",
+        "language": "en",
+    },
+)
+
+
+def standalone_sitemap_url_xml():
+    return "".join(
+        "<url><loc>" + escape(SITE_ORIGIN + story["path"]) + "</loc></url>"
+        for story in STANDALONE_NEWS
+    )
+
+
+def google_news_sitemap_xml(rows, now=None):
+    """Google News extension. Only articles published in the previous 48 hours.
+
+    The regular news-sitemap.xml remains an archival index; Google News-specific
+    metadata expires and is never refreshed merely to promote older content.
+    """
+    current = now or datetime.now(timezone.utc)
+    start = current - timedelta(hours=48)
+    candidates = []
+    for row in eligible_articles(rows, now=current):
+        published = _date(row.get("published_at_iso") or row.get("published_at_site") or row.get("published_at"))
+        if published and start <= published <= current + timedelta(minutes=30):
+            candidates.append((SITE_ORIGIN + canonical_path(row), str(row["title"]), published, "en"))
+    for story in STANDALONE_NEWS:
+        published = _date(story["published_at"])
+        if published and start <= published <= current + timedelta(minutes=30):
+            candidates.append((SITE_ORIGIN + story["path"], story["title"], published, story["language"]))
+    unique, seen = [], set()
+    for url, title, published, language in sorted(candidates, key=lambda a: a[2], reverse=True):
+        if url not in seen:
+            seen.add(url)
+            unique.append((url, title, published, language))
+    items = []
+    for url, title, published, language in unique[:1000]:
+        items.append(
+            "<url><loc>" + escape(url) + "</loc><news:news>"
+            "<news:publication><news:name>PoliticsHub.in</news:name>"
+            "<news:language>" + escape(language) + "</news:language></news:publication>"
+            "<news:publication_date>" + escape(published.isoformat(timespec="seconds")) + "</news:publication_date>"
+            "<news:title>" + escape(title) + "</news:title>"
+            "</news:news></url>"
+        )
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '
+        'xmlns:news="http://www.google.com/schemas/sitemap-news/0.9">'
+        + "".join(items) + "</urlset>"
+    )
+
 def sitemap_index_xml():
-    entries = "".join("<sitemap><loc>" + escape(SITE_ORIGIN + file) + "</loc></sitemap>" for file in ("/static-sitemap.xml", "/news-sitemap.xml"))
+    entries = "".join("<sitemap><loc>" + escape(SITE_ORIGIN + file) + "</loc></sitemap>" for file in ("/static-sitemap.xml", "/news-sitemap.xml", "/google-news.xml"))
     return '<?xml version="1.0" encoding="UTF-8"?>' + '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + entries + "</sitemapindex>"

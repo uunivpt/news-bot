@@ -13,7 +13,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from app.article_fetcher import enrich_source_text
 from app.database import NewsDatabase, DatabaseUnavailable
 from app.category_routing import normalize_category
-from app.seo_indexing import is_indexable, eligible_articles, news_sitemap_xml, SITE_ORIGIN as CANONICAL_ORIGIN
+from app.seo_indexing import is_indexable, eligible_articles, news_sitemap_xml, google_news_sitemap_xml, standalone_sitemap_url_xml, STANDALONE_NEWS, SITE_ORIGIN as CANONICAL_ORIGIN
 from app.models import NewsItem
 from app.factcheck import run_cross_source_check
 from app.newsroom import process_news, story_score, is_breaking, dedupe_story_rows, quality_headline, is_telegram_image
@@ -235,8 +235,10 @@ def _section_html(category="all"):
  body+='<div class="tile ct"><span class="lbl">Today on PoliticsHub.in</span><b class="num" data-n="'+str(len(rows))+'">'+str(len(rows))+'</b><span>stories in '+html.escape(label)+'</span></div>'
  body+='<div class="tile sc"><span class="lbl">Jump to a desk</span><div class="pills">'+"".join(jump)+'</div></div>'
  body+='<div class="tile lt"><span class="lbl">Just in</span>'+"".join(just_in)+'</div></section>'
+ if category in ("india","all"):
+  body+='<section aria-label="Verified report" style="margin:20px 0"><h2>Verified India report</h2><p><a href="/nana-patekar-tribute.html">Nana Patekar dies at 75 in Goa: report and sources</a></p></section>'
  body+='<div class="sh"><h2>Latest stories</h2><span class="lbl">'+str(len(rows))+' stories</span></div><div class="grid">'+"".join(cards)+'</div>'
- return '<!doctype html><html lang="en" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home"><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui18"></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/archive/">All News Archive</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="#/settings">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=phui13"></script></body></html>'
+ return '<!doctype html><html lang="en" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home"><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui18"></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/archive/">All News Archive</a></p><p><a href="/nana-patekar-tribute.html">Nana Patekar report</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="#/settings">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=phui13"></script></body></html>'
 
 _db_retry_after=0.0
 
@@ -458,6 +460,7 @@ def _article_html(row):
 <title>{html.escape(title)} — PoliticsHub.in</title>
 {robots_meta}
 <meta name="description" content="{html.escape(summary[:160])}">
+<meta name="robots" content="max-image-preview:large">
 <link rel="canonical" href="{html.escape(canonical)}">
 <meta property="og:type" content="article"><meta property="og:site_name" content="PoliticsHub.in">
 <meta property="og:title" content="{html.escape(title)}"><meta property="og:description" content="{html.escape(summary[:200])}">
@@ -470,7 +473,7 @@ def _article_html(row):
 <header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><div class="acts"><a class="ib" href="/" aria-label="Home">⌂</a><a class="ib" href="/about.html" aria-label="About">i</a></div></div></header>
 <main class="wrap"><article class="art" data-k="{html.escape(category.lower())}">
 <div class="ah"><span class="chip">{html.escape(category)}</span><h1>{html.escape(title)}</h1><p class="dek">{html.escape(summary)}</p>
-<div class="by"><span>By <a href="/author/politicshub-news-desk">{EDITORIAL_DESK}</a></span><span>{html.escape(str(published or ""))}</span><span>{html.escape(source)}</span></div></div>
+<div class="by"><span>By <a href="/author/politicshub-news-desk">{EDITORIAL_DESK}</a></span><time datetime="{html.escape(pub_iso,quote=True)}">{html.escape(str(published or ""))}</time><span>{html.escape(source)}</span></div></div>
 {"<div class='ahero'><img src='"+html.escape(str(row.get("image_url") or image))+"' alt='"+html.escape(title)+"' loading='eager' onerror='this.parentElement.remove()'></div>" if row.get("image_url") else ""}
 <div class="body">{paras}</div>
 <div class="src"><strong>Source transparency:</strong> This is a source-linked brief prepared from the originating report. When multiple independent sources are available, PoliticsHub compares their reported details; otherwise no independent reporting claim is made.</div>
@@ -1319,6 +1322,9 @@ def seo_archive():
   summary=html.escape(str(item.get("bot_summary") or item.get("summary") or "")[:220])
   items.append('<li><article><a href="'+href+'"><h2>'+title+'</h2></a><p>'+category+' · '+source+' · '+date+'</p><p>'+summary+'</p></article></li>')
  pager=""
+ if page==1:
+  for story in STANDALONE_NEWS:
+   items.insert(0,'<li><article><a href="'+html.escape(story["path"],quote=True)+'"><h2>'+html.escape(story["title"])+'</h2></a><p>India · PoliticsHub News Desk · '+html.escape(story["published_at"])+'</p><p>Verified report, with links to Reuters and Associated Press.</p></article></li>')
  if page>1:
   prev="/archive/" if page==2 else "/archive/?page="+str(page-1)
   pager+='<a href="'+prev+'">← Newer stories</a> '
@@ -1342,6 +1348,14 @@ def static_sitemap():
 def news_sitemap_first():
  return _news_sitemap_page(1)
 
+@app.get("/api/seo-google-news")
+@app.get("/google-news.xml")
+def google_news_sitemap_page():
+ rows=_published_sitemap_rows()
+ selected=[_publicize(r) for r in rows]
+ body=google_news_sitemap_xml(selected)
+ return Response(body,mimetype="application/xml",headers={"Cache-Control":"public,max-age=300,s-maxage=300"})
+
 @app.get("/news-sitemap-<int:page>.xml")
 def news_sitemap_page(page):
  return _news_sitemap_page(page)
@@ -1358,6 +1372,8 @@ def _news_sitemap_page(page):
  if (page-1)*chunk >= len(selected) and page!=1:
   return Response("Not found",status=404)
  xml=news_sitemap_xml(selected[(page-1)*chunk:page*chunk])
+ if page==1:
+  xml=xml.replace("</urlset>",standalone_sitemap_url_xml()+"</urlset>")
  return Response(xml,mimetype="application/xml",headers={"Cache-Control":"public,max-age=300,s-maxage=300"})
 
 @app.get("/")

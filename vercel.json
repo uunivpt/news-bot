@@ -43,6 +43,10 @@
   ],
   "rewrites": [
     {
+      "source": "/google-news.xml",
+      "destination": "/api/seo-google-news"
+    },
+    {
       "source": "/archive",
       "destination": "/api/seo-archive"
     },
