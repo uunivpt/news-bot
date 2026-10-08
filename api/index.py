@@ -193,7 +193,7 @@ def _public_rows_for_section(category="all",limit=200):
  try:
   database=db()
   try:
-   rows=[dict(x) for x in database.latest(max(limit*6,limit),"all" if category in ("india","entertainment") else category,"published")]
+   rows=[dict(x) for x in database.latest_public(max(limit*3,limit),"all" if category in ("india","entertainment") else category)]
    rows=_rank_public(rows)
    return [x for x in rows if category=="all" or x.get("category")==category][:limit]
   finally:database.close()
@@ -880,12 +880,22 @@ def news():
   response.headers["Cache-Control"]="no-store"
   return response
  try:
-  rows=_rank_public(database.latest(max(limit*6,limit),"all" if category in ("india","entertainment") else category,status,search,review,ig))
+  public_listing=not admin_ok()
+  if public_listing:
+   # Listing cards never need the full editorial article/AI fields.
+   records=database.latest_public(max(limit*3,limit),"all" if category in ("india","entertainment") else category,search)
+  else:
+   records=database.latest(max(limit*6,limit),"all" if category in ("india","entertainment") else category,status,search,review,ig)
+  rows=_rank_public(records)
   if category!="all":rows=[x for x in rows if x.get("category")==category]
   # A healthy database is authoritative; never resurrect removed stories.
   rows=_rank_public(rows)
   rows=dedupe_story_rows(rows,threshold=0.78)
-  response=jsonify(rows_json(rows[:limit],compact=compact))
+  payload=rows_json(rows[:limit],compact=compact)
+  if public_listing:
+   for item in payload:
+    item.pop("article",None)
+  response=jsonify(payload)
   # Public news is refreshed by a 30-minute collection cadence. CDN caching
   # avoids waking a free-tier Postgres compute on every visitor refresh.
   # Admin API responses remain uncacheable through the after_request policy.
