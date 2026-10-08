@@ -8,13 +8,14 @@ on:
     branches: [main]
     paths:
       - "scripts/offline_instagram.py"
+      - "app/editorial_poster.py"
       - ".github/workflows/offline-instagram.yml"
 
 permissions:
   contents: write
 
 concurrency:
-  group: emergency-instagram-news
+  group: instagram-reel-worker-production
   cancel-in-progress: false
 
 jobs:

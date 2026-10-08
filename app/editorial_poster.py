@@ -182,21 +182,27 @@ def render_editorial_poster(row: dict, output_path: str | Path | None = None) ->
 
 
 def editorial_caption(row: dict) -> str:
+    """A substantial multi-paragraph sourced news article, not a thin teaser."""
     title = _sanitize(row.get("title") or row.get("headline"))
     summary = _sanitize(row.get("bot_summary") or row.get("summary"))
-    article = _sanitize(row.get("bot_article") or "")
-    if article and article.startswith(summary):
-        article = article[len(summary):].strip()
+    raw_article = str(row.get("bot_article") or "").strip()
+    paragraphs = [
+        _sanitize(p) for p in re.split(r"\\n\\s*\\n", raw_article)
+        if _sanitize(p)
+    ]
     source = _sanitize(row.get("source_name") or row.get("source") or "Original report")
     url = _sanitize(row.get("url"))
     category = _sanitize(row.get("category") or "india").lower()
-    # Source excerpts are not expanded into imagined long-form articles.
-    body = (summary + ("\n\n" + article[:1100] if len(article) > 95 else "")).strip()
-    out = title + "\n\n" + body + "\n\nSource: " + source
+    # Remove duplicate introduction if the bot already starts with the lead.
+    if paragraphs and paragraphs[0] == summary:
+        paragraphs.pop(0)
+    body = summary + ("\\n\\n" + "\\n\\n".join(paragraphs) if paragraphs else "")
+    out = title + "\\n\\n" + body + "\\n\\nSource: " + source
     if url.startswith("https://"):
-        out += "\nOriginal report: " + url
+        out += "\\nOriginal report: " + url
     licence = _sanitize(row.get("image_license"))
     credit = _sanitize(row.get("image_credit"))
     if credit and licence and licence.lower() != "unknown":
-        out += "\nVisual credit: " + credit + " (" + licence + ")"
-    return out[:2050] + "\n\n#PoliticsHub #IndiaNews #" + re.sub(r"[^A-Za-z]", "", category.title()) + "News"
+        out += "\\nVisual credit: " + credit + " (" + licence + ")"
+    hashtag = "#PoliticsHub #IndiaNews #" + re.sub(r"[^A-Za-z]", "", category.title()) + "News"
+    return out[:max(0, 2200 - len(hashtag))].rstrip() + "\\n\\n" + hashtag

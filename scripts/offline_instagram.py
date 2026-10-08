@@ -1,7 +1,8 @@
 """Emergency Instagram worker when primary PostgreSQL is at quota.
 
-Uses only newly syndicated, source-linked public snapshot stories.
-A Git-tracked receipt prevents scheduled duplicate posts. One post / two hours.
+Uses source-linked public snapshot stories. Every category gets the premium
+4:5 editorial photo-post, a substantive source-backed caption, and a Git-tracked
+publication receipt. One post per two hours outside explicitly requested batches.
 """
 from __future__ import annotations
 
@@ -11,15 +12,18 @@ import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from app.cloudinary_storage import upload_video
-from app.meta_instagram import publish_reel
-from app.remotion_reel_renderer import render_remotion_reel
-from scripts.auto_publish import audio_path
+from app.cloudinary_storage import upload_image
+from app.meta_instagram import publish_photo
+from app.editorial_poster import render_editorial_poster, editorial_caption
+from app.category_routing import normalize_category
+from app.image_acquisition import prepare_story_image
+from app.article_fetcher import enrich_source_text
+from app.newsroom import process_news
 from scripts.offline_snapshot import parse_date, valid_url
 
 FEED = Path("public/news-data.json")
 LEDGER = Path("public/instagram-offline-ledger.json")
-VIDEO_DIR = Path("data/media")
+POSTER_DIR = Path("data/editorial_posters")
 COOLDOWN = timedelta(hours=2)
 ELIGIBLE_CATEGORIES = ("india", "politics", "business", "world", "technology", "entertainment")
 
@@ -71,27 +75,27 @@ def main():
         raise RuntimeError("Instagram fallback missing configured Meta/Cloudinary secrets")
 
     identifier = str(story["id"])
-    VIDEO_DIR.mkdir(parents=True, exist_ok=True)
-    output = VIDEO_DIR / ("offline-news-" + identifier + ".mp4")
-    music = audio_path()
-    if not music:
-        raise RuntimeError("PoliticsHub licensed news audio is not available")
-
-    print("Rendering source-linked emergency Reel for news item", identifier)
-    render_remotion_reel(story, str(output), audio_path=music)
-    public_url = upload_video(str(output), public_id="politicshub_offline_" + identifier)
-    if not public_url:
-        raise RuntimeError("Could not upload emergency Reel to public storage")
-
-    text = str(story.get("summary") or "").strip()
-    title = str(story.get("title") or "").strip()
-    caption = (
-        title + "\n\n" + text + "\n\n"
-        + "Source: " + str(story.get("source_name") or "Original report") + "\n"
-        + "Read the source: " + str(story["url"])
-        + "\n\n#PoliticsHub #IndiaNews #NewsUpdate"
-    )
-    result = publish_reel(public_url, caption)
+    story = dict(story)
+    story["category"] = normalize_category(story.get("category"), story.get("title"), story.get("summary"))
+    if len(str(story.get("bot_article") or "").strip()) < 150:
+        source = enrich_source_text(story.get("title") or "", story.get("summary") or "", story.get("url") or "")
+        processed = process_news(story.get("title") or "", source.get("text") or "", story["category"])
+        if not processed or len(processed.get("article") or "") < 150:
+            print("Skipping thin source excerpt; substantive source-backed article required.")
+            return
+        story["bot_article"] = processed["article"]
+        story["bot_summary"] = processed["summary"]
+    try:
+        image_meta = prepare_story_image(story, output_dir=POSTER_DIR / "licensed")
+        if image_meta:
+            story.update(image_meta)
+    except Exception as exc:
+        print("Licensed image unavailable; using original editorial typographic design:", type(exc).__name__)
+    POSTER_DIR.mkdir(parents=True, exist_ok=True)
+    poster = render_editorial_poster(story, POSTER_DIR / ("offline-" + identifier + ".jpg"))
+    public_url = upload_image(str(poster), public_id="politicshub/offline-editorial-" + identifier)
+    print("Publishing premium source-backed 4:5 editorial image for news item", identifier)
+    result = publish_photo(public_url, editorial_caption(story))
     media_id = str(result.get("id") or "") if isinstance(result, dict) else ""
     if not media_id:
         raise RuntimeError("Meta did not confirm a published Instagram media ID")
@@ -102,7 +106,7 @@ def main():
     ledger["posts"] = posts[:150]
     ledger["last_published_at"] = posted_at
     LEDGER.write_text(json.dumps(ledger, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print("Instagram fallback published news item", identifier, "with Meta media confirmation.")
+    print("Instagram fallback published premium editorial photo", identifier, "with Meta media confirmation.")
 
 
 if __name__ == "__main__":

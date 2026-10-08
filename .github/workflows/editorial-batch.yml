@@ -1,0 +1,63 @@
+name: PoliticsHub Premium Editorial Launch Batch
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/publish_editorial_batch.py"
+      - ".github/workflows/editorial-batch.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: instagram-reel-worker-production
+  cancel-in-progress: false
+
+jobs:
+  editorial-batch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install editorial dependencies
+        run: pip install -r requirements.txt
+      - name: Check live credentials
+        env:
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_UPLOAD_PRESET: ${{ secrets.CLOUDINARY_UPLOAD_PRESET }}
+        run: |
+          for key in META_ACCESS_TOKEN CLOUDINARY_CLOUD_NAME CLOUDINARY_UPLOAD_PRESET; do
+            test -n "${!key}" || { echo "::error::Missing credential ${key}"; exit 1; }
+          done
+      - name: Publish up to five verified 4:5 editorial image articles
+        env:
+          PYTHONPATH: .
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          META_INSTAGRAM_ACCOUNT_ID: ${{ secrets.META_INSTAGRAM_ACCOUNT_ID }}
+          META_API_VERSION: ${{ secrets.META_API_VERSION }}
+          META_API_BASE_URL: ${{ secrets.META_API_BASE_URL }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_UPLOAD_PRESET: ${{ secrets.CLOUDINARY_UPLOAD_PRESET }}
+        run: python scripts/publish_editorial_batch.py
+      - name: Save every confirmed Meta media receipt
+        if: always()
+        run: |
+          git add public/instagram-offline-ledger.json
+          if git diff --cached --quiet; then
+            echo "No new Meta-confirmed posts."
+            exit 0
+          fi
+          git config user.name "politicshub-feed-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Record confirmed premium Instagram editorial batch [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main
