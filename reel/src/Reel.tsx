@@ -70,19 +70,32 @@ export const Reel:React.FC<Story>=(p)=>{
   const shake=intro&&f>=8&&f<20?Math.sin(f*2.3)*6*(1-ramp(f,8,12)):outro&&f<488?Math.sin(f*2)*4*(1-ramp(f,480,8)):0;
   return <AbsoluteFill style={{background:'#000',color:WHITE,fontFamily:'"Barlow Condensed",sans-serif',fontWeight:700,overflow:'hidden'}}>
     <Abstract frame={f}/>
-    {a.image&&headline&&<AbsoluteFill style={{transform:`scale(${1.04+ramp(f,120,180)*.1}) translateY(${-ramp(f,120,180)*25}px)`}}><Img src={a.image} style={{width:'100%',height:'100%',objectFit:'cover',filter:'grayscale(1) contrast(1.18) brightness(.64)'}}/><AbsoluteFill style={{background:'linear-gradient(180deg,#0009 0%,#0002 24%,#0007 52%,#000d 78%,#000 100%)'}}/></AbsoluteFill>}
+    {a.image&&(intro||category||headline)&&<AbsoluteFill style={{transform:`scale(${1.04+ramp(f,0,300)*.1}) translateY(${-ramp(f,0,300)*25}px)`}}><Img src={a.image} style={{width:'100%',height:'100%',objectFit:'cover',filter:'grayscale(1) contrast(1.18) brightness(.48)'}}/><AbsoluteFill style={{background:'linear-gradient(180deg,#0009 0%,#0002 24%,#0007 52%,#000d 78%,#000 100%)'}}/></AbsoluteFill>}
     <AbsoluteFill style={{background:'radial-gradient(ellipse at center,transparent 30%,#000b 100%)'}}/>
     {intro&&<>
-      <AbsoluteFill style={{background:`linear-gradient(112deg,transparent ${-50+f*5}%,#ffffff12 ${-42+f*5}%,transparent ${-30+f*5}%)`}}/>
-      <div style={{position:'absolute',top:630,left:88,width:880,opacity:ease(ramp(f,5,10)),transform:`translateX(${shake}px) scale(${1.035-.035*ease(ramp(f,8,15))})`}}><Brand logo={a.logo} large/></div>
-    </>}
-    {(category||headline||summary)&&<>
+      <AbsoluteFill style={{background:'linear-gradient(112deg,transparent 0%,#ffffff12 45%,transparent 90%)',opacity:.25}}/>
+      <div style={{position:'absolute',left:LEFT,top:210,width:W,opacity:.9}}>
+        <div style={{fontSize:42,letterSpacing:4}}>POLITICS<span style={{color:GREY}}>HUB</span><span style={{fontSize:25,color:GREY}}>.IN</span></div>
+        <div style={{height:3,width:110,background:RED,marginTop:20}}/>
+      </div>
+      <div data-opening-hook style={{position:'absolute',left:LEFT,top:480,width:W,opacity:.8+.2*ease(ramp(f,0,5)),transform:`translateY(${24*(1-ease(ramp(f,0,8)))}px) scale(${1.02-.02*ease(ramp(f,0,8))})`,transformOrigin:'left center'}}>
+        <div style={{display:'inline-block',background:RED,padding:'10px 22px',fontSize:32,letterSpacing:3,marginBottom:30}}>IN FOCUS / {p.CATEGORY.toUpperCase()}</div>
+        <TextBlock text={p.HEADLINE} width={W} height={900} maxSize={125} maxLines={8} kinetic start={0}/>
+        <div style={{height:4,width:145,background:RED,marginTop:32}}/>
+      </div>
+      <div style={{position:'absolute',left:LEFT,top:1540,width:W,fontSize:25,color:GREY,letterSpacing:4}}>THE STORY. THE FACTS. THE SOURCE.</div>
+    </>}    {(category||headline||summary)&&<>
       <div style={{position:'absolute',left:LEFT,top:292,width:W,transform:category?`translateY(${-28*(1-ease(ramp(f,45,7)))}px) scale(${1+.12*(1-ease(ramp(f,45,7)))})`:'none',transformOrigin:'left top'}}>
         <div style={{display:'inline-block',background:RED,padding:'10px 24px 13px',maxWidth:W}}><TextBlock text={p.CATEGORY.toUpperCase()} width={W-48} height={98} maxSize={38} maxLines={2}/></div>
         <div style={{marginTop:24,color:GREY,opacity:ramp(f,53,10),transform:`translateX(${40*(1-ease(ramp(f,53,10)))}px)`}}><TextBlock text={`${p.DATE}  /  ${p.LOCATION}`} width={W} height={112} maxSize={29} maxLines={3} color={GREY}/></div>
       </div>
     </>}
-    {category&&<div style={{position:'absolute',left:LEFT,top:810,width:W,opacity:ease(ramp(f,63,14))}}><div style={{height:3,width:76,background:RED,marginBottom:30}}/><div style={{fontSize:94,lineHeight:.94,letterSpacing:-1.5}}>NEWS THAT<br/><span style={{color:GREY}}>DESERVES CONTEXT.</span></div><div style={{fontSize:20,color:GREY,letterSpacing:5,marginTop:34}}>POLITICSHUB.IN  /  DAILY BRIEF</div></div>}
+    {category&&<div style={{position:'absolute',left:LEFT,top:760,width:W,opacity:ease(ramp(f,47,7))}}>
+      <div style={{height:4,width:100,background:RED,marginBottom:24}}/>
+      <div style={{fontSize:24,color:GREY,letterSpacing:5,marginBottom:26}}>THE HEADLINE / THE CONTEXT</div>
+      <TextBlock text={p.HEADLINE} width={W} height={690} maxSize={115} maxLines={7} kinetic start={53}/>
+      <div style={{fontSize:20,color:GREY,letterSpacing:4,marginTop:22}}>FULL DETAILS NEXT  •  POLITICSHUB.IN</div>
+    </div>}
     {headline&&<div style={{position:'absolute',left:LEFT,top:650,width:W,transform:`translateY(${-ramp(f,120,180)*12}px)`}}><TextBlock text={p.HEADLINE} height={700} maxSize={126} maxLines={7}/><div style={{width:120,height:4,background:RED,marginTop:34}}/></div>}
     {summary&&<>
       {a.image&&<div style={{position:'absolute',left:LEFT,right:72,top:250,height:270,overflow:'hidden'}}><Img src={a.image} style={{width:'100%',height:'100%',objectFit:'cover',filter:'grayscale(1) contrast(1.15) brightness(.7)'}}/><AbsoluteFill style={{background:'linear-gradient(180deg,transparent 20%,rgba(0,0,0,.65) 100%)'}}/></div>}
