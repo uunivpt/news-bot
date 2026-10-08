@@ -114,5 +114,51 @@ class NewsletterTests(unittest.TestCase):
                 send_mail("reader@example.com", "News", "Hello", ["Test"])
 
 
+    def test_google_apps_script_transport_uses_real_sender_without_smtp(self):
+        from app.newsletter import mail_configured
+        settings = {
+            "NEWSLETTER_GMAIL_RELAY_URL": "https://script.google.com/macros/s/test-deployment/exec",
+            "NEWSLETTER_GMAIL_RELAY_TOKEN": "a" * 48,
+            "GMAIL_APP_PASSWORD": "existing-password-should-not-be-used",
+        }
+        with patch.dict(os.environ, settings, clear=True):
+            with patch("app.newsletter.requests.post") as post, patch("app.newsletter.smtplib.SMTP_SSL") as smtp:
+                post.return_value.json.return_value = {"ok": True}
+                self.assertTrue(mail_configured())
+                send_mail("reader@example.com", "PoliticsHub brief", "Daily update",
+                          ["A fully sourced news update"],
+                          unsubscribe="https://www.politicshub.in/newsletter/unsubscribe?token=abc")
+                post.assert_called_once()
+                payload = post.call_args.kwargs["json"]
+                self.assertEqual(payload["to"], "reader@example.com")
+                self.assertEqual(payload["token"], "a" * 48)
+                self.assertIn("Unsubscribe:", payload["text"])
+                self.assertIn("Unsubscribe", payload["html"])
+                self.assertEqual(len(payload["idempotency_key"]), 64)
+                self.assertEqual(post.call_args.kwargs["timeout"], 25)
+                smtp.assert_not_called()
+
+    def test_invalid_google_relay_fails_closed_even_with_gmail_password(self):
+        from app.newsletter import mail_configured
+        with patch.dict(os.environ, {
+            "NEWSLETTER_GMAIL_RELAY_URL": "https://untrusted.example/receive",
+            "NEWSLETTER_GMAIL_RELAY_TOKEN": "b" * 48,
+            "GMAIL_APP_PASSWORD": "unused-password",
+        }, clear=True):
+            self.assertFalse(mail_configured())
+            with self.assertRaisesRegex(RuntimeError, "not fully configured"):
+                send_mail("reader@example.com", "News", "Hello", ["Test"])
+
+    def test_google_relay_failure_is_not_reported_as_sent(self):
+        with patch.dict(os.environ, {
+            "NEWSLETTER_GMAIL_RELAY_URL": "https://script.google.com/macros/s/test-deployment/exec",
+            "NEWSLETTER_GMAIL_RELAY_TOKEN": "c" * 48,
+        }, clear=True):
+            with patch("app.newsletter.requests.post") as post:
+                post.return_value.json.return_value = {"ok": False}
+                with self.assertRaisesRegex(RuntimeError, "rejected the message"):
+                    send_mail("reader@example.com", "News", "Hello", ["Test"])
+
+
 if __name__ == "__main__":
     unittest.main()
