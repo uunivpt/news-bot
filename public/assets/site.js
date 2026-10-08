@@ -166,7 +166,7 @@ async function load(opts={}){
  // is unavailable; cached stories may have URLs that no longer resolve.
  const serverRows=apiOK?a:b;
  const hasServerFeed=apiOK||b.length>0;
- S.items=hasServerFeed?mergeFeeds(serverRows,[]):mergeFeeds(existing,[]);
+ S.items=hasServerFeed?mergeFeeds(serverRows,apiOK?b.filter(item=>item.editorial_pick===true):[]):mergeFeeds(existing,[]);
  if(S.items.length){
   S.mode=apiOK?(S.apiMode==='snapshot'?'snapshot':'api'):(b.length?'snapshot':'cached');
   if(hasServerFeed)cacheSave(S.items);
