@@ -53,7 +53,7 @@ class AuditRegressions(unittest.TestCase):
   self.assertEqual(response.status_code,503)
  def test_empty_healthy_database_does_not_resurrect_snapshot(self):
   database=Mock()
-  database.latest.return_value=[]
+  database.latest_public.return_value=[]
   with patch.object(api,'db',return_value=database):
    response=self.client.get('/api/news')
   self.assertEqual(response.json,[])

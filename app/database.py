@@ -228,6 +228,27 @@ class NewsDatabase:
   where=(" WHERE "+" AND ".join(clauses)) if clauses else ""
   row=self.conn.execute(f"SELECT COUNT(*) AS count FROM news_items{where}",params).fetchone()
   return int(row["count"] if self._postgres else row[0])
+ # Deliberately small listing projection: never transfer full articles, AI text,
+ # authentication metadata or Instagram render fields for homepage card requests.
+ PUBLIC_LIST_FIELDS = (
+  "id", "title", "summary", "bot_summary", "source_name", "source_type",
+  "url", "published_at", "published_at_site", "category", "status",
+  "image_url", "image_source", "image_license", "public_source", "view_count",
+ )
+ def latest_public(self,limit=100,category=None,search=None):
+  ph="%s" if self._postgres else "?"
+  clauses=["status='published'"]; params=[]
+  if category and category!="all":
+   clauses.append(f"category={ph}"); params.append(category)
+  if search:
+   clauses.append(f"(LOWER(title) LIKE LOWER({ph}) OR LOWER(summary) LIKE LOWER({ph}))")
+   params.extend([f"%{search}%",f"%{search}%"])
+  max_rows=min(max(1,int(limit)),1000)
+  fields=",".join(self.PUBLIC_LIST_FIELDS)
+  return self.conn.execute(
+   f"SELECT {fields} FROM news_items WHERE "+" AND ".join(clauses)+f" ORDER BY id DESC LIMIT {ph}",
+   (*params,max_rows)
+  ).fetchall()
  def latest(self,limit=20,category=None,status=None,search=None,review_status=None,instagram_status=None):
   clauses=[];params=[];ph="%s" if self._postgres else "?"
   for col,val in (("category",category),("status",status),("fact_check_status",review_status),("instagram_status",instagram_status)):

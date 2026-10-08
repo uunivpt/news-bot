@@ -36,6 +36,33 @@ class PublicTitleTests(unittest.TestCase):
         self.assertFalse(_is_source_supplied_image({"image_url": "https://commons.example/photo.jpg", "image_source": "wikimedia", "image_license": "cc0"}))
         self.assertFalse(_is_source_supplied_image({"image_url": "", "image_source": "article-source", "image_license": "cc0"}))
 
+
+    def test_public_list_query_does_not_transfer_full_articles(self):
+        import tempfile
+        from pathlib import Path
+        from app.database import NewsDatabase
+        with tempfile.TemporaryDirectory() as tmp:
+            database=NewsDatabase(path=str(Path(tmp)/"public-list.db"))
+            try:
+                base=("Test Newswire","rss","A complete sample headline about regional infrastructure",
+                      "https://example.org/news","https://example.org/news","test-hash","test-title",
+                      "2026-10-08T06:00:00+00:00","published","Extended summary of the verified source.")
+                database.conn.execute(
+                    "INSERT INTO news_items (source_name,source_type,title,url,normalized_url,url_hash,title_hash,collected_at,status,summary,bot_article,category) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (*base[:9],base[9],"Full article text " * 500,"india")
+                )
+                database.conn.commit()
+                cards=[dict(x) for x in database.latest_public(5,"india")]
+                self.assertEqual(len(cards),1)
+                self.assertIn("title",cards[0])
+                self.assertIn("summary",cards[0])
+                self.assertIn("image_source",cards[0])
+                self.assertNotIn("bot_article",cards[0])
+                self.assertNotIn("ai_article",cards[0])
+                self.assertIn("bot_article",dict(database.get_by_id(cards[0]["id"],"published")))
+            finally:database.close()
+
     def test_image_proxy_rejects_unsafe_origins(self):
         self.assertTrue(_safe_public_image_origin("https://static.example.com/photo.jpg"))
         self.assertFalse(_safe_public_image_origin("http://127.0.0.1/private"))
