@@ -14,6 +14,7 @@ import smtplib
 import ssl
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
+from email.utils import format_datetime, make_msgid
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
@@ -51,8 +52,32 @@ def valid_email(email):
     return bool(5 <= len(email) <= 254 and EMAIL_RE.fullmatch(email))
 
 
+def _outbound_settings():
+    """Use authenticated domain SMTP only when fully configured; otherwise Gmail."""
+    host = os.getenv("NEWSLETTER_SMTP_HOST", "").strip()
+    if host:
+        username = os.getenv("NEWSLETTER_SMTP_USER", "").strip()
+        password = os.getenv("NEWSLETTER_SMTP_PASSWORD", "").strip()
+        sender = os.getenv("NEWSLETTER_FROM_EMAIL", "").strip().lower()
+        try:
+            port = int(os.getenv("NEWSLETTER_SMTP_PORT", "465"))
+        except ValueError:
+            raise RuntimeError("Invalid newsletter SMTP port") from None
+        if not (username and password and valid_email(sender) and port in (465, 587)):
+            raise RuntimeError("Authenticated newsletter domain sender is not fully configured")
+        return host, port, username, password, sender
+    password = os.getenv("GMAIL_APP_PASSWORD", "").replace(" ", "").strip()
+    if not password:
+        raise RuntimeError("Newsletter email delivery is not configured")
+    return "smtp.gmail.com", 465, OWNER, password, OWNER
+
+
 def mail_configured():
-    return bool(os.getenv("GMAIL_APP_PASSWORD", "").strip())
+    try:
+        _outbound_settings()
+        return True
+    except RuntimeError:
+        return False
 
 
 def _commit(database):
@@ -108,9 +133,7 @@ def _text_only(value, limit=500):
 
 def send_mail(to, subject, title, paragraphs, action=None, unsubscribe=None, one_click=False):
     """Send authenticated mail from the exact PoliticsHub Gmail identity."""
-    password = os.getenv("GMAIL_APP_PASSWORD", "").replace(" ", "").strip()
-    if not password:
-        raise RuntimeError("Newsletter email delivery is not configured")
+    host, port, username, password, sender = _outbound_settings()
     recipient = to.strip().lower()
     if not valid_email(recipient):
         raise ValueError("Invalid email recipient")
@@ -121,11 +144,14 @@ def send_mail(to, subject, title, paragraphs, action=None, unsubscribe=None, one
     if unsubscribe:
         footer += "\nUnsubscribe: " + unsubscribe
     msg = EmailMessage()
-    msg["From"] = "PoliticsHub.in <" + OWNER + ">"
+    msg["From"] = "PoliticsHub.in <" + sender + ">"
+    msg["Date"] = format_datetime(now_utc())
+    msg["Message-ID"] = make_msgid(domain="politicshub.in")
     msg["To"] = recipient
     msg["Subject"] = subject
     msg["Reply-To"] = OWNER
     if unsubscribe:
+        msg["List-ID"] = "PoliticsHub Brief <brief.politicshub.in>"
         msg["List-Unsubscribe"] = "<" + unsubscribe.replace("/newsletter/unsubscribe?", "/api/newsletter/one-click?") + ">"
         msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
     msg.set_content(title + "\n\n" + body_text + footer)
@@ -144,9 +170,18 @@ def send_mail(to, subject, title, paragraphs, action=None, unsubscribe=None, one
         "</div><div style='background:#111;color:#aab1bb;padding:22px 30px;font-size:12px'>PoliticsHub.in — Independent, source-linked news.<br>" +
         unsub_html + "</div></div></body></html>")
     msg.add_alternative(page, subtype="html")
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=12, context=ssl.create_default_context()) as server:
-        server.login(OWNER, password)
-        server.send_message(msg)
+    context = ssl.create_default_context()
+    if port == 465:
+        with smtplib.SMTP_SSL(host, port, timeout=12, context=context) as server:
+            server.login(username, password)
+            server.send_message(msg)
+    else:
+        with smtplib.SMTP(host, port, timeout=12) as server:
+            server.ehlo()
+            server.starttls(context=context)
+            server.ehlo()
+            server.login(username, password)
+            server.send_message(msg)
 
 
 def request_optin(database, email):
