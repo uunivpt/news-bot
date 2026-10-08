@@ -338,7 +338,23 @@ const __doS=doS; doS=async function(){
 };
 const __article=article; article=async function(id){await __article(id);trackView(id)};
 
-function bindNewsletter(){const f=$('#homeNl');if(!f)return;f.onsubmit=async e=>{e.preventDefault();const m=$('#homeNlMsg'),email=f.querySelector('input[type="email"]'),privacy=f.querySelector('[name="privacy"]'),adult=f.querySelector('[name="adult"]');try{const r=await fetch('/api/newsletter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email?.value||'',consent:!!privacy?.checked,adult:!!adult?.checked})});const j=await r.json();m.textContent=j.message||j.error||'Done';if(r.ok)f.reset()}catch(x){m.textContent='Could not subscribe right now.'}}}
+function bindNewsletter(){
+ const f=$('#homeNl');if(!f)return;
+ const message=$('#homeNlMsg'),submit=f.querySelector('button[type="submit"]');
+ f.onsubmit=async e=>{
+  e.preventDefault();
+  const email=f.querySelector('input[type="email"]'),privacy=f.querySelector('[name="privacy"]'),adult=f.querySelector('[name="adult"]');
+  try{
+   const r=await fetch('/api/newsletter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email?.value||'',consent:!!privacy?.checked,adult:!!adult?.checked})});
+   const j=await r.json();message.textContent=j.message||j.error||'Unable to subscribe.';
+   if(r.ok)f.reset();
+  }catch(_){message.textContent='Could not subscribe right now.'}
+ };
+ fetch('/api/newsletter',{cache:'no-store'}).then(r=>r.json()).then(status=>{
+  if(!f.isConnected)return;
+  if(status.available===false){submit.disabled=true;submit.textContent='Coming soon';message.textContent='Email delivery is being activated. Subscription is temporarily unavailable.'}
+ }).catch(()=>{});
+}
 
 function shareStory(title){const data={title:title||document.title,text:title||document.title,url:location.href};if(navigator.share){navigator.share(data).catch(()=>{});return}const old=document.querySelector('.share-pop');old?.remove();const p=document.createElement('div');p.className='share-pop';p.setAttribute('role','dialog');p.setAttribute('aria-label','Share this story');const u=encodeURIComponent(location.href),t=encodeURIComponent(title||document.title);p.innerHTML='<button type="button" data-share-close aria-label="Close">×</button><strong>Share this story</strong><div class="share-grid"><a href="https://wa.me/?text='+encodeURIComponent((title||document.title)+' '+location.href)+'" target="_blank" rel="noopener noreferrer">WhatsApp</a><a href="https://t.me/share/url?url='+u+'&text='+t+'" target="_blank" rel="noopener noreferrer">Telegram</a><a href="https://www.facebook.com/sharer/sharer.php?u='+u+'" target="_blank" rel="noopener noreferrer">Facebook</a><a href="https://twitter.com/intent/tweet?text='+t+'&url='+u+'" target="_blank" rel="noopener noreferrer">X</a></div>';document.body.append(p);p.querySelector('[data-share-close]').onclick=()=>p.remove();p.addEventListener('click',e=>{if(e.target===p)p.remove()})}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-share-title]');if(b)shareStory(b.dataset.shareTitle)});
