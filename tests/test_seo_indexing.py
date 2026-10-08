@@ -76,6 +76,14 @@ class SEOIndexingTests(unittest.TestCase):
             noindex=client.get("/api/seo-article"+canonical)
             self.assertIn('name="robots" content="noindex,follow"',noindex.get_data(as_text=True))
 
+    def test_static_pages_canonical_match_sitemap(self):
+        from app.seo_indexing import STATIC_PAGES
+        for path in STATIC_PAGES:
+            source=Path("public/index.html" if path=="/" else "public"+path).read_text(encoding="utf-8")
+            expected='<link rel="canonical" href="'+SITE_ORIGIN+path+'">'
+            with self.subTest(path=path):
+                self.assertIn(expected,source)
+
     def test_production_routes_and_snapshot_sitemap(self):
         config=json.loads(Path("vercel.json").read_text())
         rewrites={(r["source"],r["destination"]) for r in config["rewrites"]}
