@@ -2,6 +2,9 @@
 const CATS=[['all','Home'],['india','India'],['politics','Politics'],['world','World'],['business','Business'],['technology','Technology'],['sports','Sports'],['entertainment','Entertainment'],['hindi','Hindi']];
 const TABS=[['all','All'],['politics','Politics'],['india','India'],...CATS.slice(3)];
 const ENDPOINTS={api:'/api/news?category=all&limit=120',item:'/api/news/',search:'/api/search',snap:'/news-data.json'};
+// Editorially verified one-off story stays visible even during a DB quota outage.
+const NANA_TRIBUTE={id:'nana-tribute',title:'Nana Patekar dies at 75 in Goa, leaving a lasting cinema legacy',category:'entertainment',source:'Reuters / AP',source_name:'Reuters',date:'2026-10-08T06:00:00+05:30',published_at_site:'2026-10-08T06:00:00+05:30',summary:'Veteran actor Nana Patekar died in Goa on 8 October 2026, aged 75. His celebrated films included Parinda, Krantiveer, Ab Tak Chhappan and Natsamrat.',image:'',url:'https://www.reuters.com/business/media-telecom/bollywood-actor-nana-patekar-dies-75-2026-10-08/',is_breaking:true};
+
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ls={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}},del:k=>{try{localStorage.removeItem(k)}catch(e){}}};
@@ -71,6 +74,7 @@ function ck(item){
 function inCat(item,cat){return cat==='all'||ck(item)===cat}
 function hl(cat){return cat&&cat!=='all'?'/'+encodeURIComponent(cat)+'/':'/'}
 function articleHref(item){
+ if(String(item?.id??'')==='nana-tribute')return '/nana-patekar-tribute.html';
  const id=String(item?.id??'').trim();
  if(!/^[0-9]+$/.test(id))return '#/article/'+encodeURIComponent(id);
  const category=ck(item);
@@ -134,7 +138,7 @@ function mergeFeeds(a,b){
   const prev=seen.get(key);
   if(!prev||ts(item.date)>ts(prev.date)||(!prev.body&&item.body)||(!prev.image&&item.image))seen.set(key,item);
  }
- return [...seen.values()].sort((x,y)=>ts(y.date)-ts(x.date)||0)
+ return [NANA_TRIBUTE,...[...seen.values()].filter(x=>String(x.id)!=='nana-tribute')].sort((x,y)=>ts(y.date)-ts(x.date)||0)
 }
 async function load(opts={}){
  let a=[],b=[],painted=false,apiOK=false;
