@@ -75,9 +75,11 @@ class NewsletterTests(unittest.TestCase):
                 self.assertIn("politicshub.in@gmail.com",msg["From"])
                 self.assertIn("List-Unsubscribe",msg)
                 self.assertIn("List-Unsubscribe-Post",msg)
-                self.assertIn("List-ID", msg)
+                self.assertNotIn("List-ID", msg)
                 self.assertIsNotNone(msg["Date"])
-                self.assertIsNotNone(msg["Message-ID"])
+                # Gmail submission must not forge the website domain for
+                # authentication-sensitive headers.
+                self.assertIsNone(msg["Message-ID"])
                 self.assertTrue(msg.is_multipart())
 
     def test_verified_custom_domain_smtp_uses_starttls_and_sender(self):
@@ -96,6 +98,7 @@ class NewsletterTests(unittest.TestCase):
                 msg = server.send_message.call_args.args[0]
                 self.assertIn("news@politicshub.in", msg["From"])
                 self.assertIn("List-ID", msg)
+                self.assertIn("politicshub.in", msg["Message-ID"])
                 self.assertIn("api/newsletter/one-click?", msg["List-Unsubscribe"])
                 server.starttls.assert_called_once()
                 server.login.assert_called_once_with("mailer", "provider-app-password")
