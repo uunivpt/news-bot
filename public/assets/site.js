@@ -121,7 +121,7 @@ function ticker(){
  const rows=S.items.filter(i=>i.title).slice(0,12);
  if(!rows.length){tickEl.hidden=true;return}
  const links=rows.map(i=>'<a href="'+esc(articleHref(i))+'"><b>'+esc(i.category||'NEWS')+'</b>'+esc(i.title)+'</a>').join('');
- box.innerHTML='<div>'+links+links+'</div>';
+ box.innerHTML='<div>'+links+links+'</div>';const saved=S.mode!=='api'||S.apiMode==='snapshot';tickEl.classList.toggle('saved',saved);const tag=tickEl.querySelector('.tag');if(tag)tag.innerHTML='<span class="dot"></span>'+(saved?'SAVED':'LIVE');
  tickEl.hidden=false;
 }
 function hydrateCache(){const x=cacheLoad();if(!x||!x.items.length)return false;S.items=x.items.map(norm).sort((a,b)=>ts(b.date)-ts(a.date)||0);S.mode='cache';S.api='stale';return true}
@@ -186,8 +186,8 @@ function settings(sub){setActive('');document.title='Settings — PoliticsHub.in
  <div class="legal-actions"><button class="btn" data-consent-choice="preferences">Allow preferences</button><button class="btn secondary" data-consent-choice="essential">Essential only</button><a class="btn secondary" href="/cookies.html">Cookie Policy</a></div>
  <div class="row"><span>Reset local preferences</span><button class="btn" id="rst">Reset</button></div></section>
  <section id="status"><h2>System status</h2>
- <div class="row"><span>News API</span>${S.api==='ok'?st('ok','Operational'):S.api==='empty'?st('unk','No stories returned'):st('bad','Unreachable')}</div>
- <div class="row"><span>Database</span>${S.api==='ok'?st('ok','Serving stories'):st('unk','Cannot be verified from browser')}</div>
+ <div class="row"><span>News API</span>${S.api==='ok'&&S.apiMode!=='snapshot'?st('ok','Operational'):S.apiMode==='snapshot'?st('unk','Saved feed only'):S.api==='empty'?st('unk','No stories returned'):st('bad','Unreachable')}</div>
+ <div class="row"><span>Database</span>${S.api==='ok'&&S.apiMode!=='snapshot'?st('ok','Serving stories'):S.apiMode==='snapshot'?st('bad','Live database unavailable'):st('unk','Cannot be verified from browser')}</div>
  <div class="row"><span>News snapshot</span>${S.snap==='ok'?st('ok','Available'):S.snap==='empty'?st('unk','Empty'):st('bad','Not found')}</div>
  <div class="row"><span>Frontend</span>${st('ok','Running')}</div>
  <div class="row"><span>Last update</span><span>${last?fmt(last):'Unknown'}</span></div></section></div>`;
@@ -196,7 +196,7 @@ function render(background=false){
  const path=location.pathname.split('/').filter(Boolean); const hash=location.hash.slice(1).split('/').filter(Boolean); const p=path.length>=2&&/^\d+-/.test(path[1])?['article',path[1].split('-')[0]]:(path.length===1&&CATS.some(x=>x[0]===path[0])?['c',path[0]]:hash); if(!background){closeAll();window.scrollTo(0,0)}
  const m=$('#app');m.style.animation='none';
  if(p[0]==='article')article(decodeURIComponent(p[1]||''));else if(p[0]==='settings')settings(p[1]);
- else{const c=p[0]==='c'&&CATS.some(x=>x[0]===p[1])?p[1]:'all';home(c)}
+ else{const c=p[0]==='c'&&CATS.some(x=>x[0]===p[1])?p[1]:'all';home(c);if(p[0]==='search')openS()}
  prog()}
 let rt;function route(){clearTimeout(rt);closeAll();window.__r=1;render()}
 /* effects */

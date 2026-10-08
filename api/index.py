@@ -659,6 +659,12 @@ def seo_section(category):
  if category not in set(CATEGORY_SLUGS.values()): return jsonify({"error":"not found"}),404
  return send_from_directory(app.static_folder,"index.html",max_age=0)
 
+@app.get("/search.html")
+def search_page():return redirect("/#/search",code=302)
+
+@app.get("/status")
+def public_status_page():return redirect("/#/settings/status",code=302)
+
 @app.get("/author/politicshub-news-desk")
 def author_page(): return _editorial_page("PoliticsHub News Desk","The PoliticsHub Editorial Desk publishes and edits newsroom stories, source links and public corrections.","author")
 
@@ -745,8 +751,13 @@ def trending():
  except ValueError:limit=10
  try:database=db()
  except RuntimeError:
-  proxied=_proxy_public("/api/news")
-  return proxied or (jsonify({"error":"news backend unavailable"}),503)
+  # Counts and breaking alerts cannot be reconstructed faithfully from an
+  # archived snapshot; return an explicit empty fallback, not stale live claims.
+  if not _snapshot_rows():return jsonify({"error":"news backend unavailable"}),503
+  response=jsonify([])
+  response.headers["X-News-Mode"]="snapshot"
+  response.headers["Cache-Control"]="no-store"
+  return response
  try:return jsonify(rows_json(_rank_public(database.trending(limit*2))[:limit]))
  finally:database.close()
 
@@ -755,8 +766,13 @@ def breaking():
  if not _public_rate_allowed():return jsonify({"error":"rate limit exceeded"}),429
  try:database=db()
  except RuntimeError:
-  proxied=_proxy_public("/api/news")
-  return proxied or (jsonify({"error":"news backend unavailable"}),503)
+  # Counts and breaking alerts cannot be reconstructed faithfully from an
+  # archived snapshot; return an explicit empty fallback, not stale live claims.
+  if not _snapshot_rows():return jsonify({"error":"news backend unavailable"}),503
+  response=jsonify([])
+  response.headers["X-News-Mode"]="snapshot"
+  response.headers["Cache-Control"]="no-store"
+  return response
  try:
   rows=_rank_public(database.latest(100,"all","published"))
   return jsonify(rows_json([r for r in rows if r.get("is_breaking")][:12]))

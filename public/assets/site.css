@@ -297,3 +297,7 @@ html:not([data-theme=dark]) footer img{filter:invert(1);mix-blend-mode:normal}
 .ph14-status.offline span{color:var(--mut)}
 .ph14-copy h1,.ph14-brief h3,.ph14-row h3{overflow-wrap:anywhere;word-break:normal}
 @media(prefers-reduced-motion:reduce){.ph14-home *{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+.tick.saved .tag,.tick.saved .tag .dot{color:var(--mut);animation:none}
+.tick.saved .tag .dot{background:var(--mut)}
+.ph14-more{margin:24px 0 32px;max-width:100%;min-height:44px}
