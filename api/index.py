@@ -1314,7 +1314,9 @@ def _news_sitemap_page(page):
  rows=_published_sitemap_rows()
  if not rows:
   return Response("Sitemap temporarily unavailable",status=503,headers={"Retry-After":"300"})
- selected=eligible_articles(rows)
+ # Build sitemap URLs from the same public headline representation served
+ # on article pages. Long/cleaned headlines otherwise yield divergent slugs.
+ selected=eligible_articles([_publicize(r) for r in rows])
  chunk=40000
  if (page-1)*chunk >= len(selected) and page!=1:
   return Response("Not found",status=404)

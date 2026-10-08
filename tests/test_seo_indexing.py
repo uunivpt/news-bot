@@ -84,6 +84,23 @@ class SEOIndexingTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIn(expected,source)
 
+    def test_long_headline_sitemap_matches_rendered_page_canonical(self):
+        row=example()
+        row["title"]="World News Finnish Envoy Praises the Courage of the Air Crew During an International Flight Incident and Says That Every Human Life Saved Is Highly Appreciated"
+        with api.app.test_request_context("/api/seo-news-sitemap"):
+            displayed=api._publicize(row)
+            expected=SITE_ORIGIN+canonical_path(displayed)
+        with patch.object(api,"_published_sitemap_rows",return_value=[row]):
+            response=api.app.test_client().get("/api/seo-news-sitemap")
+            self.assertEqual(response.status_code,200)
+            nodes=ET.fromstring(response.data)
+            self.assertEqual(len(nodes),1)
+            self.assertEqual(nodes[0][0].text,expected)
+        with patch.object(api,"_public_row_by_id",return_value=displayed):
+            page=api.app.test_client().get("/api/seo-article"+canonical_path(displayed))
+            self.assertEqual(page.status_code,200)
+            self.assertIn('<link rel="canonical" href="'+expected+'">',page.get_data(as_text=True))
+
     def test_production_routes_and_snapshot_sitemap(self):
         config=json.loads(Path("vercel.json").read_text())
         rewrites={(r["source"],r["destination"]) for r in config["rewrites"]}
