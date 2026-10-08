@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 from app.database import NewsDatabase
+from app.category_routing import normalize_category
 
 
 POLITICS_RE = re.compile(
@@ -31,6 +32,8 @@ TOPIC_PATTERNS = [
 
 def classify(title: str, summary: str) -> str:
     text = f"{title} {summary}".strip()
+    if normalize_category("entertainment", title, summary) == "india":
+        return "india"
     if POLITICS_RE.search(text):
         return "politics"
     for category, pattern in TOPIC_PATTERNS:
