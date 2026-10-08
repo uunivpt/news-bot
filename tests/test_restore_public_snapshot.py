@@ -52,6 +52,30 @@ class RecoverySnapshotTests(unittest.TestCase):
             finally:
                 db.close()
 
+    def test_resume_partial_restore_and_ignore_exact_duplicates(self):
+        with tempfile.TemporaryDirectory() as d:
+            db = NewsDatabase(str(Path(d) / "recovery.db"))
+            try:
+                first = select_stories([story(100), story(101)])
+                self.assertEqual(restore(db, first), 2)
+                full = select_stories([story(100), story(101), story(102)])
+                self.assertEqual(restore(db, full, resume=True), 1)
+                self.assertEqual(db.count(), 3)
+                self.assertEqual(restore(db, full, resume=True), 0)
+            finally:
+                db.close()
+
+    def test_resume_refuses_foreign_existing_articles(self):
+        with tempfile.TemporaryDirectory() as d:
+            db = NewsDatabase(str(Path(d) / "recovery.db"))
+            try:
+                self.assertEqual(restore(db, select_stories([story(900)])), 1)
+                with self.assertRaisesRegex(RuntimeError, "Refusing to mix projects"):
+                    restore(db, select_stories([story(100)]), resume=True)
+                self.assertEqual(db.count(), 1)
+            finally:
+                db.close()
+
     def test_never_restores_empty_or_unauthorized_snapshot(self):
         with tempfile.TemporaryDirectory() as d:
             db = NewsDatabase(str(Path(d) / "recovery.db"))
