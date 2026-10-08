@@ -7,7 +7,7 @@ from pathlib import Path
 from app.collector import _safe_http_url
 from app.database import NewsDatabase
 from app.newsroom import process_news, quality_headline, validate_news_copy
-from scripts.auto_publish import _direct_fallback_content, _instagram_candidates, _india_reel_due, _website_candidates
+from scripts.auto_publish import _direct_fallback_content, _instagram_candidates, _india_reel_due, _website_candidates, caption
 
 
 class PipelineHardeningTests(unittest.TestCase):
@@ -41,6 +41,21 @@ class PipelineHardeningTests(unittest.TestCase):
     def test_process_news_fails_closed_when_source_has_only_fragments(self):
         source = "Government announces a plan for. Officials said the move would."
         self.assertIsNone(process_news("Government announces plan for", source))
+
+    def test_reel_caption_uses_category_and_source_not_generic_tags(self):
+        message = caption({
+            "title": "Government announces transport improvements for the region",
+            "summary": "Officials confirmed the new service will start next month.",
+            "category": "india",
+            "source_name": "Example Newswire",
+            "url": "https://example.org/transport",
+        })
+        self.assertIn("#IndiaNews", message)
+        self.assertIn("#PoliticsHub", message)
+        self.assertIn("Source: Example Newswire", message)
+        self.assertIn("https://example.org/transport", message)
+        self.assertNotIn("#reel #update #news #politics #global", message)
+        self.assertLessEqual(len(message), 2200)
 
     def test_direct_fallback_still_runs_quality_gate(self):
         row = {"id": 1, "title": "A complete headline with enough words", "summary": "Too short."}
