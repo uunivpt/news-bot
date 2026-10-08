@@ -187,7 +187,7 @@ def editorial_caption(row: dict) -> str:
     summary = _sanitize(row.get("bot_summary") or row.get("summary"))
     raw_article = str(row.get("bot_article") or "").strip()
     paragraphs = [
-        _sanitize(p) for p in re.split(r"\\n\\s*\\n", raw_article)
+        _sanitize(p) for p in re.split(r"\n\s*\n", raw_article)
         if _sanitize(p)
     ]
     source = _sanitize(row.get("source_name") or row.get("source") or "Original report")
@@ -196,13 +196,13 @@ def editorial_caption(row: dict) -> str:
     # Remove duplicate introduction if the bot already starts with the lead.
     if paragraphs and paragraphs[0] == summary:
         paragraphs.pop(0)
-    body = summary + ("\\n\\n" + "\\n\\n".join(paragraphs) if paragraphs else "")
-    out = title + "\\n\\n" + body + "\\n\\nSource: " + source
+    body = summary + ("\n\n" + "\n\n".join(paragraphs) if paragraphs else "")
+    out = title + "\n\n" + body + "\n\nSource: " + source
     if url.startswith("https://"):
-        out += "\\nOriginal report: " + url
+        out += "\nOriginal report: " + url
     licence = _sanitize(row.get("image_license"))
     credit = _sanitize(row.get("image_credit"))
     if credit and licence and licence.lower() != "unknown":
-        out += "\\nVisual credit: " + credit + " (" + licence + ")"
+        out += "\nVisual credit: " + credit + " (" + licence + ")"
     hashtag = "#PoliticsHub #IndiaNews #" + re.sub(r"[^A-Za-z]", "", category.title()) + "News"
-    return out[:max(0, 2200 - len(hashtag))].rstrip() + "\\n\\n" + hashtag
+    return out[:max(0, 2200 - len(hashtag))].rstrip() + "\n\n" + hashtag
