@@ -63,6 +63,24 @@ class OfflineNewsFallbackTests(unittest.TestCase):
         self.assertIsNone(choose_story([story], {"last_published_at": NOW.isoformat()}, NOW))
         self.assertIsNone(choose_story([story], {"posts": [{"url": story["url"]}]}, NOW))
 
+    def test_fallback_caps_daily_posts_in_india_timezone(self):
+        story = public_story(item(), NOW)
+        posts = [
+            {"url": f"https://example.org/older-{i}",
+             "published_at": (NOW - timedelta(hours=4 + i)).isoformat()}
+            for i in range(4)
+        ]
+        self.assertIsNone(choose_story([story], {"posts": posts}, NOW))
+
+    def test_fallback_respects_three_hour_spacing(self):
+        story = public_story(item(), NOW)
+        self.assertIsNone(choose_story([story], {
+            "last_published_at": (NOW - timedelta(hours=2)).isoformat(),
+        }, NOW))
+        self.assertIsNotNone(choose_story([story], {
+            "last_published_at": (NOW - timedelta(hours=4)).isoformat(),
+        }, NOW))
+
     def test_public_rss_is_eligible_but_private_source_is_not(self):
         story = public_story(item(), NOW)
         story["source_type"] = "rss"

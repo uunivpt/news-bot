@@ -45,19 +45,38 @@ def _dedupe_caption_text(title,text):
   if not any(part.casefold()==old.casefold() for old in unique):unique.append(part)
  return " ".join(unique)
 
-REEL_HASHTAGS="#reel #update #news #politics #global"
+REEL_CATEGORY_TAGS = {
+ "india": "#IndiaNews", "politics": "#PoliticsNews", "world": "#WorldNews",
+ "business": "#BusinessNews", "technology": "#TechNews", "sports": "#SportsNews",
+ "science": "#ScienceNews", "health": "#HealthNews", "entertainment": "#EntertainmentNews",
+}
 
 def caption(row):
- title=clean_instagram_text(row.get("title") or "",""); text=clean_instagram_text(row.get("bot_summary") or row.get("summary") or "",row.get("source_name") or ""); text=_dedupe_caption_text(title,text)
- base=f"{title}\n\n{text}" if text else title
+ title=clean_instagram_text(row.get("title") or "","")
+ summary=clean_instagram_text(row.get("bot_summary") or row.get("summary") or "",row.get("source_name") or "")
+ summary=_dedupe_caption_text(title,summary)
+ body=f"{title}\n\n{summary}" if summary else title
+ source=clean_instagram_text(row.get("source_name") or "","")
+ if source:body+=f"\n\nSource: {source[:120]}"
+ source_url=str(row.get("url") or "").strip()
+ if source_url.startswith("https://") and len(source_url)<=350:
+  body+=f"\nOriginal report: {source_url}"
  license_text=str(row.get("image_license") or "").strip()
  credit=str(row.get("image_credit") or "").strip()
- source_url=str(row.get("image_source_url") or "").strip()
+ image_url=str(row.get("image_source_url") or "").strip()
  if license_text and credit and "unknown" not in license_text.lower():
-  attribution=f"Image: {credit} · {license_text}"
-  if source_url.startswith(("http://","https://")): attribution+=f" · {source_url}"
-  base+=f"\n\n{attribution}"
- return f"{base}\n\n{REEL_HASHTAGS}"
+  attribution=f"Visual: {credit} · {license_text}"
+  if image_url.startswith("https://") and len(image_url)<=350:attribution+=f" · {image_url}"
+  body+=f"\n\n{attribution}"
+ category=str(row.get("category") or "").strip().lower()
+ tags=" ".join(("#PoliticsHub","#NewsUpdate",REEL_CATEGORY_TAGS.get(category,"#LatestNews")))
+ max_body=2200-len(tags)-2
+ if len(body)>max_body:
+  clipped=body[:max_body]
+  ends=list(re.finditer(r"[.!?](?=\s|$)",clipped))
+  body=clipped[:ends[-1].end()] if ends else title[:max_body]
+ return f"{body.rstrip()}\n\n{tags}"
+
 
 def audio_path():
  path=os.getenv("FIXED_AUDIO_PATH","").strip()

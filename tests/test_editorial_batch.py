@@ -23,5 +23,23 @@ class TestEditorialBatch(unittest.TestCase):
         self.assertEqual(select_stories(rows, {"posts":[{"url":sample["url"]}]}, now), [])
         self.assertEqual(select_stories(rows, {"posts":[]}, now, {sample["title"]+"\n\nAlready published"}), [])
 
+    def test_editorial_batch_waits_for_cooldown(self):
+        now = datetime.now(timezone.utc)
+        sample = {
+            "id": 1,
+            "title": "Verified public statement on local infrastructure development",
+            "summary": "Officials provided additional information. " * 4,
+            "bot_article": "Full verified account of the development. " * 12,
+            "source_type": "editorial_verified", "editorial_pick": True,
+            "public_source": True, "url": "https://example.org/report",
+            "published_at": (now - timedelta(minutes=30)).isoformat(),
+        }
+        recent = {"posts": [{"url": "https://example.org/other",
+                              "published_at": (now - timedelta(hours=1)).isoformat()}]}
+        self.assertEqual(select_stories([sample], recent, now), [])
+        old = {"posts": [{"url": "https://example.org/other",
+                           "published_at": (now - timedelta(hours=4)).isoformat()}]}
+        self.assertEqual(len(select_stories([sample], old, now)), 1)
+
 if __name__ == "__main__":
     unittest.main()
