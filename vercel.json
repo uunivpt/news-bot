@@ -43,6 +43,10 @@
   ],
   "rewrites": [
     {
+      "source": "/musk-starlink-news.jpg",
+      "destination": "/api/ig_musk_poster"
+    },
+    {
       "source": "/google-news.xml",
       "destination": "/api/seo-google-news"
     },
