@@ -3,6 +3,7 @@ const CATS=[['all','Home'],['india','India'],['politics','Politics'],['world','W
 const TABS=[['all','All'],['politics','Politics'],['india','India'],...CATS.slice(3)];
 const ENDPOINTS={api:'/api/news?category=all&limit=120',item:'/api/news/',search:'/api/search',snap:'/news-data.json'};
 // Editorially verified one-off story stays visible even during a DB quota outage.
+const MUSK_STARLINK={id:'202610090923',title:'Elon Musk targets Mukesh Ambani over Starlink India launch delay',category:'india',source:'PoliticsHub News Desk / Reuters',source_name:'PoliticsHub News Desk',date:'2026-10-09T23:23:00+05:30',published_at_site:'2026-10-09T23:23:00+05:30',summary:'In a sarcastic X post, Elon Musk called Mukesh Ambani “Prime Minister Ambani” and alleged obstacles to Starlink. India denies favouritism, citing mandatory security and spectrum approvals.',image:'',url:'https://www.reuters.com/business/media-telecom/india-rejects-monopoly-claim-after-musk-accuses-ambani-blocking-starlink-launch-2026-10-09/',editorial_pick:true};
 const NANA_TRIBUTE={id:'nana-tribute',title:'Nana Patekar dies at 75 in Goa, leaving a lasting cinema legacy',category:'india',source:'Reuters / AP',source_name:'Reuters',date:'2026-10-08T06:00:00+05:30',published_at_site:'2026-10-08T06:00:00+05:30',summary:'Veteran actor Nana Patekar died in Goa on 8 October 2026, aged 75. His celebrated films included Parinda, Krantiveer, Ab Tak Chhappan and Natsamrat.',image:'',url:'https://www.reuters.com/business/media-telecom/bollywood-actor-nana-patekar-dies-75-2026-10-08/',is_breaking:true};
 
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
@@ -81,6 +82,7 @@ function ck(item){
 function inCat(item,cat){return cat==='all'||ck(item)===cat}
 function hl(cat){return cat&&cat!=='all'?'/'+encodeURIComponent(cat)+'/':'/'}
 function articleHref(item){
+ if(String(item?.id??'')==='202610090923')return '/elon-musk-ambani-starlink.html';
  if(String(item?.id??'')==='nana-tribute')return '/nana-patekar-tribute.html';
  const id=String(item?.id??'').trim();
  if(!/^[0-9]+$/.test(id))return '#/article/'+encodeURIComponent(id);
@@ -149,7 +151,7 @@ function mergeFeeds(a,b){
   const prev=seen.get(key);
   if(!prev||ts(item.date)>ts(prev.date)||(!prev.body&&item.body)||(!prev.image&&item.image))seen.set(key,item);
  }
- return [NANA_TRIBUTE,...[...seen.values()].filter(x=>String(x.id)!=='nana-tribute')].sort((x,y)=>ts(y.date)-ts(x.date)||0)
+ return [MUSK_STARLINK,NANA_TRIBUTE,...[...seen.values()].filter(x=>!['nana-tribute','202610090923'].includes(String(x.id)))].sort((x,y)=>ts(y.date)-ts(x.date)||0)
 }
 async function load(opts={}){
  let a=[],b=[],painted=false,apiOK=false;
