@@ -40,6 +40,20 @@ class MetaAuthCheckTests(unittest.TestCase):
         status, _ = diagnostic_status("token", "v25.0", "graph.instagram.com")
         self.assertEqual(status, "configured_host_working")
 
+    @patch("app.meta_instagram.os.getenv", return_value="MASKED")
+    def test_meta_api_access_block_is_terminal_and_sanitized(self, getenv):
+        from app.meta_instagram import _raise_meta, InstagramAccessBlockedError
+        response = Mock(status_code=400, ok=False)
+        response.json.return_value = {"error": {
+            "code": 200, "type": "OAuthException",
+            "message": "API access blocked.", "fbtrace_id": "safe_trace123"
+        }}
+        with self.assertRaises(InstagramAccessBlockedError) as caught:
+            _raise_meta(response, "token/account lookup")
+        self.assertIn("Meta API access blocked", str(caught.exception))
+        self.assertIn("safe_trace123", str(caught.exception))
+        self.assertNotIn("MASKED", str(caught.exception))
+
     def test_error_code_classifications(self):
         self.assertEqual(_reason(190, "expired"), "invalid_expired_or_revoked_token")
         self.assertEqual(_reason(200, "Insufficient permission"), "permission_or_app_access_denied")
