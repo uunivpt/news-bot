@@ -344,6 +344,9 @@ def _is_source_supplied_image(row):
 
 
 def _public_image_path(row):
+ if isinstance(row,dict) and row.get("source_type")=="x" and row.get("status")=="published":
+  try:return "/api/x-card/"+str(int(row.get("id")))
+  except (TypeError,ValueError):return ""
  if not _is_source_supplied_image(row):return ""
  item_id=row.get("id") if isinstance(row,dict) else None
  try:return "/api/image/"+str(int(item_id))
@@ -369,6 +372,18 @@ def _safe_public_image_origin(url):
  except ValueError:
   pass
  return True
+
+
+@app.get("/api/x-card/<int:item_id>")
+def x_post_quote_card(item_id):
+ database=db()
+ try:
+  row=database.get_by_id(item_id,"published")
+  if not row or row["source_type"]!="x":return Response(status=404)
+  from app.x_quote_poster import render_x_quote_card
+  image=render_x_quote_card(dict(row))
+  return Response(image,mimetype="image/jpeg",headers={"Cache-Control":"public, max-age=3600"})
+ finally:database.close()
 
 
 @app.get("/api/image/<int:item_id>")
@@ -486,7 +501,7 @@ def _article_html(row):
 <main class="wrap"><article class="art" data-k="{html.escape(category.lower())}">
 <div class="ah"><span class="chip">{html.escape(category)}</span><h1>{html.escape(title)}</h1><p class="dek">{html.escape(summary)}</p>
 <div class="by"><span>By <a href="/author/politicshub-news-desk">{EDITORIAL_DESK}</a></span><time datetime="{html.escape(pub_iso,quote=True)}">{html.escape(str(published or ""))}</time><span>{html.escape(source)}</span></div></div>
-{"<div class='ahero'><img src='"+html.escape(str(row.get("image_url") or image))+"' alt='"+html.escape(title)+"' loading='eager' onerror='this.parentElement.remove()'></div>" if row.get("image_url") else ""}
+{"<div class='ahero'><img src='"+html.escape(str(_public_image_path(row)))+"' alt='"+html.escape(title)+"' loading='eager' onerror='this.parentElement.remove()'></div>" if _public_image_path(row) else ""}
 <div class="body">{paras}</div>
 <div class="src"><strong>Source transparency:</strong> This is a source-linked brief prepared from the originating report. When multiple independent sources are available, PoliticsHub compares their reported details; otherwise no independent reporting claim is made.</div>
 <div class="src">Source: {html.escape(source)}. {"<a href='"+html.escape(str(row.get("url")))+"' rel='nofollow noopener' target='_blank'>Read the original report</a>" if row.get("url") else ""}</div>
@@ -1205,7 +1220,11 @@ def change(item_id,status=None,**extra):
  if err:return err
  database=db()
  try:
-  fields=dict(extra); 
+  fields=dict(extra);
+  if status=="published":
+   existing=database.get_by_id(item_id)
+   if existing and existing["source_type"]=="x" and existing["fact_check_status"]!="reviewed":
+    return jsonify({"error":"X post needs source and context review before publishing"}),409
   if status is not None:fields["status"]=status
   database.update(item_id,**fields); log_admin(database,"news.update",item_id,",".join(fields.keys())); return jsonify({"ok":True,**fields})
  finally:database.close()
