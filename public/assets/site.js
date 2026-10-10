@@ -151,7 +151,7 @@ function mergeFeeds(a,b){
   const prev=seen.get(key);
   if(!prev||ts(item.date)>ts(prev.date)||(!prev.body&&item.body)||(!prev.image&&item.image))seen.set(key,item);
  }
- return [MUSK_STARLINK,NANA_TRIBUTE,...[...seen.values()].filter(x=>!['nana-tribute','202610090923'].includes(String(x.id)))].sort((x,y)=>ts(y.date)-ts(x.date)||0)
+ return [...seen.values()].sort((x,y)=>ts(y.date)-ts(x.date)||0)
 }
 async function load(opts={}){
  let a=[],b=[],painted=false,apiOK=false;
@@ -168,7 +168,7 @@ async function load(opts={}){
  // is unavailable; cached stories may have URLs that no longer resolve.
  const serverRows=apiOK?a:b;
  const hasServerFeed=apiOK||b.length>0;
- S.items=hasServerFeed?mergeFeeds(serverRows,apiOK?b.filter(item=>item.editorial_pick===true):[]):mergeFeeds(existing,[]);
+ S.items=apiOK?mergeFeeds(a,[]):(b.length?mergeFeeds(b,[]):mergeFeeds(existing,[]));
  if(S.items.length){
   S.mode=apiOK?(S.apiMode==='snapshot'?'snapshot':'api'):(b.length?'snapshot':'cached');
   if(hasServerFeed)cacheSave(S.items);
