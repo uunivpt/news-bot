@@ -95,7 +95,7 @@ def main() -> int:
     if configured_host not in {"graph.instagram.com", "graph.facebook.com"}:
         print("META_AUTH: invalid configured Meta API host. Use an official Meta Graph endpoint.")
         return 2
-    if not re.fullmatch(r"v[0-9]{1,2}\\.[0-9]", version):
+    if not re.fullmatch(r"v[0-9]{1,2}\.[0-9]", version):
         print("META_AUTH: invalid Meta API version format.")
         return 2
     status, results = diagnostic_status(token, version, configured_host)
