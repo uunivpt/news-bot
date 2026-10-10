@@ -17,7 +17,7 @@ from app.instagram_graphic import clean_instagram_text
 from app.remotion_reel_renderer import render_remotion_reel
 from app.image_acquisition import prepare_story_image
 from app.media_storage import download_to, public_video_url
-from app.meta_instagram import publish_reel, InstagramRateLimitError
+from app.meta_instagram import publish_reel, InstagramRateLimitError, InstagramAccessBlockedError
 from app.newsroom import process_news, validate_news_copy
 from app.publish_policy import risk_flags
 from app.phase_system import ensure_schema, run as agent_run, start as agent_start, finish as agent_finish, quality_gate, manager_route
@@ -322,6 +322,13 @@ def _process_instagram_untracked(db,row,music):
   db.update(item_id,**updates)
   print(f"Instagram app rate limit reached; preserving container for item {item_id}: {exc}")
   return "rate_limited"
+ except InstagramAccessBlockedError as exc:
+  # A denied Meta app/token is not a per-story render failure. Do not silently
+  # move on to another story or mark the GitHub workflow successful.
+  db.update(item_id,instagram_status="failed",instagram_error=str(exc)[:3000],
+            instagram_next_retry_at=(datetime.now(timezone.utc)+timedelta(hours=24)).isoformat())
+  print(f"Meta authentication/permission block stopped Instagram worker: {exc}")
+  raise
  except Exception as exc:
   self_heal(db,"instagram","reel_publish",exc,item_id,attempts)
   db.update(item_id,instagram_status="failed",instagram_error=str(exc)[:3000],instagram_next_retry_at=_next_retry(attempts)); print(f"Instagram failed item {item_id}: {exc}"); return False
