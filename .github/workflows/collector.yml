@@ -53,6 +53,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
           NEWSDATA_API_KEY: ${{ secrets.NEWSDATA_API_KEY }}
+          X_API_BEARER_TOKEN: ${{ secrets.X_API_BEARER_TOKEN }}
         run: |
           test -n "$DATABASE_URL" || { echo "::error::DATABASE_URL is missing; refusing to collect into ephemeral SQLite."; exit 1; }
           python run.py --once
