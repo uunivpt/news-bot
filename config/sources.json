@@ -254,5 +254,37 @@
       "public_source": true,
       "requires_permission": true
     }
+  ],
+  "x": [
+    {
+      "name": "X — Rahul Gandhi",
+      "handle": "RahulGandhi",
+      "category": "politics",
+      "enabled": true,
+      "max_results": 10,
+      "check_every_minutes": 30,
+      "public_source": true,
+      "review_required": true
+    },
+    {
+      "name": "X — Narendra Modi",
+      "handle": "narendramodi",
+      "category": "politics",
+      "enabled": true,
+      "max_results": 10,
+      "check_every_minutes": 30,
+      "public_source": true,
+      "review_required": true
+    },
+    {
+      "name": "X — Elon Musk",
+      "handle": "elonmusk",
+      "category": "world",
+      "enabled": true,
+      "max_results": 10,
+      "check_every_minutes": 30,
+      "public_source": true,
+      "review_required": true
+    }
   ]
 }
