@@ -74,6 +74,9 @@ def collect_once(config: dict[str, Any], db: NewsDatabase) -> tuple[int, int]:
         for source in sources:
             if not source.get("enabled", True):
                 continue
+            if source_type == "x" and not os.getenv("X_API_BEARER_TOKEN", "").strip():
+                logger.warning("X source %s skipped: X_API_BEARER_TOKEN not configured", source.get("name", "unknown"))
+                continue
             try:
                 if not _source_due(db, source_type, source):
                     logger.info("%s/%s: skipped; check_every_minutes has not elapsed",source_type,source.get("name","unknown"))
