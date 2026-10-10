@@ -12,6 +12,10 @@ def _cfg():
 def _safe_url(url):
     parts=urlsplit(url); return f"{parts.scheme}://{parts.netloc}{parts.path}"
 
+class InstagramAccessBlockedError(RuntimeError):
+    """A Meta-side API access denial that needs authorization/permissions review."""
+
+
 class InstagramRateLimitError(RuntimeError):
     def __init__(self, message: str, container_id: str | None = None):
         super().__init__(message)
@@ -23,6 +27,16 @@ def _raise_meta(r,action):
     except Exception: detail=r.text[:2000]
     token=os.getenv("META_ACCESS_TOKEN",""); text=str(detail).replace(token,"[REDACTED]")
     detail_text=str(detail)
+    error=detail.get("error") if isinstance(detail,dict) else None
+    error=error if isinstance(error,dict) else {}
+    if str(error.get("code"))=="200" and "api access blocked" in str(error.get("message") or "").lower():
+        trace=str(error.get("fbtrace_id") or "")
+        trace=trace if all(ch.isalnum() or ch in "_-" for ch in trace) and len(trace)<=80 else ""
+        raise InstagramAccessBlockedError(
+            f"Instagram {action}: Meta API access blocked (OAuthException code 200). "
+            "Check developer app restrictions, permissions and approved login method."
+            + (f" Meta trace: {trace}" if trace else "")
+        )
     if r.status_code==429 or '"code": 4' in detail_text or "'code': 4" in detail_text or '"code": 9' in detail_text or "'code': 9" in detail_text or "Rate Limit Exceeded" in detail_text or "Application request limit reached" in detail_text or "Media Publish Limit Exceeded" in detail_text or "maximum number of posts" in detail_text:
         raise InstagramRateLimitError(f"Instagram {action} rate limit reached; retry later.")
     raise RuntimeError(f"Instagram {action} failed ({r.status_code}): {text}")

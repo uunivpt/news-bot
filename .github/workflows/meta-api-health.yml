@@ -1,0 +1,29 @@
+name: Meta API Read-Only Authentication Diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/meta-api-health.yml"
+      - "scripts/check_meta_access.py"
+
+permissions:
+  contents: read
+
+jobs:
+  meta-auth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - name: Check official Meta API authentication (read-only)
+        env:
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          META_API_VERSION: ${{ secrets.META_API_VERSION }}
+          META_API_BASE_URL: ${{ secrets.META_API_BASE_URL }}
+        run: python scripts/check_meta_access.py
