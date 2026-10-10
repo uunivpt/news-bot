@@ -11,6 +11,7 @@ from .rss import collect_rss
 from .news_api import collect_newsapi, collect_newsdata
 from .telegram_public import collect_public_telegram
 from .website_monitor import collect_website
+from .x_source import collect_x
 from .phase_system import ensure_schema, run as agent_run, cluster_stories
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,7 @@ COLLECTORS: dict[str, Callable[[dict[str, Any]], list]] = {
     "website": collect_website,
     "newsapi": collect_newsapi,
     "newsdata": collect_newsdata,
+    "x": collect_x,
 }
 
 
