@@ -66,6 +66,12 @@ jobs:
             echo "Missing Instagram secrets: ${missing[*]}"
             exit 1
           fi
+      - name: Verify Meta authentication before rendering (read-only)
+        env:
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          META_API_VERSION: ${{ secrets.META_API_VERSION }}
+          META_API_BASE_URL: ${{ secrets.META_API_BASE_URL }}
+        run: python scripts/check_meta_access.py
       - name: Publish Instagram queue
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
