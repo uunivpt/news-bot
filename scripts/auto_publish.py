@@ -168,7 +168,7 @@ def _needs_content_repair(row):
 def publish_website_first(db,row,now):
  # Website policy: display only images supplied by the originating source.
  # Do not search/acquire replacement images for text-only source stories.
- flags=risk_flags(row["title"],row.get("bot_summary") or row.get("summary") or ""); review="needs_review" if flags else "pending"
+ flags=risk_flags(row["title"],row.get("bot_summary") or row.get("summary") or ""); review="reviewed" if row.get("source_type")=="x" and row.get("fact_check_status")=="reviewed" else ("needs_review" if flags else "pending")
  db.update(int(row["id"]),status="published",published_at_site=now,fact_check_status=review,fact_check_notes=", ".join(flags) if flags else None); row["status"]="published"; return row
 
 def _next_retry(attempts):
@@ -201,7 +201,7 @@ def _process_instagram_untracked(db,row,music):
  if is_published(db,item_id,"instagram"):
   db.update(item_id,instagram_status="published",instagram_selected=0,instagram_error=None,instagram_next_retry_at=None)
   return True
- if os.getenv("INSTAGRAM_POST_FORMAT","editorial").lower()=="reel" and not music:db.update(item_id,instagram_status="failed",instagram_error="News Pulse audio unavailable",instagram_next_retry_at=_next_retry(attempts)); return False
+ if os.getenv("INSTAGRAM_POST_FORMAT","editorial").lower()=="reel" and row.get("source_type")!="x" and not music:db.update(item_id,instagram_status="failed",instagram_error="News Pulse audio unavailable",instagram_next_retry_at=_next_retry(attempts)); return False
  try:
   # If Meta already accepted the media container but the publish call hit a
   # temporary limit, retry that same container instead of creating a duplicate Reel.
@@ -229,7 +229,7 @@ def _process_instagram_untracked(db,row,music):
   # Existing article images are preferred; otherwise the deterministic
   # license-aware searcher uses openly licensed candidates only.
   try:
-   image_meta=prepare_story_image(row, output_dir=OUT/"news_images")
+   image_meta=None if row.get("source_type")=="x" else prepare_story_image(row, output_dir=OUT/"news_images")
    if image_meta and image_meta.get("image_url"):
     db.update(item_id, **{k:v for k,v in image_meta.items() if k != "image_local_path"})
     row.update(image_meta)
@@ -242,14 +242,18 @@ def _process_instagram_untracked(db,row,music):
    print(f"Image acquisition failed for item {item_id}: {image_exc}")
    row["image_local_path"]=""
   # The premium image post is now the default for every news category.
-  if os.getenv("INSTAGRAM_POST_FORMAT","editorial").lower()!="reel":
+  if os.getenv("INSTAGRAM_POST_FORMAT","editorial").lower()!="reel" or row.get("source_type")=="x":
    from app.editorial_poster import render_editorial_poster, editorial_caption
    from app.cloudinary_storage import upload_image
    from app.meta_instagram import publish_photo
    from app.category_routing import normalize_category
    row["category"]=normalize_category(row.get("category"),row.get("title") or "",row.get("bot_summary") or row.get("summary") or "")
    state_transition(db,item_id,"INSTAGRAM_QUEUE")
-   poster=render_editorial_poster(row,OUT/"editorial"/f"{item_id}.jpg")
+   if row.get("source_type")=="x":
+    from app.x_quote_poster import render_x_quote_card
+    poster=render_x_quote_card(row,OUT/"editorial"/f"x-{item_id}.jpg")
+   else:
+    poster=render_editorial_poster(row,OUT/"editorial"/f"{item_id}.jpg")
    state_transition(db,item_id,"REEL_CREATED")
    poster_hash=hashlib.sha256(poster.read_bytes()).hexdigest()[:16]
    public_id=f"politicshub/editorial/item-{item_id}-{poster_hash}"
@@ -450,6 +454,10 @@ def main():
  daily_limit=min(admin_daily,env_daily) if env_daily else admin_daily; now=datetime.now(timezone.utc); music=audio_path() if publish_instagram else None; pending=_website_candidates(db,max_items) if publish_website else []
  published=held=0
  for row in pending:
+  if row.get("source_type")=="x" and row.get("fact_check_status")!="reviewed":
+   held+=1
+   print(f"X story {row['id']} held for source/context review")
+   continue
   # Always regenerate pending content from the freshest source. If the newsroom
   # processor rejects a very short alert, fall back to cleaned source wording.
   duplicate=find_duplicate_story(db,int(row["id"]),row.get("title") or "")
