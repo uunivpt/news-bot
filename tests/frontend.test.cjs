@@ -48,14 +48,14 @@ test('editorial homepage script is CSP compatible',()=>{
  const html=fs.readFileSync('public/index.html','utf8');
  const script=fs.readFileSync('public/assets/editorial-home.js','utf8');
  assert.doesNotMatch(html,/<script id="ph-v14-script">/);
- assert.match(html,/src="\/assets\/editorial-home\.js\?v=phui18"/);
+ assert.match(html,/src="\/assets\/editorial-home\.js\?v=phui19"/);
  assert.match(script,/home=function\(c\)/);
  assert.match(script,/Source feed checks for news automatically/);
  assert.doesNotMatch(script,/onerror=/);
 });
 test('service worker does not cache API, live snapshot or error responses',()=>{
  const sw=fs.readFileSync('public/service-worker.js','utf8');
- assert.match(sw,/politicshub-shell-v10/);
+ assert.match(sw,/politicshub-shell-v11/);
  assert.match(sw,/url\.pathname==="\/news-data\.json"/);
  assert.match(sw,/if\(response\.ok/);
 });

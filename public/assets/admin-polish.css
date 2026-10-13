@@ -1,0 +1,11 @@
+/* Keep private tools distinct while making controls usable on small screens. */
+:focus-visible{outline:3px solid #a998ff;outline-offset:3px}
+button,input,select,textarea{touch-action:manipulation}
+button{transition:background .18s,box-shadow .18s,transform .18s}
+button:disabled{cursor:not-allowed;opacity:.6}
+.loginbox,form{max-width:100%;overflow-wrap:anywhere}
+.main,.content,.section,.panel,.card{min-width:0}
+.section,.panel{overflow-x:auto}
+@media(max-width:600px){input,select,textarea{font-size:16px!important}.toolbar,.actions{flex-wrap:wrap}.btn{min-height:42px}.loginbox{padding:24px}th,td{min-width:90px}.notice,.toast{max-width:calc(100vw - 32px);overflow-wrap:anywhere}}
+@media(hover:hover) and (prefers-reduced-motion:no-preference){.btn:hover{transform:translateY(-1px);box-shadow:0 4px 16px #0002}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
