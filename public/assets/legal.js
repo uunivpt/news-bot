@@ -1,3 +1,43 @@
-(()=>{const $=s=>document.querySelector(s);const ls={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}},del:k=>{try{localStorage.removeItem(k)}catch(e){}}};const clear=()=>['ph-news-cache','ph-news-cache-v6','ph-news-cache-v5','ph-news-cache-v4','ph-theme','ph-cookie','ph-ls'].forEach(ls.del);document.addEventListener('click',e=>{const b=e.target.closest('[data-consent-choice]');if(!b)return;const mode=b.dataset.consentChoice==='preferences'?'preferences':'essential';ls.set('ph-consent-v1',mode);if(mode==='essential')clear();b.textContent=mode==='preferences'?'Preferences allowed':'Essential only selected'});const nf=$('#newsletterForm');if(nf)nf.addEventListener('submit',async e=>{e.preventDefault();const m=$('#newsletterMessage');try{const r=await fetch('/api/newsletter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$('#newsletterEmail').value,consent:$('#newsletterPrivacy').checked,adult:$('#newsletterAdult').checked})});const j=await r.json();m.textContent=j.message||j.error||'Done';if(r.ok)nf.reset()}catch(err){m.textContent='Could not subscribe right now.'}});const uf=$('#unsubscribeForm');if(uf)uf.addEventListener('submit',async e=>{e.preventDefault();const m=$('#unsubscribeMessage');try{const r=await fetch('/api/newsletter',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$('#unsubscribeEmail').value})});const j=await r.json();m.textContent=j.message||j.error||'Done';if(r.ok)uf.reset()}catch(err){m.textContent='Could not process the request right now.'}});if(nf)fetch('/api/newsletter',{cache:'no-store'}).then(r=>r.json()).then(status=>{
-    if(status.available===false){const button=nf.querySelector('button[type="submit"]');button.disabled=true;button.textContent='Coming soon';$('#newsletterMessage').textContent='Email delivery is being activated. Please check back soon.'}
-   }).catch(()=>{});})();
+(() => {
+  const $ = selector => document.querySelector(selector);
+  document.addEventListener('click', event => {
+    const button = event.target.closest('[data-consent-choice]');
+    if (!button) return;
+    const mode = button.dataset.consentChoice === 'preferences' ? 'preferences' : 'essential';
+    try {
+      localStorage.setItem('ph-consent-v1', mode);
+      if (mode === 'essential') {
+        ['ph-news-cache','ph-news-cache-v6','ph-news-cache-v5','ph-news-cache-v4','ph-theme','ph-cookie','ph-ls'].forEach(key => localStorage.removeItem(key));
+        document.documentElement.dataset.theme = 'light';
+      }
+    } catch (_) {}
+    button.textContent = mode === 'preferences' ? 'Preferences allowed' : 'Essential only selected';
+    document.querySelectorAll('[data-consent-choice]').forEach(el => el.setAttribute('aria-pressed', String(el === button)));
+  });
+  function bind(form, message, method, data) {
+    if (!form) return;
+    const submit = form.querySelector('button[type="submit"]');
+    let busy = false;
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      if (busy || !form.reportValidity()) return;
+      busy = true; submit.disabled = true; form.setAttribute('aria-busy','true'); message.textContent = 'Sending…';
+      try {
+        const response = await fetch('/api/newsletter', {method,headers:{'Content-Type':'application/json'},body:JSON.stringify(data()),signal:AbortSignal.timeout(15000)});
+        const result = await response.json();
+        message.textContent = result.message || result.error || 'Please try again.';
+        if (response.ok) form.reset();
+      } catch (_) { message.textContent = 'Could not complete your request. Please try again.'; }
+      finally { busy = false; submit.disabled = false; form.removeAttribute('aria-busy'); }
+    });
+  }
+  const newsletter = $('#newsletterForm');
+  bind(newsletter, $('#newsletterMessage'), 'POST', () => ({email:$('#newsletterEmail').value,consent:$('#newsletterPrivacy').checked,adult:$('#newsletterAdult').checked}));
+  bind($('#unsubscribeForm'), $('#unsubscribeMessage'), 'DELETE', () => ({email:$('#unsubscribeEmail').value}));
+  if (newsletter) fetch('/api/newsletter', {cache:'no-store'}).then(r => r.json()).then(status => {
+    if (status.available === false) {
+      const button = newsletter.querySelector('button[type="submit"]'); button.disabled = true; button.textContent = 'Coming soon';
+      $('#newsletterMessage').textContent = 'Email delivery is being activated. Please check back soon.';
+    }
+  }).catch(() => {});
+})();

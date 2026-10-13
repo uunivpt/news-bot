@@ -28,5 +28,5 @@ jobs:
           node --check public/service-worker.js
           node --check public/assets/story-page.js
           node --check public/assets/status.js
-          node --test tests/frontend.test.cjs
+          node --test tests/*.test.cjs
           node --test reel/scripts/layout.test.mjs

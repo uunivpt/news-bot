@@ -1,5 +1,5 @@
-const CACHE="politicshub-shell-v10";
-const SHELL=["/","/manifest.webmanifest","/assets/site.css?v=phui18","/assets/site.js?v=phui18","/assets/editorial-home.js?v=phui18","/favicon.svg"];
+const CACHE="politicshub-shell-v11";
+const SHELL=["/","/manifest.webmanifest","/assets/site.css?v=phui19","/assets/site.js?v=phui19","/assets/editorial-home.js?v=phui19","/assets/editorial.css?v=phui19","/assets/polish.css?v=phui19","/assets/ui.js?v=phui19","/favicon.svg"];
 self.addEventListener("install",event=>{
  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting()));
 });
@@ -8,7 +8,7 @@ self.addEventListener("activate",event=>{
 });
 self.addEventListener("fetch",event=>{
  const req=event.request,url=new URL(req.url);
- if(req.method!=="GET"||url.origin!==self.location.origin||url.pathname.startsWith("/api/")||url.pathname==="/news-data.json")return;
+ if(req.method!=="GET"||url.origin!==self.location.origin||url.pathname.startsWith("/api/")||url.pathname.startsWith("/admin")||url.pathname.startsWith("/newsroom-console")||url.pathname==="/news-data.json")return;
  event.respondWith(fetch(req).then(response=>{
   if(response.ok&&(req.mode==="navigate"||url.pathname.startsWith("/assets/")||url.pathname==="/favicon.svg"||url.pathname==="/manifest.webmanifest")){
    const copy=response.clone();event.waitUntil(caches.open(CACHE).then(cache=>cache.put(req,copy)));
