@@ -19,7 +19,10 @@ def check_database() -> bool:
         print("DATABASE_HEALTH: DATABASE_URL is missing from GitHub Actions secrets.")
         return False
     try:
-        with psycopg.connect(url, connect_timeout=8, sslmode="require") as connection:
+        options = {"connect_timeout": 8}
+        if "sslmode=" not in url.lower():
+            options["sslmode"] = "require"
+        with psycopg.connect(url, **options) as connection:
             with connection.transaction():
                 connection.execute("SET TRANSACTION READ ONLY")
                 row = connection.execute("SELECT 1 AS connection_ok").fetchone()
