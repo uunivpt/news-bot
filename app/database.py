@@ -201,7 +201,8 @@ class NewsDatabase:
   try:limit=max(1,min(int(limit),50))
   except (TypeError,ValueError):limit=10
   ph="%s" if self._postgres else "?"
-  return self.conn.execute(f"SELECT * FROM news_items WHERE status='published' ORDER BY COALESCE(view_count,0) DESC, COALESCE(published_at_site,published_at) DESC LIMIT {ph}",(limit,)).fetchall()
+  fields=",".join(self.PUBLIC_LIST_FIELDS)
+  return self.conn.execute(f"SELECT {fields} FROM news_items WHERE status='published' ORDER BY COALESCE(view_count,0) DESC, COALESCE(published_at_site,published_at) DESC LIMIT {ph}",(limit,)).fetchall()
  def insert(self,item:NewsItem)->bool:
   normalized_url=normalize_url(item.url); url_hash,title_hash=fingerprint(normalized_url,item.title); params=(item.source_name,item.source_type,item.title.strip(),item.url,normalized_url,item.published_at,item.summary,item.external_id,url_hash,title_hash,NewsItem.now_iso(),item.category or "general",item.image_url,1 if item.public_source else 0); sql="INSERT INTO news_items (source_name,source_type,title,url,normalized_url,published_at,summary,external_id,url_hash,title_hash,collected_at,category,image_url,public_source) VALUES ({p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p})"
   if self._postgres:return self.conn.execute(sql.format(p="%s")+" ON CONFLICT DO NOTHING",params).rowcount==1
@@ -249,6 +250,14 @@ class NewsDatabase:
    f"SELECT {fields} FROM news_items WHERE "+" AND ".join(clauses)+f" ORDER BY id DESC LIMIT {ph}",
    (*params,max_rows)
   ).fetchall()
+ def latest_identities(self,limit=250):
+  """Clustering and duplicate detection need identity fields, never articles."""
+  ph="%s" if self._postgres else "?"
+  limit=max(1,min(int(limit),1000))
+  return self.conn.execute(f"SELECT id,title,source_name,url FROM news_items ORDER BY id DESC LIMIT {ph}",(limit,)).fetchall()
+ def published_coverage(self):
+  row=self.conn.execute("SELECT COUNT(*) AS published, COALESCE(SUM(CASE WHEN bot_article IS NOT NULL AND bot_article<>'' THEN 1 ELSE 0 END),0) AS with_article, COALESCE(SUM(CASE WHEN image_url IS NOT NULL AND image_url<>'' THEN 1 ELSE 0 END),0) AS with_image FROM news_items WHERE status='published'").fetchone()
+  return {key:int(row[key]) for key in ("published","with_article","with_image")}
  def latest(self,limit=20,category=None,status=None,search=None,review_status=None,instagram_status=None):
   clauses=[];params=[];ph="%s" if self._postgres else "?"
   for col,val in (("category",category),("status",status),("fact_check_status",review_status),("instagram_status",instagram_status)):

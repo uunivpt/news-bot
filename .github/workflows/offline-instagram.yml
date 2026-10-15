@@ -36,27 +36,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - name: Install media utilities
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
-      - name: Install Chrome for Remotion
-        uses: browser-actions/setup-chrome@v2
-        with:
-          chrome-version: stable
       - name: Install Python dependencies
         run: pip install -r requirements.txt
-      - name: Install Remotion
-        run: npm install --prefix reel --omit=dev --no-audit --no-fund
-      - name: Sync latest published stories and Instagram receipts
-        run: |
-          git fetch origin main
-          git show origin/main:public/news-data.json > public/news-data.json
-          if git cat-file -e origin/main:public/instagram-offline-ledger.json 2>/dev/null; then
-            git show origin/main:public/instagram-offline-ledger.json > public/instagram-offline-ledger.json
-          fi
       - name: Check whether primary newsroom has recovered
         id: database
         env:
@@ -76,11 +57,44 @@ jobs:
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
               stream.write("healthy=" + healthy + "\n")
           PY
+      - name: Verify Meta authentication before media setup (read-only)
+        if: steps.database.outputs.healthy != 'true'
+        env:
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          META_API_VERSION: ${{ secrets.META_API_VERSION }}
+          META_API_BASE_URL: ${{ secrets.META_API_BASE_URL }}
+        run: python scripts/check_meta_access.py
+      - name: Setup Node
+        if: steps.database.outputs.healthy != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install media utilities
+        if: steps.database.outputs.healthy != 'true'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Install Chrome for Remotion
+        if: steps.database.outputs.healthy != 'true'
+        uses: browser-actions/setup-chrome@v2
+        with:
+          chrome-version: stable
+      - name: Install Remotion
+        if: steps.database.outputs.healthy != 'true'
+        run: npm install --prefix reel --omit=dev --no-audit --no-fund
+      - name: Sync latest published stories and Instagram receipts
+        if: steps.database.outputs.healthy != 'true'
+        run: |
+          git fetch origin main
+          git show origin/main:public/news-data.json > public/news-data.json
+          if git cat-file -e origin/main:public/instagram-offline-ledger.json 2>/dev/null; then
+            git show origin/main:public/instagram-offline-ledger.json > public/instagram-offline-ledger.json
+          fi
       - name: Publish source-backed news Reel
         if: steps.database.outputs.healthy != 'true'
         env:
           META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
           META_INSTAGRAM_ACCOUNT_ID: ${{ secrets.META_INSTAGRAM_ACCOUNT_ID }}
+          META_API_VERSION: ${{ secrets.META_API_VERSION }}
+          META_API_BASE_URL: ${{ secrets.META_API_BASE_URL }}
           CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
           CLOUDINARY_UPLOAD_PRESET: ${{ secrets.CLOUDINARY_UPLOAD_PRESET }}
           FIXED_AUDIO_PATH: ${{ secrets.FIXED_AUDIO_PATH }}

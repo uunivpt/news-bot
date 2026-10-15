@@ -172,7 +172,7 @@ def _words(text):
 
 def cluster_stories(db, limit=250):
     ensure_schema(db)
-    rows=[dict(r) for r in db.latest(limit=limit,status="all")]
+    rows=[dict(r) for r in db.latest_identities(limit)]
     rows.sort(key=lambda x:int(x["id"]))
     assigned=0
     for row in rows:

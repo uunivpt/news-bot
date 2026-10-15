@@ -107,6 +107,11 @@ def publish_story(story):
 
 
 def main():
+    # Fail before source fetching, image acquisition, rendering and uploads when
+    # Meta has revoked the token. The workflow performs this check even earlier.
+    from scripts.check_meta_access import main as check_meta_access
+    if check_meta_access() != 0:
+        raise RuntimeError("Instagram authorization failed. Reauthorize the existing Meta app and update META_ACCESS_TOKEN in GitHub Actions secrets.")
     if not FEED.exists():
         raise RuntimeError("No public source-linked snapshot is available yet")
     rows = json.loads(FEED.read_text(encoding="utf-8"))

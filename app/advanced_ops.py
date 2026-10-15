@@ -237,8 +237,8 @@ def live_dashboard(db):
     settings=db.get_settings()
     try:
         total=db.count()
-        published=len(db.latest(1000,"all","published"))
-        review_needed=len(db.latest(1000,"all","published",None,"needs_review"))
+        published=db.count_status("published")
+        review_needed=db.count_status("published","needs_review")
         india_today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
         start = datetime.combine(india_today, datetime.min.time(), tzinfo=ZoneInfo("Asia/Kolkata")).astimezone(timezone.utc).isoformat()
         end = (datetime.combine(india_today, datetime.min.time(), tzinfo=ZoneInfo("Asia/Kolkata")) + timedelta(days=1)).astimezone(timezone.utc).isoformat()
@@ -265,7 +265,7 @@ def detailed_report(db, days=7):
 
 def find_duplicate_story(db, item_id, title, threshold=0.82):
     """Deterministic high-confidence duplicate detector; returns existing item or None."""
-    rows=db.latest(250,status="all")
+    rows=db.latest_identities(250)
     best=None
     for row in rows:
         rid=int(row["id"])

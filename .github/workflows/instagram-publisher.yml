@@ -30,26 +30,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - name: Cache Remotion dependencies
-        id: reel-cache
-        uses: actions/cache@v4
-        with:
-          path: reel/node_modules
-          key: reel-node-${{ runner.os }}-${{ hashFiles('reel/package.json') }}
-      - name: Install media tools
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
-      - name: Install Chrome
-        uses: browser-actions/setup-chrome@v2
-        with:
-          chrome-version: stable
       - name: Install Python dependencies
         run: pip install -r requirements.txt
-      - name: Install Remotion dependencies
-        if: steps.reel-cache.outputs.cache-hit != 'true'
-        run: npm install --prefix reel --omit=dev --no-audit --no-fund
       - name: Verify Instagram configuration
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -72,6 +54,24 @@ jobs:
           META_API_VERSION: ${{ secrets.META_API_VERSION }}
           META_API_BASE_URL: ${{ secrets.META_API_BASE_URL }}
         run: python scripts/check_meta_access.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Cache Remotion dependencies
+        id: reel-cache
+        uses: actions/cache@v4
+        with:
+          path: reel/node_modules
+          key: reel-node-${{ runner.os }}-${{ hashFiles('reel/package.json') }}
+      - name: Install media tools
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Install Chrome
+        uses: browser-actions/setup-chrome@v2
+        with:
+          chrome-version: stable
+      - name: Install Remotion dependencies
+        if: steps.reel-cache.outputs.cache-hit != 'true'
+        run: npm install --prefix reel --omit=dev --no-audit --no-fund
       - name: Publish Instagram queue
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

@@ -1,0 +1,26 @@
+name: Provider Recovery Check (Read Only)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install diagnostic dependencies
+        run: pip install 'requests==2.32.5' 'psycopg[binary]==3.2.10'
+      - name: Check database and Instagram authorization without publishing
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          META_API_VERSION: ${{ secrets.META_API_VERSION }}
+          META_API_BASE_URL: ${{ secrets.META_API_BASE_URL }}
+        run: python scripts/check_provider_health.py
