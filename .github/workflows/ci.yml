@@ -17,6 +17,7 @@ jobs:
       - run: pip install -r requirements.txt
       - name: Test pipeline without production credentials
         env:
+          DATABASE_3URL: ''
           DATABASE_URL: ''
           PGSSLMODE: ''
           PHI4_ENABLED: 'false'

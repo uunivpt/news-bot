@@ -41,12 +41,12 @@ jobs:
       - name: Check whether primary newsroom has recovered
         id: database
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_3URL: ${{ secrets.DATABASE_3URL }}
         run: |
           PYTHONPATH=. python - <<'PY'
           import os
           healthy = "false"
-          if os.getenv("DATABASE_URL"):
+          if os.getenv("DATABASE_3URL"):
               try:
                   from app.database import NewsDatabase
                   database = NewsDatabase()

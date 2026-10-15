@@ -38,6 +38,7 @@ jobs:
       - name: Full deterministic test suite
         env:
           PYTHONPATH: .
+          DATABASE_3URL: ""
           DATABASE_URL: ""
           PGSSLMODE: ""
         run: python -m unittest discover -s tests -p 'test_*.py' -v

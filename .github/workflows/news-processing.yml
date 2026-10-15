@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DATABASE_3URL: ${{ secrets.DATABASE_3URL }}
       PGSSLMODE: require
       NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
       NEWSDATA_API_KEY: ${{ secrets.NEWSDATA_API_KEY }}
@@ -63,10 +63,10 @@ jobs:
           PYTHONPATH: .
         run: |
           python -m compileall -q app api scripts run.py
-          DATABASE_URL="" PGSSLMODE="" python -m unittest discover -s tests -p 'test_*.py' -v
+          DATABASE_3URL="" DATABASE_URL="" PGSSLMODE="" python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Verify database secret
         run: |
-          test -n "$DATABASE_URL" || { echo "DATABASE_URL GitHub secret is missing."; exit 1; }
+          test -n "$DATABASE_3URL" || { echo "DATABASE_3URL GitHub secret is missing."; exit 1; }
       - name: Validate source configuration
         run: python -m json.tool config/sources.json >/dev/null
       - name: Collect fresh sources

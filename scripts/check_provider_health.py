@@ -11,12 +11,13 @@ if str(ROOT) not in sys.path:
 
 import psycopg
 from scripts.check_meta_access import main as check_meta_access
+from app.database import database_url_from_environment
 
 
 def check_database() -> bool:
-    url = os.getenv("DATABASE_URL", "").strip()
+    url = database_url_from_environment()
     if not url:
-        print("DATABASE_HEALTH: DATABASE_URL is missing from GitHub Actions secrets.")
+        print("DATABASE_HEALTH: DATABASE_3URL is missing from GitHub Actions secrets.")
         return False
     try:
         options = {"connect_timeout": 8}
@@ -34,7 +35,7 @@ def check_database() -> bool:
         if "quota" in detail:
             print("DATABASE_HEALTH: provider quota exhausted. Check the existing Neon project's billing and data-transfer allowance.")
         elif "password authentication failed" in detail:
-            print("DATABASE_HEALTH: credentials rejected. Verify DATABASE_URL in Actions and Vercel production.")
+            print("DATABASE_HEALTH: credentials rejected. Verify DATABASE_3URL in Actions and Vercel production.")
         else:
             print("DATABASE_HEALTH: connection unavailable. Check the existing provider's endpoint status.")
         return False
