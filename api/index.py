@@ -682,7 +682,7 @@ def login():
 
 @app.get("/robots.txt")
 def robots():
- return app.response_class("User-agent: *\nAllow: /\nAllow: /api/\nAllow: /api/news\nAllow: /ads.txt\nDisallow: /admin/\nDisallow: /admin.html\nDisallow: /admin.js\nDisallow: /newsroom-console-8x4m7k2q.html\nSitemap: https://politicshub.in/sitemap.xml\nSitemap: https://politicshub.in/news-sitemap.xml\n",mimetype="text/plain")
+ return send_from_directory(app.static_folder, "robots.txt", mimetype="text/plain")
 
 @app.get("/api/og-home")
 def og_home():
