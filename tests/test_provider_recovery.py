@@ -69,6 +69,15 @@ class ProviderRecoveryTests(unittest.TestCase):
         self.db.update(1, bot_article="", image_url="https://example.org/photo.jpg")
         self.assertEqual(self.db.published_coverage(), {"published": 1, "with_article": 0, "with_image": 1})
 
+    def test_health_uses_publication_date_when_new_project_ids_are_different(self):
+        self.db.update(1, published_at_site="2026-10-15T06:30:00+00:00")
+        self.db.insert(NewsItem("Example", "rss", "An older source brief with a newer insertion ID", "https://example.org/older"))
+        self.db.update(2, status="published", published_at_site="2026-10-15T05:00:00+00:00")
+        self.assertEqual(self.db.newest_public()["id"], 1)
+        with patch.object(api, "db", return_value=self.db), patch.object(self.db, "close"):
+            response = api.app.test_client().get("/api/health")
+        self.assertEqual(response.json["latest_published_at"], "2026-10-15T06:30:00+00:00")
+
     def test_database_quota_report_does_not_disclose_connection_credentials(self):
         output = io.StringIO()
         with patch.dict(os.environ, {"DATABASE_URL": "postgresql://private:secret@private-host/db"}), \

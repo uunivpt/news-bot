@@ -233,6 +233,8 @@ class NewsDatabase:
   return self.conn.execute(f"SELECT * FROM news_items WHERE id = {ph} LIMIT 1",(int(item_id),)).fetchone()
 
  def count(self):return int(self.conn.execute("SELECT COUNT(*) AS count FROM news_items").fetchone()["count"] if self._postgres else self.conn.execute("SELECT COUNT(*) AS count FROM news_items").fetchone()[0])
+ def newest_public(self):
+  return self.conn.execute("SELECT id,published_at,published_at_site FROM news_items WHERE status='published' ORDER BY COALESCE(NULLIF(published_at_site,''),published_at) DESC,id DESC LIMIT 1").fetchone()
  def count_status(self,status=None,review_status=None,instagram_status=None):
   clauses=[];params=[];ph="%s" if self._postgres else "?"
   if status and status!="all":clauses.append(f"status={ph}");params.append(status)

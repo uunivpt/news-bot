@@ -878,8 +878,8 @@ def health():
  try:
   database=db()
   try:
-   rows=database.latest(1,"all","published")
-   newest=_public_timestamp(dict(rows[0])) if rows else None
+   row=database.newest_public()
+   newest=_public_timestamp(dict(row)) if row else None
   finally:database.close()
   return jsonify({"ok":True,"mode":"live","latest_published_at":datetime.fromtimestamp(newest,timezone.utc).isoformat() if newest else None})
  except RuntimeError:
