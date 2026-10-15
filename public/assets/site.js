@@ -285,6 +285,7 @@ function activeFeedCategory(){
 function feedSignature(items,category){
  return (items||[]).filter(i=>inCat(i,category)).slice(0,30).map(i=>String(i.id)+':'+String(i.date||'')+':'+String(i.title||'')+':'+String(i.summary||'').slice(0,80)).join('|');
 }
+let pendingHomeRefresh=false;
 async function refreshLatest(force=false){
  if(liveRefreshBusy)return;
  if(!force&&Date.now()-lastRefreshAt<15000)return;
@@ -294,10 +295,19 @@ async function refreshLatest(force=false){
   await load();
   const after=feedSignature(S.items,category);
   ticker();
-  if(after!==before&&onStoryListRoute())render(true);
+  if(after!==before&&onStoryListRoute()){
+   if(window.scrollY>80)pendingHomeRefresh=true;
+   else render(true);
+  }
   updateFeedStatus();
  }finally{liveRefreshBusy=false;lastRefreshAt=Date.now()}
 }
+addEventListener('scroll',()=>{
+ if(pendingHomeRefresh&&window.scrollY<32&&onStoryListRoute()){
+  pendingHomeRefresh=false;
+  render(true);
+ }
+},{passive:true});
 setInterval(()=>{if(!document.hidden)refreshLatest()},90000);
 addEventListener('online',()=>refreshLatest(true));
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshLatest(true)});
