@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 import psycopg
 
 from api import index as api
-from app.database import NewsDatabase
+from app.database import NewsDatabase, DatabaseUnavailable, _active_database_target
 from app.models import NewsItem
 from app.advanced_ops import find_duplicate_story
 from app.phase_system import cluster_stories
@@ -18,6 +18,17 @@ from scripts import offline_instagram
 
 
 class ProviderRecoveryTests(unittest.TestCase):
+    def test_production_uses_new_project_and_refuses_previous_project(self):
+        new = "postgresql://user:secret@ep-bold-recipe-b5iqrmwg-pooler.c-7.us-east-2.aws.neon.tech/neondb"
+        old = "postgresql://user:secret@ep-steep-rice-b5dvvhhb-pooler.c-7.us-east-2.aws.neon.tech/neondb"
+        self.assertTrue(_active_database_target(new))
+        self.assertFalse(_active_database_target(old))
+        with patch.dict(os.environ, {"GITHUB_ACTIONS": "true", "DATABASE_URL": old}), \
+             patch("psycopg.connect") as connect:
+            with self.assertRaisesRegex(DatabaseUnavailable, "politics 3"):
+                NewsDatabase()
+        connect.assert_not_called()
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.db = NewsDatabase(str(Path(self.tmp.name) / "news.db"))

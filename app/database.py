@@ -4,6 +4,7 @@ import sqlite3
 from pathlib import Path
 from typing import Iterable, Any
 from datetime import datetime, timedelta
+from urllib.parse import urlsplit
 from .models import NewsItem
 from .normalize import fingerprint, normalize_url
 
@@ -82,11 +83,22 @@ DEFAULT_SETTINGS={"instagram_enabled":"true","instagram_daily_limit":"5","instag
 class DatabaseUnavailable(RuntimeError):
  """Safe, actionable connection failure without credentials or host details."""
 
+def _active_database_target(url):
+ try:
+  parts=urlsplit(str(url or ""))
+  return parts.scheme in {"postgres","postgresql"} and parts.hostname in {
+   "ep-bold-recipe-b5iqrmwg.c-7.us-east-2.aws.neon.tech",
+   "ep-bold-recipe-b5iqrmwg-pooler.c-7.us-east-2.aws.neon.tech",
+  }
+ except ValueError:return False
+
 class NewsDatabase:
  _schema_initialized=set()
  def __init__(self,path="data/news.db",database_url=None):
   self.database_url=database_url or os.getenv("DATABASE_URL"); self._postgres=bool(self.database_url)
   if self._postgres:
+   if os.getenv("DATABASE_URL") and (os.getenv("VERCEL")=="1" or os.getenv("GITHUB_ACTIONS")=="true") and not _active_database_target(self.database_url):
+    raise DatabaseUnavailable("Production DATABASE_URL must target politics 3 (shy-mountain-59394437); update the deployment/worker secret.")
    # Render PostgreSQL requires TLS; add sslmode when a connection string does not specify it.
    if "sslmode=" not in self.database_url.lower():
     self.database_url += ("&" if "?" in self.database_url else "?") + "sslmode=require"
