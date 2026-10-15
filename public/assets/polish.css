@@ -57,3 +57,27 @@ input[type=email],input[type=search]{background:var(--card);color:var(--ink);fon
 @media(max-width:600px){#hd .top{min-height:64px!important;padding:8px 12px!important;gap:5px}#hd .logo:after{font-size:18px}#hd .logo img{width:24px!important;height:24px!important}.acts .ib{width:36px;min-width:36px!important}.ph-subscribe-top{font-size:10px;padding:10px}.ph14-side{display:block}.ph14-copy h1{font-size:clamp(32px,9vw,46px)!important;line-height:1.09!important}.ph14-datebar{line-height:1.7;letter-spacing:.06em}.ph14-row{grid-template-columns:minmax(0,1fr) 100px;gap:14px}.ph14-row h3{font-size:23px}.ph14-row .meta{font-size:9px}.ph14-section-head h2{font-size:22px}.ph14-media{height:240px}.ph14-newsletter{padding:22px}.art{margin-top:22px}.ah{padding:24px 20px}.body p{font-size:17px}.set .row{flex-wrap:wrap;gap:14px}.set h1{font-size:42px}.ui-section-links{padding:0 14px 10px}footer .wrap{gap:24px}.src{padding:18px}.legal-table{max-width:100%}.privacy-actions{gap:8px}}
 @media(max-width:380px){#hd .logo:after{font-size:16px}.ph-subscribe-top{display:none}.acts{margin-left:auto}footer .wrap{grid-template-columns:1fr}.ph14-row{grid-template-columns:1fr}.ph14-thumb{height:160px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none!important}}
+
+
+/* Mobile hero: remove empty height left by the desktop minimum after the news media disappears. */
+@media (max-width:720px) {
+  #app .ph14-home .ph14-lead {
+    min-height:0 !important;
+    height:auto !important;
+    display:block !important;
+  }
+  #app .ph14-home .ph14-copy {
+    min-height:0 !important;
+    padding-top:20px !important;
+    padding-bottom:22px !important;
+  }
+  #app .ph14-home .ph14-read {
+    margin-top:18px;
+  }
+  #app .ph14-home .ph14-media {
+    min-height:0 !important;
+    height:auto !important;
+    aspect-ratio:16 / 9;
+    margin:0 0 16px !important;
+  }
+}
