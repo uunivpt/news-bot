@@ -10,8 +10,6 @@ download tweet-attached photos, or treat a tweet as an independently verified fa
 * In Newsroom, review every X story and open its original source link.
   Approve the **source authenticity and context** before any site publish.
 * The published website can show a 4:5 typographic source quote card.
-  The Instagram worker publishes the original 4:5 card as an image and adds
-  the original post URL to the caption.
 * The card is NOT an X screenshot and must not be represented as one.
   A licence for source photographs/screenshots, if ever used, requires separate review.
 * If a configured account is renamed, its lookup must match the configured handle;

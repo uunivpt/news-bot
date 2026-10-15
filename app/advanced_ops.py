@@ -196,7 +196,7 @@ def state_transition(db,item_id,state,error=None):
     p=_ph(db)
     row=db.conn.execute(f"SELECT attempt FROM ph_story_state WHERE item_id={p}",(int(item_id),)).fetchone()
     attempt=int(row["attempt"] if row else 0)
-    if state in {"RESEARCHING","VERIFICATION","PROCESSING","QUALITY_CHECK","PUBLISHED","INSTAGRAM_QUEUE","REEL_CREATED","INSTAGRAM_PUBLISHED"}:
+    if state in {"RESEARCHING","VERIFICATION","PROCESSING","QUALITY_CHECK","PUBLISHED"}:
         attempt += 1 if state == "RESEARCHING" else 0
     values=(int(item_id),state,_now(),error,attempt)
     db.conn.execute(
@@ -231,7 +231,7 @@ def live_dashboard(db):
     phases=phase_data["phases"]
     p=_ph(db)
     counts={}
-    for state in ("COLLECTED","RESEARCHING","VERIFICATION","PROCESSING","QUALITY_CHECK","PUBLISHED","INSTAGRAM_QUEUE","REEL_CREATED","INSTAGRAM_PUBLISHED"):
+    for state in ("COLLECTED","RESEARCHING","VERIFICATION","PROCESSING","QUALITY_CHECK","PUBLISHED"):
         row=db.conn.execute(f"SELECT COUNT(*) AS count FROM ph_story_state WHERE state={p}",(state,)).fetchone()
         counts[state]=int(row["count"] if db._postgres else row[0])
     settings=db.get_settings()
@@ -242,9 +242,9 @@ def live_dashboard(db):
         india_today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
         start = datetime.combine(india_today, datetime.min.time(), tzinfo=ZoneInfo("Asia/Kolkata")).astimezone(timezone.utc).isoformat()
         end = (datetime.combine(india_today, datetime.min.time(), tzinfo=ZoneInfo("Asia/Kolkata")) + timedelta(days=1)).astimezone(timezone.utc).isoformat()
-        stats={"total":total,"published":published,"review_needed":review_needed,"instagram_today":db.instagram_daily_count(start,end),"instagram_limit":int(settings.get("instagram_daily_limit","5"))}
+        stats={"total":total,"published":published,"review_needed":review_needed}
     except Exception:
-        stats={"total":0,"published":0,"review_needed":0,"instagram_today":0,"instagram_limit":int(settings.get("instagram_daily_limit","5"))}
+        stats={"total":0,"published":0,"review_needed":0}
     recent=db.conn.execute("SELECT stage,status,item_id,details,created_at FROM ph_audit ORDER BY id DESC LIMIT 40").fetchall()
     return {"updated_at":_now(),"pipeline":counts,"agents":a,"phases":phases,"stats":stats,"settings":settings,"audit":[dict(x) for x in recent]}
 

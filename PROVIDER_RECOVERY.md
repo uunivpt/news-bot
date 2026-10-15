@@ -40,30 +40,11 @@ Official references: [network-transfer limits](https://neon.com/docs/introductio
 [pricing](https://neon.com/docs/introduction/plans), and
 [changing plans](https://neon.com/docs/introduction/manage-billing#change-your-plan).
 
-## Instagram
-
-The worker currently receives Meta OAuth error 190: the session was invalidated.
-A revoked token cannot be repaired by calling the long-lived-token refresh API.
-
-1. Open the **existing** app in [Meta App Dashboard](https://developers.facebook.com/apps/).
-   Reauthorize the PoliticsHub Instagram account with that app's existing login
-   method, and obtain a new token with the publishing permissions it requires.
-2. Update `META_ACCESS_TOKEN` in
-   [this repository's Actions secrets](https://github.com/uunivpt/news-bot/settings/secrets/actions).
-   Keep the token inside the secret store. Never paste it in an issue, log or chat.
-3. Confirm `META_API_BASE_URL`, `META_API_VERSION`, and
-   `META_INSTAGRAM_ACCOUNT_ID` match the chosen login method/account. Use the
-   official Instagram Graph endpoint for Instagram Login and the official
-   Facebook Graph endpoint for Facebook Login. Do not switch accounts to
-   work around an authorization error.
-
-## Verify recovery
+## Verify database recovery
 
 Run [Provider Recovery Check (Read Only)](https://github.com/uunivpt/news-bot/actions/workflows/provider-health.yml).
-It reads `SELECT 1` and Meta `/me`, reports safe statuses, and never publishes.
-After the checks pass, the existing collector, news processing and Instagram
-workflows can run normally. A successful `/me` alone does not prove the token
-has media-publishing permission; the publishing workflow must also complete.
+It reads `SELECT 1`, reports connection status and never publishes.
+After the check passes, the collector and website publishing workflows can run normally.
 
 Public news search, breaking/trending lists, clustering and duplicate detection
 use small projections. Dashboard counts/coverage use SQL aggregates. These

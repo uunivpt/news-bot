@@ -55,7 +55,7 @@ test('editorial homepage script is CSP compatible',()=>{
 });
 test('service worker does not cache API, live snapshot or error responses',()=>{
  const sw=fs.readFileSync('public/service-worker.js','utf8');
- assert.match(sw,/politicshub-shell-v11/);
+ assert.match(sw,/politicshub-shell-v\d+/);
  assert.match(sw,/url\.pathname==="\/news-data\.json"/);
  assert.match(sw,/if\(response\.ok/);
 });

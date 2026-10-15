@@ -17,8 +17,7 @@ from app.seo_indexing import is_indexable, eligible_articles, news_sitemap_xml, 
 from app.models import NewsItem
 from app.factcheck import run_cross_source_check
 from app.newsroom import process_news, story_score, is_breaking, dedupe_story_rows, quality_headline, is_telegram_image
-from app.worker import dispatch_worker
-from app.phase_system import phase_analytics, cluster_stories, cluster_summary, train as train_agent
+from app.phase_system import AGENTS, phase_analytics, cluster_stories, cluster_summary, train as train_agent
 from app.reporting import operations_pdf
 from app.advanced_ops import ensure_advanced_schema, live_dashboard, detailed_report, record_verification, audit_stage
 from app.advanced_system import admin_snapshot, historical_analytics, event_timeline, ensure_schema as ensure_upgrade_schema
@@ -332,11 +331,11 @@ def _public_title(title,source_text=""):
  return raw or quality_headline(title,source_text)
 
 def _publicize(row):
- r=dict(row)
+ r={k:v for k,v in dict(row).items() if not k.startswith(("instagram_","reel_cloudinary_"))}
  if not admin_ok():
   # Public readers may see the originating source and its public article URL.
-  # Internal moderation, Instagram state, hashes and processing fields stay private.
-  for key in ("normalized_url","external_id","url_hash","title_hash","collected_at","fact_check_status","fact_check_notes","approved_at","instagram_status","instagram_media_id","instagram_error","instagram_published_at","instagram_attempts","instagram_last_attempt_at","instagram_next_retry_at","instagram_scheduled_at","instagram_queue_order","instagram_container_id","reel_cloudinary_public_id","instagram_selected","ai_summary","ai_article","published_at_site"):
+  # Internal moderation, hashes and processing fields stay private.
+  for key in ("normalized_url","external_id","url_hash","title_hash","collected_at","fact_check_status","fact_check_notes","approved_at","ai_summary","ai_article","published_at_site"):
    r.pop(key,None)
   raw=dict(row).get("published_at_site") or dict(row).get("published_at")
   if raw:
@@ -351,7 +350,7 @@ def _publicize(row):
   article_text=_strip_promo_nav(source_text)
   article_text=re.sub(r"(?:\n|\s)*Why it matters:\s*$","",article_text,flags=re.I).strip()
   r["article"]=article_text
-  # Website images are source-only. Images found later for Instagram/Reels
+  # Website images are source-only. Separately generated images
   # (Wikimedia/Openverse/etc.) must never appear on the website.
   r["image_url"]=_public_image_path(r)
   r.pop("editorial_context",None)
@@ -537,7 +536,7 @@ def _article_html(row):
 <div class="body">{paras}</div>
 <div class="src"><strong>Source transparency:</strong> This is a source-linked brief prepared from the originating report. When multiple independent sources are available, PoliticsHub compares their reported details; otherwise no independent reporting claim is made.</div>
 <div class="src">Source: {html.escape(source)}. {"<a href='"+html.escape(str(row.get("url")))+"' rel='nofollow noopener' target='_blank'>Read the original report</a>" if row.get("url") else ""}</div>
-<div class="article-share"><span>SHARE</span><a href="https://wa.me/?text={share_title}%20{share_url}">WhatsApp</a><a href="https://t.me/share/url?url={share_url}&amp;text={share_title}">Telegram</a><a href="https://www.facebook.com/sharer/sharer.php?u={share_url}">Facebook</a><a href="https://twitter.com/intent/tweet?text={share_title}&amp;url={share_url}">X</a></div>
+<div class="article-share"><span>SHARE</span><a href="https://t.me/share/url?url={share_url}&amp;text={share_title}">Telegram</a><a href="https://twitter.com/intent/tweet?text={share_title}&amp;url={share_url}">X</a></div>
 </article></main>
 <footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><p class="ser">Source-linked news. Clearly.</p></div><div><h4>Navigate</h4><ul><li><a href="/">Home</a></li><li><a href="/archive/">News Archive</a></li><li><a href="/about.html">About</a></li><li><a href="/editorial-policy.html">Editorial Policy</a></li><li><a href="/corrections.html">Corrections</a></li><li><a href="/contact.html">Contact</a></li><li><a href="/disclaimer.html">Disclaimer</a></li><li><a href="/privacy.html">Privacy</a></li><li><a href="/cookies.html">Cookies</a></li><li><a href="/terms.html">Terms</a></li><li><a href="/newsletter.html">Newsletter</a></li><li><a href="/settings.html">Settings</a></li><li><a href="/debug.html">System Status</a></li></ul></div><div><h4>Contact</h4><ul><li><a href="mailto:politicshub.in@gmail.com">politicshub.in@gmail.com</a></li></ul></div></div></footer>
 <script src="/assets/story-page.js"></script>
@@ -577,7 +576,7 @@ def rows_json(rows,compact=False):
   if not (admin_ok() or row.get("status")=="published"):continue
   item=_publicize(row)
   if compact and admin_ok():
-   item={k:item.get(k) for k in ("id","title","source_name","category","status","instagram_status","instagram_attempts","instagram_error","instagram_selected","instagram_scheduled_at","instagram_queue_order","fact_check_status","bot_summary","news_score","is_breaking","view_count")}
+   item={k:item.get(k) for k in ("id","title","source_name","category","status","fact_check_status","bot_summary","news_score","is_breaking","view_count")}
   out.append(item)
  return out
 def users():
@@ -916,12 +915,12 @@ def health():
 @app.get("/api/news")
 def news():
  if not _public_rate_allowed():return jsonify({"error":"rate limit exceeded"}),429
- category=request.args.get("category","all").lower().strip(); status=request.args.get("status","published"); review=request.args.get("review_status","all"); ig=request.args.get("instagram_status","all"); search=request.args.get("search"); compact=request.args.get("compact","0")=="1"
+ category=request.args.get("category","all").lower().strip(); status=request.args.get("status","published"); review=request.args.get("review_status","all"); search=request.args.get("search"); compact=request.args.get("compact","0")=="1"
  if category!="all" and category not in {"general","india","world","politics","business","technology","sports","entertainment","science","health","hindi"}:return jsonify({"error":"invalid category"}),400
  if search is not None: search=str(search).strip()[:120]
  try:limit=min(max(int(request.args.get("limit","200")),1),200)
  except ValueError:limit=100
- if not admin_ok():status,review,ig="published","all","all"
+ if not admin_ok():status,review="published","all"
  try:database=db()
  except Exception:
   # When the database is unavailable, publish only a valid saved snapshot.
@@ -938,7 +937,7 @@ def news():
    # Listing cards never need the full editorial article/AI fields.
    records=database.latest_public(max(limit*3,limit),"all" if category in ("india","entertainment") else category,search)
   else:
-   records=database.latest(max(limit*6,limit),"all" if category in ("india","entertainment") else category,status,search,review,ig)
+   records=database.latest(max(limit*6,limit),"all" if category in ("india","entertainment") else category,status,search,review)
   rows=_rank_public(records)
   if category!="all":rows=[x for x in rows if x.get("category")==category]
   # A healthy database is authoritative; never resurrect removed stories.
@@ -1040,7 +1039,8 @@ def stats():
  if err:return err
  database=db()
  try:
-  settings=database.get_settings(); a,b=_india_day_bounds(); return jsonify({"total":database.count(),"pending":database.count_status("pending"),"review_needed":database.count_status("published","needs_review"),"published":database.count_status("published"),"instagram_failed":database.count_status("published",None,"failed"),"instagram_today":database.instagram_daily_count(a,b),"instagram_limit":int(settings.get("instagram_daily_limit","5")),"instagram_interval_minutes":int(settings.get("instagram_interval_minutes","0")),"instagram_enabled":settings.get("instagram_enabled","true")=="true","instagram_paused":settings.get("instagram_paused","false")=="true","instagram_priority_id":settings.get("instagram_priority_id",""),"website_enabled":settings.get("website_enabled","true")=="true"})
+  settings=database.get_settings()
+  return jsonify({"total":database.count(),"pending":database.count_status("pending"),"review_needed":database.count_status("published","needs_review"),"published":database.count_status("published"),"website_enabled":settings.get("website_enabled","true")=="true"})
  finally:database.close()
 
 
@@ -1050,10 +1050,8 @@ def admin_dashboard():
  if err:return err
  database=db()
  try:
-  settings=database.get_settings(); a,b=_india_day_bounds();
-  payload={"settings":settings,"stats":{"total":database.count(),"pending":database.count_status("pending"),"review_needed":database.count_status("published","needs_review"),"published":database.count_status("published"),"instagram_failed":database.count_status("published",None,"failed"),"instagram_today":database.instagram_daily_count(a,b),"instagram_limit":int(settings.get("instagram_daily_limit","5")),"instagram_interval_minutes":int(settings.get("instagram_interval_minutes","0")),"instagram_enabled":settings.get("instagram_enabled","true")=="true","instagram_paused":settings.get("instagram_paused","false")=="true","instagram_priority_id":settings.get("instagram_priority_id",""),"website_enabled":settings.get("website_enabled","true")=="true"}, "activity":rows_json(database.recent_activity(20))}
-  payload["settings"]["instagram_today"]=str(payload["stats"]["instagram_today"]); payload["settings"]["instagram_last_published_at"]=database.instagram_last_published_at() or ""
-  return jsonify(payload)
+  settings=database.get_settings()
+  return jsonify({"settings":settings,"stats":{"total":database.count(),"pending":database.count_status("pending"),"review_needed":database.count_status("published","needs_review"),"published":database.count_status("published"),"website_enabled":settings.get("website_enabled","true")=="true"},"activity":rows_json(database.recent_activity(20))})
  finally:database.close()
 
 @app.get("/api/admin/health")
@@ -1061,8 +1059,7 @@ def admin_health():
  err=require_admin()
  if err:return err
  database=db()
- try:
-  s=database.get_settings(); worker_ready=bool(os.getenv("WORKFLOW_TOKEN", "").strip() or os.getenv("GITHUB_WORKFLOW_TOKEN", "").strip()); instagram_marker=os.getenv("INSTAGRAM_WORKER_CONFIGURED", "").strip().lower()=="true"; return jsonify({"ok":True,"database":"connected","instagram":{"configured":bool(worker_ready or instagram_marker or os.getenv("META_ACCESS_TOKEN", "").strip()),"credentials_source":"github_actions" if worker_ready and not os.getenv("META_ACCESS_TOKEN", "").strip() else ("vercel" if os.getenv("META_ACCESS_TOKEN", "").strip() else "marker"),"enabled":s.get("instagram_enabled","true")=="true","paused":s.get("instagram_paused","false")=="true"},"worker_dispatch_configured":worker_ready,"website_enabled":s.get("website_enabled","true")=="true","news_count":database.count()})
+ try:return jsonify({"ok":True,"database":"connected","website_enabled":database.get_settings().get("website_enabled","true")=="true","news_count":database.count()})
  finally:database.close()
 
 @app.get("/api/admin/activity")
@@ -1073,22 +1070,6 @@ def admin_activity():
  try:return jsonify([dict(r) for r in database.recent_activity(request.args.get("limit",50))])
  finally:database.close()
 
-@app.get("/api/admin/instagram/analytics")
-def instagram_analytics():
- err=require_admin()
- if err:return err
- database=db()
- try:
-  now=datetime.now(timezone.utc); start=now-timedelta(days=7); rows=[dict(r) for r in database.latest(500,"all","published")]; published=[r for r in rows if r.get("instagram_status")=="published"]
-  daily={};
-  for row in published:
-   raw=row.get("instagram_published_at")
-   if raw:
-    try:day=datetime.fromisoformat(str(raw).replace("Z","+00:00")).astimezone(ZoneInfo("Asia/Kolkata")).date().isoformat(); daily[day]=daily.get(day,0)+1
-    except ValueError:pass
-  recent=[{"id":r["id"],"title":r["title"],"published_at":r.get("instagram_published_at"),"media_id":r.get("instagram_media_id")} for r in published[:20]]
-  return jsonify({"last_7_days":{k:v for k,v in daily.items() if k>=start.astimezone(ZoneInfo("Asia/Kolkata")).date().isoformat()},"total_published":len(published),"failed":len([r for r in rows if r.get("instagram_status")=="failed"]),"processing":len([r for r in rows if r.get("instagram_status")=="processing"]),"queued":len([r for r in rows if r.get("instagram_status")=="pending" and int(r.get("instagram_selected") or 0)==1]),"recent":recent})
- finally:database.close()
 
 @app.get("/api/admin/live")
 def admin_live():
@@ -1164,18 +1145,7 @@ def admin_operations():
   cluster_stories(database,250)
   with __import__("app.phase_system",fromlist=["run"]).run(database,"reporting","generate_operations_report"):
    ops=phase_analytics(database,7)
-  recent_errors=[dict(r) for r in database.conn.execute("SELECT agent_id,operation,error,started_at FROM ph_agent_runs WHERE status='failed' ORDER BY id DESC LIMIT 20").fetchall()]
-  # Instagram failures are stored on news_items as well as agent telemetry. Surface them
-  # in the Command Center so a failed Reel never looks like a silent queue stall.
-  instagram_errors=[dict(r) for r in database.conn.execute("SELECT id,title,instagram_error,instagram_status,instagram_attempts,instagram_last_attempt_at FROM news_items WHERE instagram_error IS NOT NULL AND instagram_error <> '' ORDER BY id DESC LIMIT 20").fetchall()]
-  for item in instagram_errors:
-   recent_errors.append({
-    "agent_id":"instagram",
-    "operation":"publish_reel",
-    "error":f"#{item.get('id')} {item.get('title')}: {item.get('instagram_error')}",
-    "started_at":item.get("instagram_last_attempt_at") or ""
-   })
-  recent_errors=recent_errors[-20:]
+  recent_errors=[dict(r) for r in database.conn.execute("SELECT agent_id,operation,error,started_at FROM ph_agent_runs WHERE status='failed' ORDER BY id DESC LIMIT 20").fetchall() if r["agent_id"] in AGENTS]
   clusters=cluster_summary(database)
   total=database.count()
   coverage=database.published_coverage()
@@ -1221,8 +1191,7 @@ def admin_settings():
  err=require_admin()
  if err:return err
  database=db()
- try:
-  settings=database.get_settings(); a,b=_india_day_bounds(); settings["instagram_today"]=str(database.instagram_daily_count(a,b)); settings["instagram_last_published_at"]=database.instagram_last_published_at() or ""; return jsonify(settings)
+ try:return jsonify(database.get_settings())
  finally:database.close()
 
 @app.post("/api/admin/settings")
@@ -1231,25 +1200,18 @@ def save_settings():
  if err:return err
  err=require_csrf()
  if err:return err
- body=request.get_json(silent=True) or {}; values={}
- for key in ("instagram_enabled","website_enabled","instagram_paused"):
-  if key in body:values[key]="true" if bool(body[key]) else "false"
- for key,maximum in (("instagram_daily_limit",100),("instagram_interval_minutes",1440)):
-  if key in body:
-   try:value=int(body[key])
-   except (TypeError,ValueError):return jsonify({"error":f"{key} must be a number"}),400
-   if value<0 or value>maximum:return jsonify({"error":f"{key} is out of range"}),400
-   values[key]=str(value)
- if "instagram_selection_mode" in body:
-  mode=str(body["instagram_selection_mode"]).lower()
-  if mode not in {"auto","manual"}:return jsonify({"error":"selection mode must be auto or manual"}),400
-  values["instagram_selection_mode"]=mode
+ body=request.get_json(silent=True)
+ if not isinstance(body,dict) or set(body)-{"website_enabled"}:return jsonify({"error":"Unsupported settings"}),400
+ values={}
+ if "website_enabled" in body:
+  if not isinstance(body["website_enabled"],bool):return jsonify({"error":"website_enabled must be a boolean"}),400
+  values["website_enabled"]="true" if body["website_enabled"] else "false"
  database=db()
- try:database.set_settings(values); settings_now=database.get_settings(); log_admin(database,"settings.update",None,",".join(values.keys()))
+ try:
+  database.set_settings(values)
+  log_admin(database,"settings.update",None,",".join(values))
+  return jsonify({"ok":True,"settings":database.get_settings()})
  finally:database.close()
- dispatch=dispatch_worker() if any(k.startswith("instagram_") for k in values) else None; payload={"ok":True,"settings":settings_now}
- if dispatch is not None:payload.update({"worker_dispatched":dispatch.get("ok",False),"worker_dispatch":dispatch})
- return jsonify(payload)
 
 def change(item_id,status=None,**extra):
  err=require_admin()
@@ -1270,7 +1232,7 @@ def change(item_id,status=None,**extra):
 @app.post("/api/news/<int:item_id>/approve")
 def approve(item_id):return change(item_id,fact_check_status="reviewed",approved_at=datetime.now(timezone.utc).isoformat())
 @app.post("/api/news/<int:item_id>/reject")
-def reject(item_id):return change(item_id,status="rejected",instagram_selected=0)
+def reject(item_id):return change(item_id,status="rejected")
 @app.post("/api/news/<int:item_id>/publish")
 def publish(item_id):return change(item_id,status="published",published_at_site=datetime.now(timezone.utc).isoformat())
 
@@ -1348,120 +1310,6 @@ def process_item(item_id):
 @app.post("/api/news/<int:item_id>/ai")
 def legacy_process(item_id):return process_item(item_id)
 
-@app.post("/api/news/<int:item_id>/instagram/queue")
-def instagram_queue(item_id):
- result=change(item_id,instagram_selected=1,instagram_status="pending",instagram_error=None,instagram_next_retry_at=None,instagram_queue_order=0,instagram_scheduled_at=None)
- if isinstance(result,tuple):return result
- dispatch=dispatch_worker(); payload=result.get_json() or {}; payload["worker_dispatched"]=dispatch.get("ok",False); payload["worker_dispatch"]=dispatch; return jsonify(payload)
-@app.post("/api/news/<int:item_id>/instagram/unqueue")
-def instagram_unqueue(item_id):return change(item_id,instagram_selected=0)
-@app.post("/api/news/<int:item_id>/instagram/retry")
-def instagram_retry(item_id):
- result=change(item_id,instagram_status="pending",instagram_error=None,instagram_next_retry_at=None,instagram_selected=1)
- if isinstance(result,tuple):return result
- dispatch=dispatch_worker(); payload=result.get_json() or {}; payload["worker_dispatched"]=dispatch.get("ok",False); payload["worker_dispatch"]=dispatch; return jsonify(payload)
-
-@app.post("/api/admin/instagram/bulk")
-def instagram_bulk():
- err=require_admin()
- if err:return err
- err=require_csrf()
- if err:return err
- body=request.get_json(silent=True) or {}; ids=[]; action=str(body.get("action","")).lower()
- for value in body.get("ids",[]):
-  try: ids.append(int(value))
-  except (TypeError,ValueError): pass
- ids=list(dict.fromkeys(ids))[:100]
- if action not in {"queue","unqueue","retry","cancel_schedule"}:return jsonify({"error":"unsupported bulk action"}),400
- database=db(); changed=0
- try:
-  for item_id in ids:
-   row=(dict(database.get_by_id(item_id,"all")) if database.get_by_id(item_id,"all") else None)
-   if not row:continue
-   if action=="queue":
-    order=database.next_instagram_queue_order(); database.update(item_id,instagram_selected=1,instagram_status="pending",instagram_error=None,instagram_next_retry_at=None,instagram_scheduled_at=None,instagram_queue_order=order)
-   elif action=="unqueue":database.update(item_id,instagram_selected=0)
-   elif action=="retry":database.update(item_id,instagram_selected=1,instagram_status="pending",instagram_error=None,instagram_next_retry_at=None)
-   elif action=="cancel_schedule":database.update(item_id,instagram_scheduled_at=None)
-   changed+=1
-  log_admin(database,"instagram.bulk",None,f"{action}:{changed}")
- finally:database.close()
- dispatch=dispatch_worker() if action in {"queue","retry"} else {"ok":False,"configured":False}
- return jsonify({"ok":True,"changed":changed,"worker_dispatched":dispatch.get("ok",False)})
-
-@app.post("/api/news/<int:item_id>/instagram/publish-now")
-def instagram_publish_now(item_id):
- err=require_admin()
- if err:return err
- err=require_csrf()
- if err:return err
- database=db()
- try:
-  row=(dict(database.get_by_id(item_id,"published")) if database.get_by_id(item_id,"published") else None)
-  if not row:return jsonify({"error":"published story not found"}),404
-  if not row.get("bot_article") or not row.get("bot_summary"):
-   source=enrich_source_text(row.get("title") or "",row.get("summary") or "",row.get("url") or ""); material=source.get("text") or row.get("summary") or row.get("title") or ""; packets=_editorial_source_packets(database,row); result=process_news(row.get("title") or "",material,row.get("category") or "general",source_materials=packets)
-   if not result:return jsonify({"error":"story could not be processed by the newsroom bot"}),422
-   fields={"title":result["headline"],"summary":result["summary"],"bot_summary":result["summary"],"bot_article":result["article"],"editorial_context":result.get("editorial_context") or "", "editorial_value":1 if result.get("editorial_value") else 0, "source_count":int(result.get("source_count") or 0)}
-   if source.get("image_url") and not row.get("image_url"):fields["image_url"]=source["image_url"]
-   database.update(item_id,**fields); row.update(fields); log_admin(database,"news.process",item_id,"auto before Instagram")
-  if row.get("instagram_status")=="published":return jsonify({"error":"already published to Instagram"}),409
-  database.set_settings({"instagram_priority_id":str(item_id),"instagram_paused":"false"}); database.update(item_id,instagram_selected=1,instagram_status="pending",instagram_error=None,instagram_next_retry_at=None,instagram_scheduled_at=None); log_admin(database,"instagram.priority",item_id,"post_now")
- finally:database.close()
- dispatch=dispatch_worker(); return jsonify({"ok":True,"priority_id":item_id,"queue_paused":True,"worker_dispatched":dispatch.get("ok",False),"worker_dispatch":dispatch})
-
-@app.post("/api/news/<int:item_id>/instagram/schedule")
-def instagram_schedule(item_id):
- err=require_admin()
- if err:return err
- err=require_csrf()
- if err:return err
- body=request.get_json(silent=True) or {}; raw=str(body.get("scheduled_at","")).strip()
- if raw:
-  try:due=datetime.fromisoformat(raw.replace("Z","+00:00")); due=due if due.tzinfo else due.replace(tzinfo=ZoneInfo("Asia/Kolkata"))
-  except ValueError:return jsonify({"error":"invalid scheduled_at; use ISO date/time"}),400
-  if due.astimezone(timezone.utc)<=datetime.now(timezone.utc):return jsonify({"error":"scheduled time must be in the future"}),400
-  value=due.astimezone(timezone.utc).isoformat()
- else:value=None
- database=db()
- try:
-  database.update(item_id,instagram_scheduled_at=value,instagram_selected=1,instagram_status="pending",instagram_error=None,instagram_next_retry_at=None)
-  log_admin(database,"instagram.schedule",item_id,value or "cleared")
-  return jsonify({"ok":True,"scheduled_at":value})
- finally:database.close()
-
-@app.post("/api/news/<int:item_id>/instagram/order")
-def instagram_order(item_id):
- err=require_admin()
- if err:return err
- err=require_csrf()
- if err:return err
- body=request.get_json(silent=True) or {}; direction=str(body.get("direction","")).lower()
- if direction not in {"up","down"}:return jsonify({"error":"direction must be up or down"}),400
- database=db()
- try:
-  rows=[dict(r) for r in database.latest(200,"all","published",None,"all","pending") if int(r.get("instagram_selected") or 0)==1]
-  rows.sort(key=lambda r:(int(r.get("instagram_queue_order") or 0) if int(r.get("instagram_queue_order") or 0)>0 else 10**9,-int(r["id"])))
-  index=next((i for i,r in enumerate(rows) if int(r["id"])==item_id),-1)
-  target=index-1 if direction=="up" else index+1
-  if index<0 or target<0 or target>=len(rows):return jsonify({"ok":True,"moved":False})
-  a,b=rows[index],rows[target]; ao=int(a.get("instagram_queue_order") or 0); bo=int(b.get("instagram_queue_order") or 0)
-  if ao<=0:ao=database.next_instagram_queue_order()
-  if bo<=0:bo=max(1,ao-1)
-  database.update(int(a["id"]),instagram_queue_order=bo); database.update(int(b["id"]),instagram_queue_order=ao); log_admin(database,"instagram.reorder",item_id,direction); return jsonify({"ok":True,"moved":True})
- finally:database.close()
-
-@app.post("/api/news/<int:item_id>/instagram/cancel-priority")
-def instagram_cancel_priority(item_id):
- err=require_admin()
- if err:return err
- err=require_csrf()
- if err:return err
- database=db()
- try:
-  if str(database.get_settings().get("instagram_priority_id",""))!=str(item_id):return jsonify({"error":"this story is not the active priority"}),409
-  database.set_settings({"instagram_priority_id":"","instagram_paused":"false"}); log_admin(database,"instagram.priority.cancel",item_id); return jsonify({"ok":True})
- finally:database.close()
 
 @app.post("/api/fact-check")
 def fact_check():

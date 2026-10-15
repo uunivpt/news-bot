@@ -8,7 +8,7 @@ from email.utils import parsedate_to_datetime
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-STATES=("COLLECTED","RESEARCHING","VERIFICATION","PROCESSING","QUALITY_CHECK","PUBLISHED","INSTAGRAM_QUEUE","REEL_CREATED","INSTAGRAM_PUBLISHED")
+STATES=("COLLECTED","RESEARCHING","VERIFICATION","PROCESSING","QUALITY_CHECK","PUBLISHED")
 BREAKING_TERMS=("breaking","just in","urgent","alert","earthquake","attack","resigns","resignation","dead","dies","war","explosion","emergency","major","supreme court","prime minister","president","election result")
 IMPORTANCE_TERMS=("election","government","parliament","supreme court","prime minister","president","war","conflict","economy","market","budget","policy","earthquake","cyclone","flood","security")
 CATEGORY_WEIGHT={"politics":24,"india":20,"world":22,"business":17,"technology":14,"science":12,"sports":10,"health":15,"entertainment":8,"general":8}
@@ -33,7 +33,7 @@ def ensure_schema(db):
       """CREATE TABLE IF NOT EXISTS ph_event_items(event_id TEXT NOT NULL, item_id BIGINT PRIMARY KEY, relation TEXT NOT NULL, first_seen_at TEXT NOT NULL)""",
       """CREATE TABLE IF NOT EXISTS ph_bot_failures(id BIGSERIAL PRIMARY KEY, bot TEXT NOT NULL, item_id BIGINT, step TEXT NOT NULL, error TEXT, attempt INTEGER DEFAULT 1, action TEXT, resolved INTEGER DEFAULT 0, created_at TEXT NOT NULL)""",
       """CREATE TABLE IF NOT EXISTS ph_alerts(id BIGSERIAL PRIMARY KEY, severity TEXT NOT NULL, bot TEXT, step TEXT, item_id BIGINT, message TEXT NOT NULL, resolved INTEGER DEFAULT 0, created_at TEXT NOT NULL)""",
-      """CREATE TABLE IF NOT EXISTS ph_publish_locks(item_id BIGINT PRIMARY KEY, story_key TEXT NOT NULL UNIQUE, website_published INTEGER DEFAULT 0, instagram_published INTEGER DEFAULT 0, reel_url TEXT, locked_at TEXT NOT NULL)""",
+      """CREATE TABLE IF NOT EXISTS ph_publish_locks(item_id BIGINT PRIMARY KEY, story_key TEXT NOT NULL UNIQUE, website_published INTEGER DEFAULT 0, locked_at TEXT NOT NULL)""",
       """CREATE TABLE IF NOT EXISTS ph_resource_snapshots(id BIGSERIAL PRIMARY KEY, captured_at TEXT NOT NULL, payload TEXT NOT NULL)""",
       """CREATE TABLE IF NOT EXISTS ph_reel_previews(item_id BIGINT PRIMARY KEY, video_path TEXT, preview_path TEXT, qa TEXT, layout_id TEXT, created_at TEXT NOT NULL)""",
       """CREATE TABLE IF NOT EXISTS ph_regression_runs(id BIGSERIAL PRIMARY KEY, commit_ref TEXT, status TEXT NOT NULL, results TEXT, created_at TEXT NOT NULL)""",
@@ -189,19 +189,17 @@ def publish_lock(db,item_id,story_key):
     )
     db.conn.commit()
     return cur.rowcount==1
-def mark_published(db,item_id,channel,reel_url=None):
-    p=ph(db); col="website_published" if channel=="website" else "instagram_published"
-    extra=", reel_url="+p if reel_url else ""
-    args=[]
-    if reel_url:args.append(reel_url)
-    args.append(int(item_id))
-    db.conn.execute(f"UPDATE ph_publish_locks SET {col}=1{extra} WHERE item_id={p}",args)
+def mark_published(db,item_id,channel="website"):
+    if channel != "website":raise ValueError("Unsupported publication channel")
+    p=ph(db)
+    db.conn.execute(f"UPDATE ph_publish_locks SET website_published=1 WHERE item_id={p}",(int(item_id),))
     if not getattr(db,"_postgres",False):db.conn.commit()
 
-def is_published(db,item_id,channel):
-    ensure_schema(db); p=ph(db); row=q1(db,f"SELECT website_published,instagram_published FROM ph_publish_locks WHERE item_id={p}",(int(item_id),))
-    if not row:return False
-    return bool(val(row,"website_published" if channel=="website" else "instagram_published",0))
+def is_published(db,item_id,channel="website"):
+    if channel != "website":raise ValueError("Unsupported publication channel")
+    ensure_schema(db); p=ph(db)
+    row=q1(db,f"SELECT website_published FROM ph_publish_locks WHERE item_id={p}",(int(item_id),))
+    return bool(val(row,"website_published",0))
 
 def capture_resources(db,root="."):
     ensure_schema(db); root=Path(root); sizes={}

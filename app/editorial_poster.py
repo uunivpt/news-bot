@@ -1,4 +1,4 @@
-"""PoliticsHub's default premium 4:5 Instagram editorial poster.
+"""PoliticsHub's default premium 4:5 website editorial poster.
 
 No stock/photo placeholder is fabricated. A licensed source image is used only
 when the upstream image-acquisition step has recorded its licence/credit.
