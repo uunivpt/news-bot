@@ -41,11 +41,11 @@ jobs:
           from urllib.parse import urlsplit
           url = urlsplit(os.environ.get("DATABASE_URL") or "")
           allowed_hosts = {
-              "ep-steep-rice-b5dvvhhb-pooler.c-7.us-east-2.aws.neon.tech",
-              "ep-steep-rice-b5dvvhhb.c-7.us-east-2.aws.neon.tech",
+              "ep-bold-recipe-b5iqrmwg-pooler.c-7.us-east-2.aws.neon.tech",
+              "ep-bold-recipe-b5iqrmwg.c-7.us-east-2.aws.neon.tech",
           }
           if url.scheme not in {"postgres", "postgresql"} or url.hostname not in allowed_hosts:
-              raise SystemExit("DATABASE_URL does not target the new PoliticsHub Neon project. Update the GitHub Actions secret.")
+              raise SystemExit("DATABASE_URL must target politics 3 (shy-mountain-59394437). Update the GitHub Actions secret.")
           print("Database target verified (connection credentials concealed).")
           PY
       - name: Run collector once

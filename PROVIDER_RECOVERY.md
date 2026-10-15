@@ -1,6 +1,24 @@
 # Restore the existing production providers
 
-## Database
+## Active database after 15 October cutover
+
+The account owner created **politics 3**, project `shy-mountain-59394437`,
+production branch `br-misty-block-b5rt7ujx`. New collection and website reads
+use that project through `DATABASE_URL` in GitHub Actions and Vercel Production.
+The collector validates the new endpoint:
+`ep-bold-recipe-b5iqrmwg-pooler.c-7.us-east-2.aws.neon.tech`
+(or its direct counterpart without `-pooler`).
+
+Keep historical data in `soft-bread-75007292` and `ancient-king-18045040`.
+Do not run the snapshot-restore script or copy historical tables into politics 3.
+Changing only the Vercel variable is insufficient: the collector and publishing
+workers also require the matching Actions secret. Changes to Vercel environment
+variables require a new production deployment before they take effect.
+
+The fresh database's article sequence starts at `1000000000000000` to keep
+new article IDs separate from historical database and emergency snapshot IDs.
+
+## Previous database quota diagnosis
 
 The existing Neon project is `soft-bread-75007292`, endpoint
 `ep-steep-rice-b5dvvhhb`. On 15 October 2026 the project reported
