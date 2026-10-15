@@ -1,19 +1,77 @@
 import unittest
+from html.parser import HTMLParser
 from pathlib import Path
 from unittest.mock import patch
 from api.index import app, _article_html
 
 
-class UIAdSenseTests(unittest.TestCase):
-    def test_ads_disabled_until_both_explicit_release_flags(self):
-        client = app.test_client()
-        for flags, enabled in [({}, False), ({'ADSENSE_ENABLED':'true'}, False), ({'ADSENSE_CMP_READY':'true'}, False), ({'ADSENSE_ENABLED':'true','ADSENSE_CMP_READY':'true'}, True)]:
-            with patch.dict('os.environ', flags, clear=True):
-                response = client.get('/api/ads-config')
-            assert response.status_code == 200
-            assert response.json == {'enabled': enabled, 'client':'ca-pub-1752666987448533'}
-            assert response.headers['Cache-Control'] == 'no-store'
+ADSENSE_URL = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1752666987448533'
 
+
+class AdSenseScripts(HTMLParser):
+    def __init__(self, page):
+        super().__init__()
+        self.in_head = False
+        self.scripts = []
+        self.feed(page)
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'head':
+            self.in_head = True
+        if tag == 'script' and 'adsbygoogle.js' in dict(attrs).get('src', ''):
+            self.scripts.append((self.in_head, dict(attrs)))
+
+    def handle_endtag(self, tag):
+        if tag == 'head':
+            self.in_head = False
+
+
+class UIAdSenseTests(unittest.TestCase):
+    def assert_adsense_head(self, page):
+        scripts = AdSenseScripts(page).scripts
+        self.assertEqual(len(scripts), 1)
+        in_head, attrs = scripts[0]
+        self.assertTrue(in_head)
+        self.assertEqual(attrs['src'], ADSENSE_URL)
+        self.assertIn('async', attrs)
+        self.assertEqual(attrs.get('crossorigin'), 'anonymous')
+        self.assertNotIn('/assets/adsense.js', page)
+
+    def test_static_news_documents_include_one_async_adsense_script(self):
+        client = app.test_client()
+        for path in ['/index.html', '/elon-musk-ambani-starlink.html', '/nana-patekar-tribute.html']:
+            with self.subTest(path=path):
+                response = client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assert_adsense_head(response.get_data(as_text=True))
+
+    def test_server_rendered_news_documents_include_one_async_adsense_script(self):
+        row = {
+            'id': 44, 'title': 'India Parliament passes a new public services law',
+            'category': 'india', 'status': 'published', 'public_source': True,
+            'source_type': 'rss', 'url': 'https://example.org/news/44',
+            'source_name': 'Source News', 'published_at': '2026-10-15T08:00:00Z',
+            'summary': 'Official sources report changes to public services after discussion in Parliament. ' * 2,
+            'bot_article': 'Official sources described the parliamentary debate and changes to public services. ' * 8,
+        }
+        client = app.test_client()
+        with patch('api.index._public_rows_for_section', return_value=[row]), \
+             patch('api.index._public_row_by_id', return_value=row), \
+             patch('api.index._published_sitemap_rows', return_value=[row]):
+            for path in ['/india/', '/india/44-india-parliament-passes-a-new-public-services-law', '/archive/']:
+                with self.subTest(path=path):
+                    response = client.get(path)
+                    self.assertEqual(response.status_code, 200)
+                    self.assert_adsense_head(response.get_data(as_text=True))
+                    self.assertIn('https://pagead2.googlesyndication.com', response.headers['Content-Security-Policy'])
+
+    def test_utility_and_admin_documents_do_not_include_advertising(self):
+        client = app.test_client()
+        for path in ['/privacy.html', '/cookies.html', '/newsletter.html', '/settings.html', '/admin/', '/admin/setup.html']:
+            with self.subTest(path=path):
+                response = client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(AdSenseScripts(response.get_data(as_text=True)).scripts, [])
 
     def test_public_files_are_not_redirected_to_category_404(self):
         client = app.test_client()
