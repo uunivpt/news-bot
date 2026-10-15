@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 import psycopg
 
 from api import index as api
-from app.database import NewsDatabase
+from app.database import NewsDatabase, DatabaseUnavailable, _active_database_target
 from app.models import NewsItem
 from app.advanced_ops import find_duplicate_story
 from app.phase_system import cluster_stories
@@ -18,6 +18,17 @@ from scripts import offline_instagram
 
 
 class ProviderRecoveryTests(unittest.TestCase):
+    def test_production_uses_new_project_and_refuses_previous_project(self):
+        new = "postgresql://user:secret@ep-bold-recipe-b5iqrmwg-pooler.c-7.us-east-2.aws.neon.tech/neondb"
+        old = "postgresql://user:secret@ep-steep-rice-b5dvvhhb-pooler.c-7.us-east-2.aws.neon.tech/neondb"
+        self.assertTrue(_active_database_target(new))
+        self.assertFalse(_active_database_target(old))
+        with patch.dict(os.environ, {"GITHUB_ACTIONS": "true", "DATABASE_URL": old}), \
+             patch("psycopg.connect") as connect:
+            with self.assertRaisesRegex(DatabaseUnavailable, "politics 3"):
+                NewsDatabase()
+        connect.assert_not_called()
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.db = NewsDatabase(str(Path(self.tmp.name) / "news.db"))
@@ -57,6 +68,15 @@ class ProviderRecoveryTests(unittest.TestCase):
         self.assertEqual(self.db.published_coverage(), {"published": 1, "with_article": 1, "with_image": 0})
         self.db.update(1, bot_article="", image_url="https://example.org/photo.jpg")
         self.assertEqual(self.db.published_coverage(), {"published": 1, "with_article": 0, "with_image": 1})
+
+    def test_health_uses_publication_date_when_new_project_ids_are_different(self):
+        self.db.update(1, published_at_site="2026-10-15T06:30:00+00:00")
+        self.db.insert(NewsItem("Example", "rss", "An older source brief with a newer insertion ID", "https://example.org/older"))
+        self.db.update(2, status="published", published_at_site="2026-10-15T05:00:00+00:00")
+        self.assertEqual(self.db.newest_public()["id"], 1)
+        with patch.object(api, "db", return_value=self.db), patch.object(self.db, "close"):
+            response = api.app.test_client().get("/api/health")
+        self.assertEqual(response.json["latest_published_at"], "2026-10-15T06:30:00+00:00")
 
     def test_database_quota_report_does_not_disclose_connection_credentials(self):
         output = io.StringIO()
