@@ -255,10 +255,12 @@ def _section_html(category="all"):
 
 def _enhance_section_seo(document, category):
  """Provide structured data and useful metadata on server-rendered news pages."""
+ if category == "all":
+  document = document.replace("<title>Latest news — PoliticsHub.in</title>", "<title>India &amp; World News | PoliticsHub.in</title>", 1)
  section = category if category != "all" else "India and world"
  description = (
-  "Explore the latest India and world news, politics, public affairs, business and technology "
-  "on PoliticsHub.in. Read source-linked reports, editorial updates and corrections."
+  "Explore the latest India and world news, politics, business and technology "
+  "on PoliticsHub.in. Read source-linked reports and editorial updates."
   if category == "all" else
   f"Read the latest {section.title()} news and public affairs coverage on PoliticsHub.in, "
   "with source-linked reports, publication details and editorial transparency."
@@ -888,7 +890,7 @@ def seo_article(category,item_id,slug):
    database=db()
    database.close()
   except RuntimeError:
-   return Response("Article temporarily unavailable",status=503,headers={"Retry-After":"300","X-Robots-Tag":"noindex"})
+   return Response("Article temporarily unavailable",status=503,headers={"Retry-After":"300","Cache-Control":"no-store"})
   return jsonify({"error":"not found"}),404
  canonical_path=article_path(row); requested=f"/{category}/{item_id}-{slug}"
  if requested.rstrip("/")!=canonical_path.rstrip("/"):return redirect(SITE_ORIGIN+canonical_path,code=301)
