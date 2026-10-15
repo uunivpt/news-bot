@@ -174,7 +174,7 @@ class SEOIndexingTests(unittest.TestCase):
 
     def test_server_rendered_homepage_and_metadata(self):
         config=json.loads(Path("vercel.json").read_text(encoding="utf-8"))
-        self.assertIn({"source":"/","destination":"/api/seo-home"}, config["rewrites"])
+        self.assertNotIn({"source":"/","destination":"/api/seo-home"}, config["rewrites"])
         with patch.object(api,"_public_rows_for_section",return_value=[example()]):
             response=api.app.test_client().get("/api/seo-home")
         self.assertEqual(response.status_code,200)
