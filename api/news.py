@@ -19,11 +19,11 @@ def handler(request):
         from app.database import NewsDatabase
         database = NewsDatabase()
         try:
-            rows = [dict(row) for row in database.latest(limit, category, "published")]
+            rows = [dict(row) for row in database.latest_public(limit, category)]
         finally:
             database.close()
-        if rows:
-            return jsonify(rows)
+        # A successful empty database read is authoritative too.
+        return jsonify(rows)
     except Exception as exc:
         print(f"/api/news database fallback: {exc}")
 

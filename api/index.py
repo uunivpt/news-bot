@@ -942,7 +942,7 @@ def public_search():
  except RuntimeError:
   return jsonify(rows_json(_rank_public(_snapshot_rows("all",q))[:limit]))
  try:
-  rows=_rank_public(database.latest(min(limit*8,400),"all","published",q))
+  rows=_rank_public(database.latest_public(min(limit*3,150),"all",q))
   # Snapshot is only used when the database is unavailable.
   rows=_rank_public(rows)
   rows=dedupe_story_rows(rows,threshold=0.78)
@@ -979,7 +979,7 @@ def breaking():
   response.headers["Cache-Control"]="no-store"
   return response
  try:
-  rows=_rank_public(database.latest(100,"all","published"))
+  rows=_rank_public(database.latest_public(100,"all"))
   return jsonify(rows_json([r for r in rows if r.get("is_breaking")][:12]))
  finally:database.close()
 
@@ -1152,10 +1152,10 @@ def admin_operations():
   recent_errors=recent_errors[-20:]
   clusters=cluster_summary(database)
   total=database.count()
-  published=len(database.latest(1000,"all","published"))
-  published_rows=[dict(r) for r in database.latest(1000,"all","published")]
-  with_article=len([r for r in published_rows if r.get("bot_article")])
-  images=len([r for r in published_rows if r.get("image_url")])
+  coverage=database.published_coverage()
+  published=coverage["published"]
+  with_article=coverage["with_article"]
+  images=coverage["with_image"]
   ops["content_quality"]={"published":published,"with_article":with_article,"article_coverage_percent":round(with_article/published*100,1) if published else None,"with_image":images,"image_coverage_percent":round(images/published*100,1) if published else None,"cluster_count":len(clusters)}
   ops["recent_errors"]=recent_errors
   return jsonify(ops)
