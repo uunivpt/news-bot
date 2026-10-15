@@ -4,7 +4,7 @@
 
 The account owner created **politics 3**, project `shy-mountain-59394437`,
 production branch `br-misty-block-b5rt7ujx`. New collection and website reads
-use that project through `DATABASE_URL` in GitHub Actions and Vercel Production.
+use that project through `DATABASE_3URL` in GitHub Actions and Vercel Production.
 The collector validates the new endpoint:
 `ep-bold-recipe-b5iqrmwg-pooler.c-7.us-east-2.aws.neon.tech`
 (or its direct counterpart without `-pooler`).

@@ -11,7 +11,7 @@ Public site exposes only published stories. Source name and original source link
 Configure permitted sources in `config/sources.json`. Do not copy full copyrighted articles; keep source attribution and link to the original source. Private sources remain disabled until collection permission is configured.
 
 ## Environment
-- Database: `DATABASE_URL`
+- Database: `DATABASE_3URL` (preferred; legacy `DATABASE_URL` remains a local compatibility fallback)
 - Admin: `FLASK_SECRET_KEY`, `ADMIN_USERS_JSON` (username → Werkzeug password hash)
 - Instagram: `META_ACCESS_TOKEN`, `META_INSTAGRAM_ACCOUNT_ID`, optional `META_API_VERSION`
 - Public Reel storage: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_UPLOAD_PRESET`
@@ -33,6 +33,6 @@ Image acquisition tries up to five relevant licensed candidates before falling b
 `python run.py --once`
 `python scripts/auto_publish.py`
 
-The worker uses PostgreSQL when `DATABASE_URL` is present and otherwise falls back to SQLite.
+The worker uses PostgreSQL from `DATABASE_3URL` (or legacy `DATABASE_URL`) and uses SQLite as a local-development fallback.
 
 <!-- deployment refresh -->

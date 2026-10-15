@@ -92,13 +92,17 @@ def _active_database_target(url):
   }
  except ValueError:return False
 
+def database_url_from_environment():
+ # New production secret takes precedence over the legacy/local setting.
+ return os.getenv("DATABASE_3URL", "").strip() or os.getenv("DATABASE_URL", "").strip() or None
+
 class NewsDatabase:
  _schema_initialized=set()
  def __init__(self,path="data/news.db",database_url=None):
-  self.database_url=database_url or os.getenv("DATABASE_URL"); self._postgres=bool(self.database_url)
+  self.database_url=database_url or database_url_from_environment(); self._postgres=bool(self.database_url)
   if self._postgres:
-   if os.getenv("DATABASE_URL") and (os.getenv("VERCEL")=="1" or os.getenv("GITHUB_ACTIONS")=="true") and not _active_database_target(self.database_url):
-    raise DatabaseUnavailable("Production DATABASE_URL must target politics 3 (shy-mountain-59394437); update the deployment/worker secret.")
+   if database_url_from_environment() and (os.getenv("VERCEL")=="1" or os.getenv("GITHUB_ACTIONS")=="true") and not _active_database_target(self.database_url):
+    raise DatabaseUnavailable("Production DATABASE_3URL must target politics 3 (shy-mountain-59394437); update the deployment/worker secret.")
    # Render PostgreSQL requires TLS; add sslmode when a connection string does not specify it.
    if "sslmode=" not in self.database_url.lower():
     self.database_url += ("&" if "?" in self.database_url else "?") + "sslmode=require"
@@ -120,7 +124,7 @@ class NewsDatabase:
      if "exceeded the quota" in detail or "quota exceeded" in detail:
       raise DatabaseUnavailable("Database quota exhausted; restore capacity in the database provider console.") from None
      if "password authentication failed" in detail:
-      raise DatabaseUnavailable("Database credentials rejected; check DATABASE_URL.") from None
+      raise DatabaseUnavailable("Database credentials rejected; check DATABASE_3URL.") from None
      print(f"Database connection attempt {attempt}/3 failed")
    else:
     raise DatabaseUnavailable("Database connection unavailable after three attempts") from None
@@ -137,7 +141,7 @@ class NewsDatabase:
   else:
    # Vercel's filesystem is read-only. SQLite is only a local-development fallback.
    if os.getenv("VERCEL") and not self.database_url:
-    raise RuntimeError("DATABASE_URL is required on Vercel; refusing to use local SQLite")
+    raise RuntimeError("DATABASE_3URL is required on Vercel; refusing to use local SQLite")
    self.path=Path(path); self.path.parent.mkdir(parents=True,exist_ok=True); self.conn=sqlite3.connect(self.path); self.conn.row_factory=sqlite3.Row
    schema_key="sqlite:"+str(self.path.resolve())
    if schema_key not in self._schema_initialized:

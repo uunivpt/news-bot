@@ -33,27 +33,27 @@ jobs:
         run: pip install -r requirements.txt
       - name: Verify Neon production database target
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_3URL: ${{ secrets.DATABASE_3URL }}
         shell: bash
         run: |
           python - <<'PY'
           import os
           from urllib.parse import urlsplit
-          url = urlsplit(os.environ.get("DATABASE_URL") or "")
+          url = urlsplit(os.environ.get("DATABASE_3URL") or "")
           allowed_hosts = {
               "ep-bold-recipe-b5iqrmwg-pooler.c-7.us-east-2.aws.neon.tech",
               "ep-bold-recipe-b5iqrmwg.c-7.us-east-2.aws.neon.tech",
           }
           if url.scheme not in {"postgres", "postgresql"} or url.hostname not in allowed_hosts:
-              raise SystemExit("DATABASE_URL must target politics 3 (shy-mountain-59394437). Update the GitHub Actions secret.")
+              raise SystemExit("DATABASE_3URL must target politics 3 (shy-mountain-59394437). Update the GitHub Actions secret.")
           print("Database target verified (connection credentials concealed).")
           PY
       - name: Run collector once
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_3URL: ${{ secrets.DATABASE_3URL }}
           NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
           NEWSDATA_API_KEY: ${{ secrets.NEWSDATA_API_KEY }}
           X_API_BEARER_TOKEN: ${{ secrets.X_API_BEARER_TOKEN }}
         run: |
-          test -n "$DATABASE_URL" || { echo "::error::DATABASE_URL is missing; refusing to collect into ephemeral SQLite."; exit 1; }
+          test -n "$DATABASE_3URL" || { echo "::error::DATABASE_3URL is missing; refusing to collect into ephemeral SQLite."; exit 1; }
           python run.py --once

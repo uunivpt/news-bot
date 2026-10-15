@@ -1,7 +1,7 @@
 """Restore source-linked public news from the committed snapshot into a NEW, EMPTY database.
 
 Dry run (no DB access): python scripts/restore_public_snapshot.py
-Restore after safely setting the *new* DATABASE_URL:
+Restore after safely setting the *new* DATABASE_3URL:
     python scripts/restore_public_snapshot.py --apply
 Resume a verified partial restore:
     python scripts/restore_public_snapshot.py --apply --resume
@@ -135,8 +135,8 @@ def main():
     if not args.apply:
         print("DRY RUN ONLY. No database was contacted or changed.")
         return
-    if not os.getenv("DATABASE_URL", "").startswith(("postgresql://", "postgres://")):
-        raise SystemExit("DATABASE_URL must be set to a NEW PostgreSQL project (never the old project)")
+    if not (database_url_from_environment() or "").startswith(("postgresql://", "postgres://")):
+        raise SystemExit("DATABASE_3URL must be set to a NEW PostgreSQL project (never the old project)")
     database = NewsDatabase()
     try:
         count = restore(database, stories, resume=args.resume)

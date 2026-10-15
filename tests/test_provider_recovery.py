@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 import psycopg
 
 from api import index as api
-from app.database import NewsDatabase, DatabaseUnavailable, _active_database_target
+from app.database import NewsDatabase, DatabaseUnavailable, _active_database_target, database_url_from_environment
 from app.models import NewsItem
 from app.advanced_ops import find_duplicate_story
 from app.phase_system import cluster_stories
@@ -18,6 +18,14 @@ from scripts import offline_instagram
 
 
 class ProviderRecoveryTests(unittest.TestCase):
+    def test_database_3url_takes_priority_over_legacy_secret(self):
+        with patch.dict(os.environ, {"DATABASE_3URL": " postgresql://new/active ", "DATABASE_URL": "postgresql://old/history"}):
+            self.assertEqual(database_url_from_environment(), "postgresql://new/active")
+
+    def test_legacy_connection_remains_available_for_local_compatibility(self):
+        with patch.dict(os.environ, {"DATABASE_3URL": "", "DATABASE_URL": "postgresql://local/test"}):
+            self.assertEqual(database_url_from_environment(), "postgresql://local/test")
+
     def test_production_uses_new_project_and_refuses_previous_project(self):
         new = "postgresql://user:secret@ep-bold-recipe-b5iqrmwg-pooler.c-7.us-east-2.aws.neon.tech/neondb"
         old = "postgresql://user:secret@ep-steep-rice-b5dvvhhb-pooler.c-7.us-east-2.aws.neon.tech/neondb"
