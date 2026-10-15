@@ -252,6 +252,38 @@ def _section_html(category="all"):
  body+='<div class="sh"><h2>Latest stories</h2><span class="lbl">'+str(len(rows))+' stories</span></div><div class="grid">'+"".join(cards)+'</div>'
  return '<!doctype html><html lang="en" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta name="google-adsense-account" content="ca-pub-1752666987448533"><script src="/assets/adsense.js?v=phui19" defer></script><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home"><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui19"><link rel="stylesheet" href="/assets/editorial.css?v=phui19"><link rel="stylesheet" href="/assets/polish.css?v=phui19"><script src="/assets/ui.js?v=phui19" defer></script></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/archive/">All News Archive</a></p><p><a href="/nana-patekar-tribute.html">Nana Patekar report</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="/settings.html">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=phui19"></script><script src="/assets/editorial-home.js?v=phui19"></script></body></html>'
 
+
+def _enhance_section_seo(document, category):
+ """Provide structured data and useful metadata on server-rendered news pages."""
+ if category == "all":
+  document = document.replace("<title>Latest news — PoliticsHub.in</title>", "<title>India &amp; World News | PoliticsHub.in</title>", 1)
+ section = category if category != "all" else "India and world"
+ description = (
+  "Explore the latest India and world news, politics, business and technology "
+  "on PoliticsHub.in. Read source-linked reports and editorial updates."
+  if category == "all" else
+  f"Read the latest {section.title()} news and public affairs coverage on PoliticsHub.in, "
+  "with source-linked reports, publication details and editorial transparency."
+ )
+ document = re.sub(
+  r'<meta name="description" content="[^"]*">',
+  '<meta name="description" content="' + html.escape(description, quote=True) + '">',
+  document, count=1,
+ )
+ canonical = SITE_ORIGIN + ("/" if category == "all" else "/" + category + "/")
+ publisher = {"@type": "Organization", "@id": SITE_ORIGIN + "/#publisher",
+              "name": "PoliticsHub.in", "url": SITE_ORIGIN + "/",
+              "logo": {"@type": "ImageObject", "url": SITE_ORIGIN + "/favicon.svg"}}
+ website = {"@type": "WebSite", "name": "PoliticsHub.in",
+            "url": SITE_ORIGIN + "/", "publisher": {"@id": publisher["@id"]}}
+ page = {"@type": "CollectionPage", "name": ("Latest news" if category == "all" else section.title() + " news"),
+         "url": canonical, "description": description, "isPartOf": {"@type": "WebSite", "url": SITE_ORIGIN + "/"}}
+ schema = json.dumps({"@context": "https://schema.org", "@graph": [publisher, website, page]}, ensure_ascii=False).replace("<", "\\u003c")
+ injection = ('<meta property="og:description" content="' + html.escape(description, quote=True) + '">'
+              '<meta name="twitter:description" content="' + html.escape(description, quote=True) + '">'
+              '<script type="application/ld+json">' + schema + '</script>')
+ return document.replace("</head>", injection + "</head>", 1)
+
 _db_retry_after=0.0
 
 def db():
@@ -476,7 +508,7 @@ def _article_html(row):
   "@context":"https://schema.org","@type":"NewsArticle","headline":title,
   "description":summary,"image":[image],"datePublished":pub_iso,"dateModified":str(modified or pub_iso),
   "author":[{"@type":"Organization","name":EDITORIAL_DESK,"url":SITE_ORIGIN+"/author/politicshub-news-desk"}],
-  "publisher":{"@type":"Organization","name":"PoliticsHub.in","url":SITE_ORIGIN},
+  "publisher":{"@type":"Organization","name":"PoliticsHub.in","url":SITE_ORIGIN,"logo":{"@type":"ImageObject","url":SITE_ORIGIN+"/favicon.svg"}},
   "mainEntityOfPage":{"@type":"WebPage","@id":canonical},"isAccessibleForFree":True
  }
  json_ld=json.dumps(data,ensure_ascii=False).replace("<", "\\u003c")
@@ -650,7 +682,7 @@ def login():
 
 @app.get("/robots.txt")
 def robots():
- return app.response_class("User-agent: *\nAllow: /\nAllow: /api/\nAllow: /api/news\nAllow: /ads.txt\nDisallow: /admin/\nDisallow: /admin.html\nDisallow: /admin.js\nDisallow: /newsroom-console-8x4m7k2q.html\nSitemap: https://politicshub.in/sitemap.xml\nSitemap: https://politicshub.in/news-sitemap.xml\n",mimetype="text/plain")
+ return send_from_directory(app.static_folder, "robots.txt", mimetype="text/plain")
 
 @app.get("/api/og-home")
 def og_home():
@@ -833,7 +865,7 @@ def seo_section(category):
  if category not in set(CATEGORY_SLUGS.values()):
   if request.path.startswith("/api/"):return jsonify({"error":"not found"}),404
   return send_from_directory(app.static_folder,category)
- return Response(_section_html(category),mimetype="text/html",headers={"Cache-Control":"public,max-age=60,s-maxage=180"})
+ return Response(_enhance_section_seo(_section_html(category), category),mimetype="text/html",headers={"Cache-Control":"public,max-age=60,s-maxage=180"})
 
 @app.get("/search.html")
 def search_page():return redirect("/#/search",code=302)
@@ -858,7 +890,7 @@ def seo_article(category,item_id,slug):
    database=db()
    database.close()
   except RuntimeError:
-   return Response("Article temporarily unavailable",status=503,headers={"Retry-After":"300","X-Robots-Tag":"noindex"})
+   return Response("Article temporarily unavailable",status=503,headers={"Retry-After":"300","Cache-Control":"no-store"})
   return jsonify({"error":"not found"}),404
  canonical_path=article_path(row); requested=f"/{category}/{item_id}-{slug}"
  if requested.rstrip("/")!=canonical_path.rstrip("/"):return redirect(SITE_ORIGIN+canonical_path,code=301)
@@ -1560,12 +1592,13 @@ def _news_sitemap_page(page):
  return Response(xml,mimetype="application/xml",headers={"Cache-Control":"public,max-age=300,s-maxage=300"})
 
 @app.get("/")
+@app.get("/api/seo-home")
 def seo_home():
  category=request.args.get("category","").lower().strip()
  if category:
   category=CATEGORY_SLUGS.get(category,category)
   if category in set(CATEGORY_SLUGS.values()): return redirect("/"+category+"/",code=301)
- return Response(_section_html("all"),mimetype="text/html")
+ return Response(_enhance_section_seo(_section_html("all"), "all"),mimetype="text/html",headers={"Cache-Control":"public,max-age=60,s-maxage=180"})
 
 @app.get("/article.html")
 def legacy_article():

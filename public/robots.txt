@@ -5,8 +5,10 @@ Disallow: /admin.html
 Disallow: /admin.js
 Disallow: /newsroom-console-8x4m7k2q.html
 Disallow: /debug.html
+Disallow: /api/seo-home
 Disallow: /api/seo-article/
 Disallow: /api/seo-section/
+Disallow: /api/seo-google-news
 Disallow: /api/seo-news-sitemap
 Disallow: /api/seo-archive
 
