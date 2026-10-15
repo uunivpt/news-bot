@@ -172,5 +172,32 @@ class SEOIndexingTests(unittest.TestCase):
             self.assertEqual(parsed[0][0].text,SITE_ORIGIN+canonical_path(row))
 
 
+    def test_server_rendered_homepage_and_metadata(self):
+        config=json.loads(Path("vercel.json").read_text(encoding="utf-8"))
+        self.assertIn({"source":"/","destination":"/api/seo-home"}, config["rewrites"])
+        with patch.object(api,"_public_rows_for_section",return_value=[example()]):
+            response=api.app.test_client().get("/api/seo-home")
+        self.assertEqual(response.status_code,200)
+        page=response.get_data(as_text=True)
+        self.assertIn("<h1>",page)
+        self.assertIn('<link rel="canonical" href="'+SITE_ORIGIN+'/"',page)
+        self.assertIn('type="application/ld+json"',page)
+        self.assertIn('"CollectionPage"',page)
+        description=re.search(r'<meta name="description" content="([^"]+)"',page)
+        self.assertIsNotNone(description)
+        self.assertGreater(len(description.group(1)),70)
+
+    def test_static_home_fallback_and_article_logo(self):
+        source=Path("public/index.html").read_text(encoding="utf-8")
+        self.assertIn("<h1",source)
+        self.assertIn('property="og:image"',source)
+        self.assertIn('type="application/ld+json"',source)
+        with patch.object(api,"_public_row_by_id",return_value=example()):
+            response=api.app.test_client().get("/api/seo-article"+canonical_path(example()))
+        self.assertEqual(response.status_code,200)
+        self.assertIn('"ImageObject"',response.get_data(as_text=True))
+
+
+
 if __name__=="__main__":
     unittest.main()
