@@ -16,7 +16,6 @@ AGENTS = {
     "hr": ("Agent HR", "Tracks reliability, load and training events", 3),
     "automation": ("Automation Controller", "Schedules queues, retries and operational workflows", 4),
     "publisher": ("Web Publisher", "Publishes approved stories to the public site", 4),
-    "instagram": ("Instagram Publisher", "Builds and publishes Reels within configured limits", 4),
     "reporting": ("Reporting Desk", "Produces operational analytics and report-ready output", 5),
 }
 
@@ -128,8 +127,6 @@ def manager_route(title="", category="general", has_image=False):
     route=["trend","manager","research","factcheck","writer","reviewer","publisher"]
     if any(k in text for k in ("market","stock","shares","gdp","inflation")):
         route.insert(3,"research")
-    if has_image:
-        route.append("instagram")
     return list(dict.fromkeys(route))
 
 
@@ -207,7 +204,7 @@ def analytics(db, days=7):
     ensure_schema(db)
     cutoff=(datetime.now(timezone.utc)-timedelta(days=max(1,min(int(days),90)))).isoformat()
     ph="%s" if db._postgres else "?"
-    agents=_exec(db,"SELECT * FROM ph_agents ORDER BY phase,agent_id").fetchall()
+    agents=[r for r in _exec(db,"SELECT * FROM ph_agents ORDER BY phase,agent_id").fetchall() if r["agent_id"] in AGENTS]
     # One aggregate query replaces the previous per-agent query fan-out.
     q=_exec(db,
         "SELECT agent_id,"

@@ -43,7 +43,7 @@ def handler(request):
         item_category = str(item.get("category") or "general").lower()
         if category not in ("all", "general") and item_category != category:
             continue
-        # Snapshot entries are public content; never expose private admin/Instagram fields.
+        # Snapshot entries are public content; never expose private admin fields.
         out.append({
             "id": item.get("id"),
             "title": item.get("title"),

@@ -8,7 +8,6 @@ from dataclasses import replace
 
 from app.models import NewsItem
 from scripts.offline_snapshot import public_story, build
-from scripts.offline_instagram import choose_story, publish_story
 
 
 NOW = datetime(2026, 10, 8, 7, 0, tzinfo=timezone.utc)
@@ -80,56 +79,6 @@ class OfflineNewsFallbackTests(unittest.TestCase):
         output, changed = build([story], [item()], NOW)
         self.assertEqual(changed, 0)
         self.assertEqual(len(output), 1)
-
-    def test_instagram_cooldown_and_source_selection(self):
-        story = public_story(item(), NOW)
-        self.assertEqual(choose_story([story], {"posts": []}, NOW)["url"], story["url"])
-        self.assertIsNone(choose_story([story], {"last_published_at": NOW.isoformat()}, NOW))
-        self.assertIsNone(choose_story([story], {"posts": [{"url": story["url"]}]}, NOW))
-
-    def test_fallback_caps_daily_posts_in_india_timezone(self):
-        story = public_story(item(), NOW)
-        posts = [
-            {"url": f"https://example.org/older-{i}",
-             "published_at": (NOW - timedelta(hours=4 + i)).isoformat()}
-            for i in range(4)
-        ]
-        self.assertIsNone(choose_story([story], {"posts": posts}, NOW))
-
-    def test_fallback_respects_three_hour_spacing(self):
-        story = public_story(item(), NOW)
-        self.assertIsNone(choose_story([story], {
-            "last_published_at": (NOW - timedelta(hours=2)).isoformat(),
-        }, NOW))
-        self.assertIsNotNone(choose_story([story], {
-            "last_published_at": (NOW - timedelta(hours=4)).isoformat(),
-        }, NOW))
-
-    def test_public_rss_is_eligible_but_private_source_is_not(self):
-        story = public_story(item(), NOW)
-        story["source_type"] = "rss"
-        self.assertIsNotNone(choose_story([story], {}, NOW))
-        story["public_source"] = False
-        self.assertIsNone(choose_story([story], {}, NOW))
-
-    def test_fallback_publishes_validated_video_as_reel(self):
-        story = public_story(item(), NOW)
-        with tempfile.TemporaryDirectory() as tmp:
-            video = Path(tmp, "reel.mp4")
-            video.write_bytes(b"test-video")
-            with patch.dict(os.environ, {"INSTAGRAM_POST_FORMAT": "reel"}), \
-                 patch("scripts.offline_instagram.POSTER_DIR", Path(tmp)), \
-                 patch("scripts.auto_publish.audio_path", return_value="music.wav"), \
-                 patch("scripts.offline_instagram.render_remotion_reel", return_value=str(video)) as render, \
-                 patch("scripts.offline_instagram.upload_video", return_value="https://example.org/reel.mp4"), \
-                 patch("scripts.offline_instagram.publish_reel", return_value={"id": "confirmed"}) as publish, \
-                 patch("scripts.offline_instagram.publish_photo") as photo:
-                result, kind, url = publish_story(story)
-                self.assertEqual(result["id"], "confirmed")
-                self.assertEqual(kind, "reel")
-                self.assertEqual(publish.call_args.args[0], url)
-                self.assertEqual(render.call_args.kwargs["audio_path"], "music.wav")
-                photo.assert_not_called()
 
 
 if __name__ == "__main__":

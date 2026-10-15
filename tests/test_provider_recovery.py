@@ -14,7 +14,6 @@ from app.models import NewsItem
 from app.advanced_ops import find_duplicate_story
 from app.phase_system import cluster_stories
 from scripts.check_provider_health import check_database
-from scripts import offline_instagram
 
 
 class ProviderRecoveryTests(unittest.TestCase):
@@ -42,7 +41,7 @@ class ProviderRecoveryTests(unittest.TestCase):
         self.db = NewsDatabase(str(Path(self.tmp.name) / "news.db"))
         self.db.insert(NewsItem("Example", "rss", "Regional council approves new transport funding", "https://example.org/transport", summary="The council approved new funding for regional transport services."))
         self.db.update(1, status="published", bot_article="Full article payload " * 5000,
-                       ai_article="Internal text " * 5000, instagram_error="Private internal error")
+                       ai_article="Internal text " * 5000)
         api._PUBLIC_RATE.clear()
 
     def tearDown(self):
@@ -61,7 +60,7 @@ class ProviderRecoveryTests(unittest.TestCase):
         self.assertTrue(reads)
         self.assertTrue(all("SELECT *" not in q for q in reads))
 
-    def test_public_lists_do_not_transfer_private_article_or_instagram_fields(self):
+    def test_public_lists_do_not_transfer_private_article_fields(self):
         with patch.object(api, "db", return_value=self.db), patch.object(self.db, "close"), \
              patch.object(self.db, "latest", side_effect=AssertionError("Full-row listing must not be used")):
             client = api.app.test_client()
@@ -95,17 +94,6 @@ class ProviderRecoveryTests(unittest.TestCase):
         self.assertIn("quota exhausted", output.getvalue())
         self.assertNotIn("secret", output.getvalue())
         self.assertNotIn("private-host", output.getvalue())
-
-    def test_invalid_meta_auth_stops_offline_worker_before_fetch_or_render(self):
-        with patch("scripts.check_meta_access.main", return_value=3), \
-             patch.object(offline_instagram, "prepare_story") as prepare, \
-             patch.object(offline_instagram, "render_remotion_reel") as render, \
-             patch.object(offline_instagram, "upload_video") as upload:
-            with self.assertRaisesRegex(RuntimeError, "Reauthorize"):
-                offline_instagram.main()
-        prepare.assert_not_called()
-        render.assert_not_called()
-        upload.assert_not_called()
 
 
 if __name__ == "__main__":

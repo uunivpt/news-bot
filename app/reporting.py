@@ -41,6 +41,6 @@ def operations_pdf(db, days=7):
         agent_rows.append([a["name"],str(a["phase"]),str(a["runs"]),str(a["successes"]),str(a["failed"]),str(a["current_load"]),str(a["avg_duration_seconds"])])
     at=Table(agent_rows,colWidths=[145,40,45,50,45,45,55],repeatRows=1)
     at.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#202433")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("GRID",(0,0),(-1,-1),.35,colors.HexColor("#d5d7de")),("FONTSIZE",(0,0),(-1,-1),7.5),("VALIGN",(0,0),(-1,-1),"TOP"),("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.white,colors.HexColor("#f5f6f8")])]))
-    story += [at, Spacer(1,16), Paragraph("Quality notes", styles["Heading2"]), Paragraph("Research clustering, verification prechecks, agent training events, queue automation and public/Instagram publishing are tracked in the operational database. Human/source verification remains required for flagged stories.", styles["BodyText"])]
+    story += [at, Spacer(1,16), Paragraph("Quality notes", styles["Heading2"]), Paragraph("Research clustering, verification prechecks, agent training events, queue automation and website publishing are tracked in the operational database. Human/source verification remains required for flagged stories.", styles["BodyText"])]
     doc.build(story)
     return buf.getvalue()

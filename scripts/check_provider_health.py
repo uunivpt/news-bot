@@ -10,7 +10,6 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import psycopg
-from scripts.check_meta_access import main as check_meta_access
 from app.database import database_url_from_environment
 
 
@@ -45,9 +44,8 @@ def check_database() -> bool:
 
 def main() -> int:
     database_ok = check_database()
-    meta_ok = check_meta_access() == 0
-    print(f"PROVIDER_HEALTH: database={'ready' if database_ok else 'blocked'} instagram_auth={'ready' if meta_ok else 'blocked'}")
-    return 0 if database_ok and meta_ok else 1
+    print(f"PROVIDER_HEALTH: database={'ready' if database_ok else 'blocked'}")
+    return 0 if database_ok else 1
 
 
 if __name__ == "__main__":

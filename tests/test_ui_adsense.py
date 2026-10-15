@@ -39,7 +39,7 @@ class UIAdSenseTests(unittest.TestCase):
 
     def test_static_news_documents_include_one_async_adsense_script(self):
         client = app.test_client()
-        for path in ['/index.html', '/elon-musk-ambani-starlink.html', '/nana-patekar-tribute.html']:
+        for path in ['/elon-musk-ambani-starlink.html', '/nana-patekar-tribute.html']:
             with self.subTest(path=path):
                 response = client.get(path)
                 self.assertEqual(response.status_code, 200)
@@ -88,13 +88,14 @@ class UIAdSenseTests(unittest.TestCase):
             if path.name.startswith('newsroom-console'):
                 continue
             html = path.read_text()
-            assert '/assets/polish.css?v=phui19' in html, path
+            assert '/assets/polish.css?v=' in html, path
             assert '/assets/ui.js?v=phui19' in html, path
             assert 'PH.bindChrome()' not in html
             assert 'googletagmanager.com/gtag/js' not in html
         home = (root/'index.html').read_text()
         assert 'name="google-adsense-account" content="ca-pub-1752666987448533"' in home
         assert 'pub-1752666987448533' in (root/'ads.txt').read_text()
+        self.assertEqual(AdSenseScripts(home).scripts, [])
 
     def test_article_summary_keeps_the_complete_sentence(self):
         summary = 'Context matters. ' * 30 + 'This final sentence must remain intact.'

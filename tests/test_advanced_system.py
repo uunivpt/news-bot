@@ -48,9 +48,9 @@ class AdvancedSystemTests(unittest.TestCase):
         self.assertTrue(eid)
         self.assertTrue(publish_lock(db, 1, "story-key-1"))
         self.assertFalse(publish_lock(db, 2, "story-key-1"))
-        self.assertFalse(is_published(db, 1, "instagram"))
-        mark_published(db, 1, "instagram", "https://example.test/reel.mp4")
-        self.assertTrue(is_published(db, 1, "instagram"))
+        self.assertFalse(is_published(db, 1, "website"))
+        mark_published(db, 1, "website")
+        self.assertTrue(is_published(db, 1, "website"))
 
     def test_source_reliability_metrics(self):
         db = DB()

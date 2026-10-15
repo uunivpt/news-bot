@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-from app import meta_instagram, news_api
+from app import news_api
 from app.image_acquisition import acquire_story_image
 from app.website_monitor import collect_website
 
@@ -26,13 +26,6 @@ class ReliabilityTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "unavailable"):
             collect_website({"name": "Blocked", "url": "https://example.org"})
 
-    @patch("app.meta_instagram._resolve_from_token", return_value="correct-id")
-    def test_instagram_resolution_is_shared_by_new_and_retry_paths(self, resolve):
-        meta_instagram._resolve_instagram_user.cache_clear()
-        for _ in range(2):
-            self.assertEqual(meta_instagram._resolve_instagram_user("https://graph.instagram.com/v25.0", "token", "stale"), "correct-id")
-        resolve.assert_called_once()
-        meta_instagram._resolve_instagram_user.cache_clear()
 
     @patch("app.image_acquisition._download_and_validate")
     @patch("app.image_acquisition._score_candidate", return_value=50)

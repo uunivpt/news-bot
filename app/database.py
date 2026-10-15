@@ -19,10 +19,7 @@ CREATE TABLE IF NOT EXISTS news_items (
  image_url TEXT, public_source INTEGER NOT NULL DEFAULT 0,
  ai_summary TEXT, ai_article TEXT, bot_summary TEXT, bot_article TEXT,
  fact_check_status TEXT NOT NULL DEFAULT 'pending', fact_check_notes TEXT, approved_at TEXT, published_at_site TEXT,
- instagram_status TEXT NOT NULL DEFAULT 'pending', instagram_media_id TEXT, instagram_error TEXT,
- instagram_published_at TEXT, instagram_attempts INTEGER NOT NULL DEFAULT 0, instagram_last_attempt_at TEXT,
- instagram_next_retry_at TEXT, instagram_container_id TEXT, reel_cloudinary_public_id TEXT, reel_cloudinary_url TEXT,
- instagram_selected INTEGER NOT NULL DEFAULT 0, image_source TEXT, image_license TEXT, image_credit TEXT, image_source_url TEXT, image_search_query TEXT, image_selection_score INTEGER, image_local_path TEXT, image_width INTEGER, image_height INTEGER, image_selected_at TEXT, UNIQUE(source_name, external_id)
+ image_source TEXT, image_license TEXT, image_credit TEXT, image_source_url TEXT, image_search_query TEXT, image_selection_score INTEGER, image_local_path TEXT, image_width INTEGER, image_height INTEGER, image_selected_at TEXT, UNIQUE(source_name, external_id)
 )
 """
 ADMIN_SCHEMA = """
@@ -53,11 +50,6 @@ CREATE INDEX IF NOT EXISTS idx_news_source ON news_items(source_name);
 CREATE INDEX IF NOT EXISTS idx_news_category ON news_items(category);
 CREATE INDEX IF NOT EXISTS idx_news_status ON news_items(status);
 CREATE INDEX IF NOT EXISTS idx_news_review ON news_items(fact_check_status);
-CREATE INDEX IF NOT EXISTS idx_news_instagram ON news_items(instagram_status);
-CREATE INDEX IF NOT EXISTS idx_news_instagram_retry ON news_items(instagram_status, instagram_next_retry_at);
-CREATE INDEX IF NOT EXISTS idx_news_instagram_selected ON news_items(instagram_selected, instagram_status);
-CREATE INDEX IF NOT EXISTS idx_news_instagram_schedule ON news_items(instagram_status, instagram_scheduled_at);
-CREATE INDEX IF NOT EXISTS idx_news_instagram_queue_order ON news_items(instagram_selected, instagram_queue_order);
 CREATE INDEX IF NOT EXISTS idx_news_views ON news_items(view_count DESC, published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_admin_login_attempts_key_time ON admin_login_attempts(attempt_key, attempted_at);
 """
@@ -68,17 +60,13 @@ MIGRATIONS = {
  "bot_summary":"ALTER TABLE news_items ADD COLUMN bot_summary TEXT", "bot_article":"ALTER TABLE news_items ADD COLUMN bot_article TEXT",
  "fact_check_status":"ALTER TABLE news_items ADD COLUMN fact_check_status TEXT NOT NULL DEFAULT 'pending'", "fact_check_notes":"ALTER TABLE news_items ADD COLUMN fact_check_notes TEXT",
  "approved_at":"ALTER TABLE news_items ADD COLUMN approved_at TEXT", "published_at_site":"ALTER TABLE news_items ADD COLUMN published_at_site TEXT",
- "instagram_status":"ALTER TABLE news_items ADD COLUMN instagram_status TEXT NOT NULL DEFAULT 'pending'", "instagram_media_id":"ALTER TABLE news_items ADD COLUMN instagram_media_id TEXT",
- "instagram_error":"ALTER TABLE news_items ADD COLUMN instagram_error TEXT", "instagram_published_at":"ALTER TABLE news_items ADD COLUMN instagram_published_at TEXT",
- "instagram_attempts":"ALTER TABLE news_items ADD COLUMN instagram_attempts INTEGER NOT NULL DEFAULT 0", "instagram_last_attempt_at":"ALTER TABLE news_items ADD COLUMN instagram_last_attempt_at TEXT",
- "instagram_next_retry_at":"ALTER TABLE news_items ADD COLUMN instagram_next_retry_at TEXT", "instagram_container_id":"ALTER TABLE news_items ADD COLUMN instagram_container_id TEXT",
- "reel_cloudinary_public_id":"ALTER TABLE news_items ADD COLUMN reel_cloudinary_public_id TEXT", "reel_cloudinary_url":"ALTER TABLE news_items ADD COLUMN reel_cloudinary_url TEXT", "instagram_selected":"ALTER TABLE news_items ADD COLUMN instagram_selected INTEGER NOT NULL DEFAULT 0",
- "instagram_scheduled_at":"ALTER TABLE news_items ADD COLUMN instagram_scheduled_at TEXT",
- "instagram_queue_order":"ALTER TABLE news_items ADD COLUMN instagram_queue_order INTEGER NOT NULL DEFAULT 0", "image_source":"ALTER TABLE news_items ADD COLUMN image_source TEXT", "image_license":"ALTER TABLE news_items ADD COLUMN image_license TEXT", "image_credit":"ALTER TABLE news_items ADD COLUMN image_credit TEXT", "image_source_url":"ALTER TABLE news_items ADD COLUMN image_source_url TEXT", "image_search_query":"ALTER TABLE news_items ADD COLUMN image_search_query TEXT", "image_selection_score":"ALTER TABLE news_items ADD COLUMN image_selection_score INTEGER", "image_local_path":"ALTER TABLE news_items ADD COLUMN image_local_path TEXT", "image_width":"ALTER TABLE news_items ADD COLUMN image_width INTEGER", "image_height":"ALTER TABLE news_items ADD COLUMN image_height INTEGER", "image_selected_at":"ALTER TABLE news_items ADD COLUMN image_selected_at TEXT",
+
+
+ "image_source":"ALTER TABLE news_items ADD COLUMN image_source TEXT", "image_license":"ALTER TABLE news_items ADD COLUMN image_license TEXT", "image_credit":"ALTER TABLE news_items ADD COLUMN image_credit TEXT", "image_source_url":"ALTER TABLE news_items ADD COLUMN image_source_url TEXT", "image_search_query":"ALTER TABLE news_items ADD COLUMN image_search_query TEXT", "image_selection_score":"ALTER TABLE news_items ADD COLUMN image_selection_score INTEGER", "image_local_path":"ALTER TABLE news_items ADD COLUMN image_local_path TEXT", "image_width":"ALTER TABLE news_items ADD COLUMN image_width INTEGER", "image_height":"ALTER TABLE news_items ADD COLUMN image_height INTEGER", "image_selected_at":"ALTER TABLE news_items ADD COLUMN image_selected_at TEXT",
  "view_count":"ALTER TABLE news_items ADD COLUMN view_count INTEGER NOT NULL DEFAULT 0",
  "last_viewed_at":"ALTER TABLE news_items ADD COLUMN last_viewed_at TEXT",
 }
-DEFAULT_SETTINGS={"instagram_enabled":"true","instagram_daily_limit":"5","instagram_selection_mode":"auto","instagram_interval_minutes":"0","website_enabled":"true","instagram_paused":"false","instagram_priority_id":""}
+DEFAULT_SETTINGS={"website_enabled":"true"}
 
 class DatabaseUnavailable(RuntimeError):
  """Safe, actionable connection failure without credentials or host details."""
@@ -164,7 +152,7 @@ class NewsDatabase:
    else:self.conn.execute("INSERT OR IGNORE INTO admin_settings (key,value,updated_at) VALUES (?,?,?)",(key,value,now))
   if not self._postgres:self.conn.commit()
  def get_settings(self):
-  rows=self.conn.execute("SELECT key,value FROM admin_settings").fetchall(); result=dict(DEFAULT_SETTINGS); result.update({str(r["key"] if self._postgres else r[0]):str(r["value"] if self._postgres else r[1]) for r in rows}); return result
+  rows=self.conn.execute("SELECT key,value FROM admin_settings").fetchall(); result=dict(DEFAULT_SETTINGS); result.update({str(r["key"] if self._postgres else r[0]):str(r["value"] if self._postgres else r[1]) for r in rows}); return {k:v for k,v in result.items() if k in DEFAULT_SETTINGS or k.startswith("collector_last:")}
  def get_setting(self,key,default=None):return self.get_settings().get(key,default)
  def set_settings(self,values):
   now=NewsItem.now_iso()
@@ -188,10 +176,6 @@ class NewsDatabase:
   ph="%s" if self._postgres else "?"
   self.conn.execute(f"DELETE FROM admin_login_attempts WHERE attempt_key = {ph}",(attempt_key,))
   if not self._postgres:self.conn.commit()
- def instagram_daily_count(self,start,end):
-  ph="%s" if self._postgres else "?"; row=self.conn.execute(f"SELECT COUNT(*) AS count FROM news_items WHERE instagram_status='published' AND instagram_published_at >= {ph} AND instagram_published_at < {ph}",(start,end)).fetchone(); return int(row["count"] if self._postgres else row[0])
- def instagram_last_published_at(self):
-  row=self.conn.execute("SELECT instagram_published_at FROM news_items WHERE instagram_status='published' AND instagram_published_at IS NOT NULL ORDER BY instagram_published_at DESC LIMIT 1").fetchone(); return (row["instagram_published_at"] if self._postgres else row[0]) if row else None
  def close(self):self.conn.close()
  def subscribe_newsletter(self,email,source="website",confirmed=True):
   email=str(email or "").strip().lower()
@@ -239,16 +223,15 @@ class NewsDatabase:
  def count(self):return int(self.conn.execute("SELECT COUNT(*) AS count FROM news_items").fetchone()["count"] if self._postgres else self.conn.execute("SELECT COUNT(*) AS count FROM news_items").fetchone()[0])
  def newest_public(self):
   return self.conn.execute("SELECT id,published_at,published_at_site FROM news_items WHERE status='published' ORDER BY COALESCE(NULLIF(published_at_site,''),published_at) DESC,id DESC LIMIT 1").fetchone()
- def count_status(self,status=None,review_status=None,instagram_status=None):
+ def count_status(self,status=None,review_status=None):
   clauses=[];params=[];ph="%s" if self._postgres else "?"
   if status and status!="all":clauses.append(f"status={ph}");params.append(status)
   if review_status and review_status!="all":clauses.append(f"fact_check_status={ph}");params.append(review_status)
-  if instagram_status and instagram_status!="all":clauses.append(f"instagram_status={ph}");params.append(instagram_status)
   where=(" WHERE "+" AND ".join(clauses)) if clauses else ""
   row=self.conn.execute(f"SELECT COUNT(*) AS count FROM news_items{where}",params).fetchone()
   return int(row["count"] if self._postgres else row[0])
  # Deliberately small listing projection: never transfer full articles, AI text,
- # authentication metadata or Instagram render fields for homepage card requests.
+ # authentication metadata or render fields for homepage card requests.
  PUBLIC_LIST_FIELDS = (
   "id", "title", "summary", "bot_summary", "source_name", "source_type",
   "url", "published_at", "published_at_site", "category", "status",
@@ -276,14 +259,14 @@ class NewsDatabase:
  def published_coverage(self):
   row=self.conn.execute("SELECT COUNT(*) AS published, COALESCE(SUM(CASE WHEN bot_article IS NOT NULL AND bot_article<>'' THEN 1 ELSE 0 END),0) AS with_article, COALESCE(SUM(CASE WHEN image_url IS NOT NULL AND image_url<>'' THEN 1 ELSE 0 END),0) AS with_image FROM news_items WHERE status='published'").fetchone()
   return {key:int(row[key]) for key in ("published","with_article","with_image")}
- def latest(self,limit=20,category=None,status=None,search=None,review_status=None,instagram_status=None):
+ def latest(self,limit=20,category=None,status=None,search=None,review_status=None):
   clauses=[];params=[];ph="%s" if self._postgres else "?"
-  for col,val in (("category",category),("status",status),("fact_check_status",review_status),("instagram_status",instagram_status)):
+  for col,val in (("category",category),("status",status),("fact_check_status",review_status)):
    if val and val!="all":clauses.append(f"{col} = {ph}");params.append(val)
   if search:clauses.append(f"(LOWER(title) LIKE LOWER({ph}) OR LOWER(summary) LIKE LOWER({ph}))");params.extend([f"%{search}%",f"%{search}%"])
   where=(" WHERE "+" AND ".join(clauses)) if clauses else ""; return self.conn.execute(f"SELECT * FROM news_items{where} ORDER BY id DESC LIMIT {ph}",(*params,limit)).fetchall()
  def update(self,item_id:int,**fields:Any):
-  allowed={"title","summary","category","status","bot_summary","bot_article","ai_summary","ai_article","fact_check_status","fact_check_notes","image_url","approved_at","published_at_site","instagram_status","instagram_media_id","instagram_error","instagram_published_at","instagram_attempts","instagram_last_attempt_at","instagram_next_retry_at","instagram_scheduled_at","instagram_container_id","reel_cloudinary_public_id","reel_cloudinary_url","instagram_selected","instagram_queue_order","public_source","image_source","image_license","image_credit","image_source_url","image_search_query","image_selection_score","image_local_path","image_width","image_height","image_selected_at"}; fields={k:v for k,v in fields.items() if k in allowed}
+  allowed={"title","summary","category","status","bot_summary","bot_article","ai_summary","ai_article","fact_check_status","fact_check_notes","image_url","approved_at","published_at_site","public_source","image_source","image_license","image_credit","image_source_url","image_search_query","image_selection_score","image_local_path","image_width","image_height","image_selected_at"}; fields={k:v for k,v in fields.items() if k in allowed}
   if not fields:return
   ph="%s" if self._postgres else "?";sets=[];params=[]
   for k,v in fields.items():sets.append(f"{k} = {ph}");params.append(v)
@@ -300,5 +283,3 @@ class NewsDatabase:
    limit=50
   ph="%s" if self._postgres else "?"
   return self.conn.execute(f"SELECT id,username,action,item_id,details,created_at FROM admin_activity ORDER BY id DESC LIMIT {ph}",(limit,)).fetchall()
- def next_instagram_queue_order(self):
-  row=self.conn.execute("SELECT COALESCE(MAX(instagram_queue_order),0) AS value FROM news_items").fetchone(); return int(row["value"] if self._postgres else row[0])+1

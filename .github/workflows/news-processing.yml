@@ -82,7 +82,6 @@ jobs:
         env:
           PYTHONPATH: .
           PUBLISH_WEBSITE: "true"
-          PUBLISH_TO_INSTAGRAM: "false"
           MAX_ITEMS: "10"
           BOT_REPAIR_ITEMS: "3"
         run: python scripts/auto_publish.py
