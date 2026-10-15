@@ -74,6 +74,28 @@
       "public_source": true,
       "timeout_seconds": 12,
       "max_items": 50
+    },
+    {
+      "name": "The Hindu - India",
+      "url": "https://www.thehindu.com/news/national/feeder/default.rss",
+      "source_class": "rss",
+      "category": "india",
+      "enabled": true,
+      "public_source": true,
+      "timeout_seconds": 12,
+      "max_items": 50,
+      "note": "Publisher-provided RSS metadata only: headline, short excerpt and original link; no article scraping or image republication."
+    },
+    {
+      "name": "BBC News - India",
+      "url": "https://feeds.bbci.co.uk/news/world/asia/india/rss.xml",
+      "source_class": "rss",
+      "category": "india",
+      "enabled": true,
+      "public_source": true,
+      "timeout_seconds": 12,
+      "max_items": 50,
+      "note": "Publisher-provided RSS metadata only: headline, short excerpt and original link; no article scraping or image republication."
     }
   ],
   "telegram": [

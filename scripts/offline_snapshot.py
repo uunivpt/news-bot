@@ -9,6 +9,7 @@ import hashlib
 import html
 import json
 import logging
+import os
 import re
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
@@ -73,7 +74,14 @@ def public_story(item, now):
     endings = list(re.finditer(r"[.!?](?=\s|$)", excerpt))
     if endings:
         summary = excerpt[:endings[-1].end()].strip()
-    elif len(summary) > 460 or not summary.endswith((".", "!", "?")):
+    elif len(summary) > 460:
+        return None
+    elif not summary.endswith((".", "!", "?")) and item.source_type != "rss":
+        return None
+    # RSS standfirsts often intentionally omit a final full stop. Preserve the
+    # entire short source excerpt rather than discard today's feed as a fragment.
+    # Explicitly clipped excerpts still stay out of the public feed.
+    if summary.endswith(("...", "…", "[read more]", "[Read more]")):
         return None
     if len(summary) < 55:
         return None
@@ -99,7 +107,6 @@ def public_story(item, now):
 
 def build(current, collected, now):
     indexed = {}
-    old_keys = set()
     for row in current:
         if not isinstance(row, dict) or not valid_url(row.get("url")):
             continue
@@ -107,9 +114,9 @@ def build(current, collected, now):
         if not published or published > now + timedelta(minutes=30) or now - published > ARCHIVE_AGE:
             continue
         key = str(row["url"]).strip()
+        row = dict(row)
         row["category"] = normalize_category(row.get("category"), row.get("title"), row.get("summary") or row.get("bot_summary"))
         indexed[key] = row
-        old_keys.add(key)
 
     fresh = 0
     for item in collected:
@@ -171,6 +178,17 @@ def main():
         raise SystemExit(1)
 
     result, fresh = build(current, collected, now)
+    newest = max((parse_date(row.get("published_at")) for row in result), default=None)
+    age_minutes = max(0, int((now - newest).total_seconds() / 60)) if newest else None
+    log.info("Feed freshness: newest=%s age_minutes=%s; sources_ok=%s sources_failed=%s", newest, age_minutes, good, len(failed))
+    report_path = os.getenv("GITHUB_STEP_SUMMARY")
+    if report_path:
+        with open(report_path, "a", encoding="utf-8") as report:
+            report.write(f"\n### Public feed freshness\nSuccessful sources: {good}; failed sources: {len(failed)}; new/updated stories: {fresh}.\n\nNewest source story: {newest.isoformat() if newest else 'none'}; age: {age_minutes} minutes.\n")
+    if age_minutes is None or age_minutes > 180:
+        log.warning("No source story within the last three hours; check provider delay and source availability")
+        if os.getenv("GITHUB_ACTIONS"):
+            print("::warning::Public feed is stale: no eligible source story within the last three hours.")
     # Apply editorial recategorization even when the source offers no fresh item.
     changed_categories = any(
         isinstance(row, dict)

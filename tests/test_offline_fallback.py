@@ -4,6 +4,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 from datetime import datetime, timedelta, timezone
+from dataclasses import replace
 
 from app.models import NewsItem
 from scripts.offline_snapshot import public_story, build
@@ -50,6 +51,29 @@ class OfflineNewsFallbackTests(unittest.TestCase):
     def test_rejects_stale_unsourced_or_unsafe_items(self):
         self.assertIsNone(public_story(item(date=(NOW-timedelta(days=3)).isoformat()), NOW))
         self.assertIsNone(public_story(item(url="javascript:alert(1)"), NOW))
+
+    def test_rss_standfirst_without_period_is_preserved_in_full(self):
+        text = "The hill town uses about 60 lakh gallons a day; officials now pin their hopes on the northeast monsoon"
+        story = public_story(replace(item(), source_type="rss", summary=text), NOW)
+        self.assertIsNotNone(story)
+        self.assertEqual(story["summary"], text)
+        self.assertEqual(story["url"], item().url)
+        self.assertIsNone(story["image_url"])
+
+    def test_rss_clipped_or_overlong_standfirst_is_not_published(self):
+        for text in ("More details are expected about this developing report " * 12,
+                     "Officials released details about the latest regional development…",
+                     "Officials released details about the latest regional development..."):
+            with self.subTest(text=text):
+                self.assertIsNone(public_story(replace(item(), source_type="rss", summary=text), NOW))
+
+    def test_build_does_not_mutate_previous_snapshot_categories(self):
+        story = public_story(item(), NOW)
+        story["category"] = "entertainment"
+        story["title"] = "Bollywood actor dies at 82"
+        rows, _ = build([story], [], NOW)
+        self.assertEqual(story["category"], "entertainment")
+        self.assertEqual(rows[0]["category"], "india")
 
     def test_dedupes_source_urls(self):
         story = public_story(item(), NOW)
