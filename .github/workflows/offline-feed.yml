@@ -12,6 +12,9 @@ on:
     branches: [main]
     paths:
       - "scripts/offline_snapshot.py"
+      - "config/sources.json"
+      - "app/rss.py"
+      - "app/news_api.py"
       - ".github/workflows/offline-feed.yml"
 
 concurrency:
