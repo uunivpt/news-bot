@@ -251,6 +251,15 @@ class NewsDatabase:
    f"SELECT {fields} FROM news_items WHERE "+" AND ".join(clauses)+f" ORDER BY id DESC LIMIT {ph}",
    (*params,max_rows)
   ).fetchall()
+ def search_public(self,query):
+  ph="%s" if self._postgres else "?"
+  fields=",".join(self.PUBLIC_LIST_FIELDS)
+  columns=("title","summary","bot_summary","bot_article","source_name")
+  where=" OR ".join(f"LOWER(COALESCE({column},'')) LIKE LOWER({ph})" for column in columns)
+  return self.conn.execute(f"SELECT {fields} FROM news_items WHERE status='published' AND ({where})",tuple(f"%{query}%" for _ in columns)).fetchall()
+ def archive_overrides(self):
+  # Even an unpublished live record takes precedence over a saved public copy.
+  return self.conn.execute("SELECT id,url,status FROM news_items").fetchall()
  def latest_identities(self,limit=250):
   """Clustering and duplicate detection need identity fields, never articles."""
   ph="%s" if self._postgres else "?"

@@ -77,7 +77,7 @@ class AuditRegressions(unittest.TestCase):
   self.assertEqual(api._public_timestamp({'published_at':'Wed, 07 Oct 2026 10:00:00 +0530'}), api._public_timestamp({'published_at':'2026-10-07T04:30:00Z'}))
  def test_healthy_missing_story_does_not_use_snapshot(self):
   database=Mock();database.get_by_id.return_value=None
-  with patch.object(api,'db',return_value=database),api.app.test_request_context('/'):
+  with patch.object(api,'db',return_value=database),patch.object(api.public_archive,'by_id',return_value=None),api.app.test_request_context('/'):
    self.assertIsNone(api._public_row_by_id(api._snapshot_rows()[0]['id']))
  def test_rate_limits_are_independent_per_endpoint(self):
   with api.app.test_request_context('/api/newsletter',method='POST'):
