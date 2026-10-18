@@ -1,5 +1,5 @@
-const CACHE="politicshub-shell-v13";
-const SHELL=["/","/manifest.webmanifest","/assets/site.css?v=phui19","/assets/site.js?v=phui21","/assets/editorial-home.js?v=phui19","/assets/editorial.css?v=phui19","/assets/polish.css?v=phui20","/assets/ui.js?v=phui19","/favicon.svg"];
+const CACHE="politicshub-shell-v14";
+const SHELL=["/","/manifest.webmanifest","/assets/site.css?v=phui22","/assets/site.js?v=phui22","/assets/editorial-home.js?v=phui19","/assets/editorial.css?v=phui19","/assets/polish.css?v=phui20","/assets/ui.js?v=phui19","/favicon.svg"];
 self.addEventListener("install",event=>{
  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting()));
 });
