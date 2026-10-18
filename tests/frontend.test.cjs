@@ -93,3 +93,19 @@ test('mobile page requests explicit web fonts with stable fallback',()=>{
  assert.match(css,/Bricolage\+Grotesque/);
  assert.match(css,/--sans:'Inter',Arial,Helvetica,sans-serif/);
 });
+
+test('archive search loads beyond fifty results and filters category on the server',async()=>{
+ const elements={'#si':{value:'India'},'#sc':{textContent:''},'#sres':{innerHTML:''},'#searchMore':{}};
+ const urls=[];
+ const context=vm.createContext({window:{searchCat:'india'},$:(s)=>elements[s],get:async url=>{
+  urls.push(url);const offset=Number(new URL(url,'https://example.com').searchParams.get('offset'));
+  return Array.from({length:offset===0?50:12},(_,i)=>({id:offset+i+1,title:'Result '+(offset+i+1),category:'india'}));
+ },ENDPOINTS:{search:'/api/search'},S:{items:[]},norm:x=>x,inCat:()=>true,esc:String,articleHref:x=>'/'+x.id,ago:()=>'',doS(){}});
+ vm.runInContext(source.slice(source.indexOf('let searchRequest='),source.indexOf('const __article=')),context);
+ await vm.runInContext('doS()',context);
+ await vm.runInContext('doS(true)',context);
+ assert.match(urls[1],/offset=50&category=india/);
+ assert.equal((elements['#sres'].innerHTML.match(/class="sr"/g)||[]).length,62);
+ assert.match(elements['#sres'].innerHTML,/Result 62/);
+ assert.doesNotMatch(elements['#sres'].innerHTML,/id="searchMore"/);
+});

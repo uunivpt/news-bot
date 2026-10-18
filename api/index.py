@@ -15,6 +15,7 @@ from app.database import NewsDatabase, DatabaseUnavailable
 from app.category_routing import normalize_category
 from app.seo_indexing import is_indexable, eligible_articles, news_sitemap_xml, google_news_sitemap_xml, standalone_sitemap_url_xml, STANDALONE_NEWS, SITE_ORIGIN as CANONICAL_ORIGIN
 from app.models import NewsItem
+from app import public_archive
 from app.factcheck import run_cross_source_check
 from app.newsroom import process_news, story_score, is_breaking, dedupe_story_rows, quality_headline, is_telegram_image
 from app.phase_system import AGENTS, phase_analytics, cluster_stories, cluster_summary, train as train_agent
@@ -249,7 +250,7 @@ def _section_html(category="all"):
  if category in ("india","all"):
   body+='<section aria-label="Verified report" style="margin:20px 0"><h2>Verified India report</h2><p><a href="/nana-patekar-tribute.html">Nana Patekar dies at 75 in Goa: report and sources</a></p></section>'
  body+='<div class="sh"><h2>Latest stories</h2><span class="lbl">'+str(len(rows))+' stories</span></div><div class="grid">'+"".join(cards)+'</div>'
- return '<!doctype html><html lang="en" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta name="google-adsense-account" content="ca-pub-1752666987448533"><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1752666987448533" crossorigin="anonymous"></script><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home"><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui22"><link rel="stylesheet" href="/assets/editorial.css?v=phui19"><link rel="stylesheet" href="/assets/polish.css?v=phui19"><script src="/assets/ui.js?v=phui19" defer></script></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/archive/">All News Archive</a></p><p><a href="/nana-patekar-tribute.html">Nana Patekar report</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="/settings.html">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=phui22"></script><script src="/assets/editorial-home.js?v=phui19"></script></body></html>'
+ return '<!doctype html><html lang="en" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta name="google-adsense-account" content="ca-pub-1752666987448533"><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1752666987448533" crossorigin="anonymous"></script><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home"><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui22"><link rel="stylesheet" href="/assets/editorial.css?v=phui19"><link rel="stylesheet" href="/assets/polish.css?v=phui19"><script src="/assets/ui.js?v=phui19" defer></script></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/archive/">All News Archive</a></p><p><a href="/nana-patekar-tribute.html">Nana Patekar report</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="/settings.html">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=phui23"></script><script src="/assets/editorial-home.js?v=phui19"></script></body></html>'
 
 
 def _enhance_section_seo(document, category):
@@ -476,17 +477,41 @@ def article_path(row):
  category=CATEGORY_SLUGS.get(category,"india")
  return f"/{category}/{int(row['id'])}-{_slugify(row.get('title'))}"
 
+def _archive_rows(database=None, search=None):
+ rows=public_archive.rows(search)
+ if database is not None:
+  overrides=[dict(row) for row in database.archive_overrides()]
+  ids={str(row["id"]) for row in overrides}
+  urls={row["url"] for row in overrides}
+  rows=[row for row in rows if str(row["id"]) not in ids and row["url"] not in urls]
+ return rows
+
+def _archive_row(item_id,database=None):
+ row=public_archive.by_id(item_id)
+ if row is None:return None
+ if database is not None:
+  # Honor current publication status, including a changed ID after migration.
+  overrides=[dict(record) for record in database.archive_overrides()]
+  for record in overrides:
+   if str(record["id"])==str(item_id) or record["url"]==row["url"]:
+    return database.get_by_id(record["id"],"published") if record["status"]=="published" else None
+ return row
+
 def _public_row_by_id(item_id):
  try:
   database=db()
   try:
-   row=database.get_by_id(int(item_id),"published")
+   row=database.get_by_id(int(item_id),"all")
+   if row:return _publicize(row) if row["status"]=="published" else None
+   row=_archive_row(item_id,database)
    return _publicize(row) if row else None
   finally: database.close()
  except RuntimeError:
   pass
  for item in _snapshot_rows("all"):
   if str(item.get("id"))==str(item_id):return _publicize(item)
+ archived=_archive_row(item_id)
+ if archived:return _publicize(archived)
  proxied=_proxy_public("/api/news/"+str(int(item_id)))
  return proxied.get_json(silent=True) if proxied is not None and proxied.status_code<400 else None
 
@@ -961,18 +986,32 @@ def public_search():
  if not _public_rate_allowed():return jsonify({"error":"rate limit exceeded"}),429
  q=str(request.args.get("q","")).strip()[:120]
  if len(q)<2:return jsonify([])
- try:limit=min(max(int(request.args.get("limit","30")),1),50)
- except ValueError:limit=30
- try:database=db()
- except RuntimeError:
-  return jsonify(rows_json(_rank_public(_snapshot_rows("all",q))[:limit]))
  try:
-  rows=_rank_public(database.latest_public(min(limit*3,150),"all",q))
-  # Snapshot is only used when the database is unavailable.
-  rows=_rank_public(rows)
-  rows=dedupe_story_rows(rows,threshold=0.78)
-  return jsonify(rows_json(rows[:limit]))
- finally:database.close()
+  limit=min(max(int(request.args.get("limit","30")),1),50)
+  offset=max(int(request.args.get("offset","0")),0)
+ except ValueError:return jsonify({"error":"Invalid search pagination"}),400
+ category=str(request.args.get("category","all")).lower()
+ database=None
+ try:
+  database=db()
+  rows=[dict(row) for row in database.search_public(q)]+_archive_rows(database,q)
+ except RuntimeError:
+  rows=_snapshot_rows("all",q)+_archive_rows(search=q)
+ finally:
+  if database is not None:database.close()
+ # Deduplicate identities, not similar headlines across different news dates.
+ unique=[]; ids=set(); urls=set()
+ for row in rows:
+  if str(row["id"]) in ids or row.get("url") in urls:continue
+  ids.add(str(row["id"])); urls.add(row.get("url"))
+  row["category"]=normalize_category(row.get("category"),row.get("title"),row.get("bot_summary") or row.get("summary"))
+  if category!="all" and row["category"]!=category:continue
+  unique.append(row)
+ unique.sort(key=lambda row:(public_archive.timestamp(row),int(row["id"])),reverse=True)
+ response=jsonify(rows_json(unique[offset:offset+limit]))
+ response.headers["X-Search-Total"]=str(len(unique))
+ response.headers["Cache-Control"]="no-store"
+ return response
 
 @app.get("/api/trending")
 def trending():
@@ -1025,11 +1064,16 @@ def article(item_id):
  except RuntimeError:
   snapshot=next((x for x in _snapshot_rows("all") if str(x.get("id"))==str(item_id)),None)
   if snapshot:return jsonify(_publicize(snapshot))
+  archived=_archive_row(item_id)
+  if archived:return jsonify(_publicize(archived))
   proxied=_proxy_public("/api/news/"+str(item_id))
   return proxied or (jsonify({"error":"news backend unavailable"}),503)
  try:
   row=database.get_by_id(item_id,"all")
   if row and (row["status"]=="published" or admin_ok()):return jsonify(_publicize(row))
+  if row is None:
+   archived=_archive_row(item_id,database)
+   if archived:return jsonify(_publicize(archived))
   return jsonify({"error":"not found"}),404
  finally:database.close()
 
@@ -1343,11 +1387,11 @@ def _published_sitemap_rows():
     "FROM news_items WHERE status='published' "
     "ORDER BY COALESCE(published_at_site,published_at) DESC,id DESC"
    ).fetchall()
-   return [dict(r) for r in rows]
+   return [dict(r) for r in rows]+_archive_rows(database)
   finally:
    database.close()
  except RuntimeError:
-  return _snapshot_rows("all")
+  return _snapshot_rows("all")+_archive_rows()
 
 
 @app.get("/api/seo-archive")

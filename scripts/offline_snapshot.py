@@ -16,6 +16,7 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from app.public_archive import retain_public_records
 from app.collector import load_sources
 from app.news_api import collect_newsdata
 from app.category_routing import normalize_category
@@ -178,6 +179,7 @@ def main():
         raise SystemExit(1)
 
     result, fresh = build(current, collected, now)
+    retain_public_records(current + result)
     newest = max((parse_date(row.get("published_at")) for row in result), default=None)
     age_minutes = max(0, int((now - newest).total_seconds() / 60)) if newest else None
     log.info("Feed freshness: newest=%s age_minutes=%s; sources_ok=%s sources_failed=%s", newest, age_minutes, good, len(failed))

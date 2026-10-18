@@ -335,21 +335,26 @@ function ensureSearchFilters(){
  box.onclick=e=>{const b=e.target.closest('[data-search-cat]');if(!b)return;window.searchCat=b.dataset.searchCat;$$('[data-search-cat]',box).forEach(x=>x.classList.toggle('on',x===b));doS()};
 }
 const __openS=openS; openS=function(){__openS();ensureSearchFilters()};
-let searchRequest=0,searchTimer;
-const __doS=doS; doS=async function(){
+let searchRequest=0,searchTimer,searchOffset=0,searchResults=[];
+const __doS=doS; doS=async function(append=false){
  const requestId=++searchRequest;
  const q=$('#si')?.value.trim()||'',cat=window.searchCat||'all';
+ if(!append){searchOffset=0;searchResults=[]}
+ const offset=searchOffset;
  if(!q){$('#sc').textContent='Type to search all stories';$('#sres').innerHTML='';return}
  let r=[];
  try{
-  r=await get(ENDPOINTS.search+'?q='+encodeURIComponent(q)+'&limit=50');
+  r=await get(ENDPOINTS.search+'?q='+encodeURIComponent(q)+'&limit=50&offset='+offset+'&category='+encodeURIComponent(cat));
  }catch(e){
-  r=S.items.filter(i=>[i.title,i.summary,i.source,i.category].join(' ').toLowerCase().includes(q.toLowerCase())).slice(0,50);
+  r=S.items.filter(i=>(cat==='all'||inCat(i,cat))&&[i.title,i.summary,i.source,i.category].join(' ').toLowerCase().includes(q.toLowerCase())).slice(offset,offset+50);
  }
  if(requestId!==searchRequest)return;
- r=r.map(norm).filter(i=>cat==='all'||inCat(i,cat));
+ const hasMore=r.length===50;searchOffset=offset+r.length;
+ searchResults=searchResults.concat(r.map(norm).filter(i=>cat==='all'||inCat(i,cat)));
+ r=searchResults;
  $('#sc').textContent=r.length?(r.length+' '+(r.length===1?'story':'stories')+' found'):'No stories match your search.';
- $('#sres').innerHTML=r.slice(0,50).map(i=>'<a class="sr" href="'+esc(articleHref(i))+'">'+(i.image?'<img src="'+esc(i.image)+'" alt="" loading="lazy" onerror="this.remove()">':'')+'<div><span class="lbl red">'+esc(i.category)+'</span><h3>'+esc(i.title)+'</h3><small>'+esc(i.source)+' '+ago(i.date)+'</small></div></a>').join('');
+ $('#sres').innerHTML=r.map(i=>'<a class="sr" href="'+esc(articleHref(i))+'">'+(i.image?'<img src="'+esc(i.image)+'" alt="" loading="lazy" onerror="this.remove()">':'')+'<div><span class="lbl red">'+esc(i.category)+'</span><h3>'+esc(i.title)+'</h3><small>'+esc(i.source)+' '+ago(i.date)+'</small></div></a>').join('')+(hasMore?'<button type="button" class="btn" id="searchMore">Load more stories</button>':'');
+ const more=$('#searchMore');if(more)more.onclick=()=>{more.disabled=true;doS(true)};
 };
 const __article=article; article=async function(id){await __article(id);trackView(id)};
 

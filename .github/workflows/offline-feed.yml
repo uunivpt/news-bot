@@ -47,13 +47,13 @@ jobs:
         run: PYTHONPATH=. python scripts/offline_snapshot.py
       - name: Publish snapshot to production branch (only when changed)
         run: |
-          if git diff --quiet -- public/news-data.json; then
+          if git diff --quiet -- public/news-data.json app/data/public-archive.json.gz; then
             echo "No newly eligible stories. No deployment needed."
             exit 0
           fi
           git config user.name "politicshub-feed-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/news-data.json
+          git add public/news-data.json app/data/public-archive.json.gz
           git commit -m "Refresh PoliticsHub public news snapshot"
           git pull --rebase origin main
           git push origin HEAD:main
