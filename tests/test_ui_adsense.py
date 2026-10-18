@@ -95,7 +95,7 @@ class UIAdSenseTests(unittest.TestCase):
         home = (root/'index.html').read_text()
         assert 'name="google-adsense-account" content="ca-pub-1752666987448533"' in home
         assert 'pub-1752666987448533' in (root/'ads.txt').read_text()
-        self.assertEqual(AdSenseScripts(home).scripts, [])
+        self.assert_adsense_head(home)
 
     def test_article_summary_keeps_the_complete_sentence(self):
         summary = 'Context matters. ' * 30 + 'This final sentence must remain intact.'
