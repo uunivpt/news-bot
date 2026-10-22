@@ -250,7 +250,7 @@ def _section_html(category="all"):
  if category in ("india","all"):
   body+='<section aria-label="Verified report" style="margin:20px 0"><h2>Verified India report</h2><p><a href="/nana-patekar-tribute.html">Nana Patekar dies at 75 in Goa: report and sources</a></p></section>'
  body+='<div class="sh"><h2>Latest stories</h2><span class="lbl">'+str(len(rows))+' stories</span></div><div class="grid">'+"".join(cards)+'</div>'
- return '<!doctype html><html lang="en" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta name="google-adsense-account" content="ca-pub-1752666987448533"><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1752666987448533" crossorigin="anonymous"></script><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home"><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui22"><link rel="stylesheet" href="/assets/editorial.css?v=phui19"><link rel="stylesheet" href="/assets/polish.css?v=phui19"><script src="/assets/ui.js?v=phui19" defer></script></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/archive/">All News Archive</a></p><p><a href="/nana-patekar-tribute.html">Nana Patekar report</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="/settings.html">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=phui23"></script><script src="/assets/editorial-home.js?v=phui19"></script></body></html>'
+ return '<!doctype html><html lang="en" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta name="google-adsense-account" content="ca-pub-1752666987448533"><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1752666987448533" crossorigin="anonymous"></script><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui22"><link rel="stylesheet" href="/assets/editorial.css?v=phui19"><link rel="stylesheet" href="/assets/polish.css?v=phui19"><script src="/assets/ui.js?v=phui19" defer></script></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/archive/">All News Archive</a></p><p><a href="/nana-patekar-tribute.html">Nana Patekar report</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="/settings.html">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=phui23"></script><script src="/assets/editorial-home.js?v=phui19"></script></body></html>'
 
 
 def _enhance_section_seo(document, category):
@@ -524,7 +524,7 @@ def _article_html(row):
  summary=str(row.get("summary") or row.get("bot_summary") or "")
  body=str(row.get("article") or row.get("bot_article") or row.get("body") or summary)
  source=str(row.get("source_name") or "PoliticsHub.in")
- image=SITE_ORIGIN+"/api/og/"+str(row.get("id"))
+ image=SITE_ORIGIN+"/api/og/"+str(row.get("id"))+"?v=20261022"
  share_title=quote(title,safe=""); share_url=quote(canonical,safe="")
  pub_iso=str(published or datetime.now(timezone.utc).isoformat())
  if pub_iso and not re.search(r"[+-]\d\d:\d\d|Z$",pub_iso): pub_iso=pub_iso+"Z"
@@ -568,25 +568,11 @@ def _article_html(row):
 </body></html>"""
 
 def _og_image(item_id):
- row=_public_row_by_id(item_id)
- if not row:return None
- from PIL import Image, ImageDraw, ImageFont
- image=Image.new("RGB",(1200,630),(245,245,242)); draw=ImageDraw.Draw(image)
- try: font_big=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",54); font_small=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",24)
- except Exception: font_big=ImageFont.load_default(); font_small=ImageFont.load_default()
- draw.rectangle((0,0,1200,18),fill=(200,16,46)); draw.text((70,65),"PoliticsHub.in",font=font_small,fill=(60,60,60))
- title=str(row.get("title") or "PoliticsHub.in")
- words=title.split(); lines=[]; line=""
- for word in words:
-  test=(line+" "+word).strip()
-  if draw.textlength(test,font=font_big)>1050 and line: lines.append(line);line=word
-  else:line=test
- if line:lines.append(line)
- y=170
- for line in lines[:5]:
-  draw.text((70,y),line,font=font_big,fill=(15,15,18)); y+=64
- draw.text((70,560),f"{str(row.get('category') or 'News')} · {EDITORIAL_DESK}",font=font_small,fill=(105,105,105))
- out=io.BytesIO();image.save(out,format="PNG",optimize=True);return out.getvalue()
+  row = _public_row_by_id(item_id)
+  if not row:
+    return None
+  from app.social_preview import render_story
+  return render_story(row.get("title") or "Latest PoliticsHub report", row.get("category") or "News")
 
 def _editorial_page(title,lead,kind="page"):
  links=["Home","About","Editorial Policy","Corrections","Contact","Disclaimer","Privacy","Cookies","Terms","Newsletter","Settings","System Status"]
@@ -704,12 +690,10 @@ def robots():
 
 @app.get("/api/og-home")
 def og_home():
- from PIL import Image, ImageDraw, ImageFont
- image=Image.new("RGB",(1200,630),(245,245,242));draw=ImageDraw.Draw(image)
- try: font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",72); small=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",28)
- except Exception: font=ImageFont.load_default();small=ImageFont.load_default()
- draw.rectangle((0,0,1200,18),fill=(200,16,46));draw.text((70,70),"PoliticsHub.in",font=small,fill=(70,70,70));draw.text((70,190),"What matters, clearly.",font=font,fill=(15,15,18));draw.text((70,520),"Source-linked news · Politics · India · World",font=small,fill=(105,105,105))
- out=io.BytesIO();image.save(out,format="PNG",optimize=True);return Response(out.getvalue(),mimetype="image/png",headers={"Cache-Control":"public, max-age=86400, s-maxage=86400"})
+  from app.social_preview import render_home
+  return Response(render_home(),mimetype="image/png",
+                  headers={"Cache-Control":"public, max-age=86400, s-maxage=86400",
+                           "X-Content-Type-Options":"nosniff"})
 
 @app.get("/api/og/<int:item_id>")
 def og_image(item_id):
