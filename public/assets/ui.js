@@ -1,5 +1,27 @@
 /* Lightweight chrome for static pages, server-rendered stories and the home app. */
 (() => {
+  // Site-wide Google tag. Count the Google Ads "Page view" conversion once
+  // on the campaign's main landing page, never on admin or secondary pages.
+  const path = window.location.pathname;
+  if (!path.startsWith('/admin') && !path.startsWith('/api/') &&
+      !path.startsWith('/newsroom-console') && !path.startsWith('/debug')) {
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = window.gtag || function() { window.dataLayer.push(arguments); };
+    window.gtag('js', new Date());
+    window.gtag('config', 'G-2HVZQST08G');
+    window.gtag('config', 'AW-18495731647');
+    if (!document.querySelector('script[src*="googletagmanager.com/gtag/js"]')) {
+      const googleTag = document.createElement('script');
+      googleTag.async = true;
+      googleTag.src = 'https://www.googletagmanager.com/gtag/js?id=G-2HVZQST08G';
+      document.head.appendChild(googleTag);
+    }
+    if (path === '/' || path === '/index.html') {
+      window.gtag('event', 'conversion', {
+        'send_to': 'AW-18495731647/4NrBCOKXz6UdEL_vufNE'
+      });
+    }
+  }
   const desks = [['','Home'],['india','India'],['politics','Politics'],['world','World'],['business','Business'],['technology','Technology'],['sports','Sports'],['entertainment','Entertainment'],['science','Science'],['health','Health'],['hindi','Hindi']];
   try {
     if (localStorage.getItem('ph-consent-v1') === 'preferences') {

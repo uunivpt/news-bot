@@ -97,6 +97,18 @@ class UIAdSenseTests(unittest.TestCase):
         assert 'pub-1752666987448533' in (root/'ads.txt').read_text()
         self.assert_adsense_head(home)
 
+
+    def test_google_ads_page_view_conversion_setup(self):
+        code = (Path('public') / 'assets/ui.js').read_text()
+        self.assertIn("gtag/js?id=G-2HVZQST08G", code)
+        self.assertIn("'config', 'G-2HVZQST08G'", code)
+        self.assertIn("'config', 'AW-18495731647'", code)
+        self.assertIn("'send_to': 'AW-18495731647/4NrBCOKXz6UdEL_vufNE'", code)
+        self.assertIn("path === '/' || path === '/index.html'", code)
+        self.assertEqual(code.count("'event', 'conversion'"), 1)
+        self.assertIn("!path.startsWith('/admin')", code)
+        self.assertIn("google-analytics.com", (Path('api') / 'index.py').read_text())
+
     def test_article_summary_keeps_the_complete_sentence(self):
         summary = 'Context matters. ' * 30 + 'This final sentence must remain intact.'
         row = {'id':1, 'title':'Report', 'category':'india', 'summary':summary, 'article':summary, 'source_name':'Test', 'published_at':'2026-10-13T12:00:00Z'}
