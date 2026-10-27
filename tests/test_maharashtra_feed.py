@@ -35,3 +35,20 @@ class TestMaharashtraFeeds(unittest.TestCase):
   self.assertEqual(english["language"],"en")
   self.assertEqual(english["items"],[])
   self.assertIn("not automatic translations",english["editorial_note"])
+
+ def test_language_route_exposes_separate_publisher_feeds(self):
+  from api.index import app
+  from unittest.mock import patch
+  with patch("api.maharashtra_feed.get_feed",return_value={"language":"en","items":[],"sources":{}}) as fake:
+   response=app.test_client().get("/api/maharashtra?lang=en")
+  self.assertEqual(response.status_code,200)
+  self.assertEqual(response.json["language"],"en")
+  fake.assert_called_once_with("en")
+
+ def test_decommissioned_sections_redirect_without_deleting_articles(self):
+  from api.index import app
+  client=app.test_client()
+  for section in ("business","technology","sports","entertainment","science","health"):
+   response=client.get("/"+section+"/")
+   self.assertEqual(response.status_code,301)
+   self.assertEqual(response.headers["Location"],"/")
