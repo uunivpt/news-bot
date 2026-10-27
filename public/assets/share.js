@@ -1,7 +1,7 @@
 /* Consistent mobile/desktop share sheet. */
 (()=>{"use strict";
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const canonical=v=>{try{const u=new URL(v||location.href,location.href);return u.origin===location.origin&&/^https?:$/.test(u.protocol)?u.href:location.href}catch(_){return location.href}};
+const canonical=v=>{try{const u=new URL(v||location.href,location.href);return u.protocol==="https:"&&(u.origin===location.origin||["www.tv9marathi.com","tv9marathi.com","marathi.abplive.com","www.loksatta.com","loksatta.com","ddnews.gov.in"].includes(u.hostname))?u.href:location.href}catch(_){return location.href}};
 function links(title,raw){const t=String(title||document.title),u=canonical(raw),T=encodeURIComponent(t),U=encodeURIComponent(u),M=encodeURIComponent(t+"\n"+u);return [
 ["WhatsApp","WA","https://wa.me/?text="+M],["Facebook","f","https://www.facebook.com/sharer/sharer.php?u="+U],["X","X","https://twitter.com/intent/tweet?text="+T+"&url="+U],["Telegram","➤","https://t.me/share/url?url="+U+"&text="+T],["Threads","@","https://www.threads.com/intent/post?text="+M],["LinkedIn","in","https://www.linkedin.com/sharing/share-offsite/?url="+U],["Reddit","r","https://www.reddit.com/submit?url="+U+"&title="+T],["Bluesky","✦","https://bsky.app/intent/compose?text="+M],["Pinterest","P","https://pinterest.com/pin/create/button/?url="+U+"&description="+T],["LINE","L","https://social-plugins.line.me/lineit/share?url="+U],["Email","✉","mailto:?subject="+T+"&body="+M],["SMS","SMS","sms:?body="+M]
 ].map(([name,mark,href])=>({name,mark,href}))}
