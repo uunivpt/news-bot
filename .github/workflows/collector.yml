@@ -11,11 +11,11 @@ on:
       - "config/sources.json"
 
 concurrency:
-  group: news-collector
+  group: emergency-public-feed
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   collect:
@@ -49,6 +49,7 @@ jobs:
           print("Database target verified (connection credentials concealed).")
           PY
       - name: Run collector once
+        id: collection
         env:
           DATABASE_3URL: ${{ secrets.DATABASE_3URL }}
           NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
@@ -56,4 +57,34 @@ jobs:
           X_API_BEARER_TOKEN: ${{ secrets.X_API_BEARER_TOKEN }}
         run: |
           test -n "$DATABASE_3URL" || { echo "::error::DATABASE_3URL is missing; refusing to collect into ephemeral SQLite."; exit 1; }
+          set +e
           python run.py --once
+          exit_code=$?
+          set -e
+          if [ "$exit_code" -eq 78 ]; then
+            echo "mode=offline" >> "$GITHUB_OUTPUT"
+            echo "::warning::Neon transfer quota exhausted. Publishing source-attributed emergency snapshot instead."
+          elif [ "$exit_code" -ne 0 ]; then
+            exit "$exit_code"
+          else
+            echo "mode=database" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Refresh emergency feed while database is quota-blocked
+        if: steps.collection.outputs.mode == 'offline'
+        env:
+          NEWSDATA_API_KEY: ${{ secrets.NEWSDATA_API_KEY }}
+        run: |
+          PYTHONPATH=. python scripts/offline_snapshot.py
+      - name: Publish emergency feed only when new stories exist
+        if: steps.collection.outputs.mode == 'offline'
+        run: |
+          if git diff --quiet -- public/news-data.json app/data/public-archive.json.gz; then
+            echo "No newly eligible emergency stories; no deployment needed."
+            exit 0
+          fi
+          git config user.name "politicshub-feed-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/news-data.json app/data/public-archive.json.gz
+          git commit -m "Refresh PoliticsHub public news snapshot"
+          git pull --rebase origin main
+          git push origin HEAD:main
