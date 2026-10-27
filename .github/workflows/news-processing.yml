@@ -9,6 +9,7 @@ on:
       - main
     paths:
       - "app/**"
+      - "!app/data/**"
       - "api/**"
       - "config/sources.json"
       - "scripts/auto_publish.py"
@@ -54,31 +55,65 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Check database availability before expensive processing
+        id: db_status
+        shell: bash
+        run: |
+          test -n "$DATABASE_3URL" || { echo "::error::DATABASE_3URL GitHub secret is missing."; exit 1; }
+          python -m pip install "psycopg[binary]==3.2.10"
+          python - <<'PY'
+          import os
+          import psycopg
+          from app.database import _active_database_target
+          target = os.environ["DATABASE_3URL"]
+          if not _active_database_target(target):
+              raise SystemExit("Database target is not the approved production Neon project")
+          try:
+              with psycopg.connect(target, connect_timeout=5) as connection:
+                  connection.execute("SELECT 1").fetchone()
+          except psycopg.OperationalError as exc:
+              detail = str(exc).lower()
+              if "exceeded the quota" not in detail and "quota exceeded" not in detail:
+                  raise
+              print("::warning::Neon quota is exhausted; newsroom DB processing skipped. Emergency public feed remains active.")
+              mode = "offline"
+          else:
+              mode = "online"
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"mode={mode}\n")
+          PY
       - name: Install ffmpeg
+        if: steps.db_status.outputs.mode == 'online'
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - name: Install dependencies
+        if: steps.db_status.outputs.mode == 'online'
         run: pip install -r requirements.txt
       - name: Validate code and tests
+        if: steps.db_status.outputs.mode == 'online'
         env:
           PYTHONPATH: .
         run: |
           python -m compileall -q app api scripts run.py
           DATABASE_3URL="" DATABASE_URL="" PGSSLMODE="" python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Verify database secret
+        if: steps.db_status.outputs.mode == 'online'
         run: |
           test -n "$DATABASE_3URL" || { echo "DATABASE_3URL GitHub secret is missing."; exit 1; }
       - name: Validate source configuration
+        if: steps.db_status.outputs.mode == 'online'
         run: python -m json.tool config/sources.json >/dev/null
       - name: Collect fresh sources
-        if: github.event_name != 'workflow_run'
+        if: steps.db_status.outputs.mode == 'online' && github.event_name != 'workflow_run'
         env:
           PYTHONPATH: .
         run: python run.py --once --config config/sources.json
       - name: Repair category routing
+        if: steps.db_status.outputs.mode == 'online'
         env:
           PYTHONPATH: .
         run: python scripts/repair_news_categories.py
       - name: Publish website queue
+        if: steps.db_status.outputs.mode == 'online'
         env:
           PYTHONPATH: .
           PUBLISH_WEBSITE: "true"
@@ -86,10 +121,12 @@ jobs:
           BOT_REPAIR_ITEMS: "3"
         run: python scripts/auto_publish.py
       - name: Export public snapshot and sitemaps
+        if: steps.db_status.outputs.mode == 'online'
         env:
           PYTHONPATH: .
         run: python scripts/export_public_snapshot.py
       - name: Keep public snapshot out of production branch
+        if: steps.db_status.outputs.mode == 'online'
         run: |
           # The live Vercel app reads the PostgreSQL-backed API directly.
           # Snapshot files remain a local/exported fallback and must NOT be
