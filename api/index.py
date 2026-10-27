@@ -145,7 +145,17 @@ def _snapshot_rows(category="all", search=None):
        break
     except Exception:
      continue
- if not isinstance(payload,list):return []
+ # Keep manually verified election reports independent of rotating news snapshots.
+ # These time-stamped leads are NOT certified final election results.
+ if not isinstance(payload,list):payload=[]
+ curated_path=Path(app.static_folder or "public") / "maharashtra-mlc-2026-verified.json"
+ try:
+  curated=json.loads(curated_path.read_text(encoding="utf-8"))
+  if isinstance(curated,list):
+   present={str(x.get("id")) for x in payload if isinstance(x,dict)}
+   payload=[x for x in curated if isinstance(x,dict) and x.get("title") and str(x.get("id")) not in present] + payload
+ except (OSError,ValueError):
+  pass
  rows=[dict(x) for x in payload if isinstance(x,dict) and x.get("title")]
  for row in rows:
   row.setdefault("status","published")
