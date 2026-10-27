@@ -21,3 +21,17 @@ class TestMaharashtraFeeds(unittest.TestCase):
   self.assertEqual(out["items"],[])
   self.assertFalse(out["sources"]["TV9 Marathi"]["available"])
 
+
+ def test_english_mode_filters_non_maharashtra_and_devanagari(self):
+  xml = """<?xml version="1.0"?><rss version="2.0"><channel><title>English</title><item><title>Nagpur voter turnout reported</title><link>https://www.thehindu.com/news/national/maharashtra/nagpur-test.ece</link></item><item><title>Politics in Delhi today</title><link>https://www.thehindu.com/news/national/delhi-test.ece</link></item></channel></rss>""".encode("utf-8")
+  with patch.object(mh.requests,"get",return_value=Mock(content=xml,raise_for_status=lambda:None)):
+   rows=mh._read_one("The Hindu","https://www.thehindu.com/news/national/feeder/default.rss",("www.thehindu.com",),language="en")
+  self.assertEqual(len(rows),1)
+  self.assertEqual(rows[0]["language"],"en")
+ def test_languages_are_separate_and_not_fabricated_translations(self):
+  mh._cache={}
+  with patch.object(mh,"_read_one",return_value=[]):
+   english=mh.get_feed("en")
+  self.assertEqual(english["language"],"en")
+  self.assertEqual(english["items"],[])
+  self.assertIn("not automatic translations",english["editorial_note"])

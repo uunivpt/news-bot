@@ -201,5 +201,77 @@
     "api/index.py": {
       "includeFiles": "app/data/**"
     }
-  }
+  },
+  "redirects": [
+    {
+      "source": "/business",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/business/",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/technology",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/technology/",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/sports",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/sports/",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/entertainment",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/entertainment/",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/science",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/science/",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/health",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/health/",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/Maharashtra",
+      "destination": "/maharashtra/",
+      "permanent": true
+    },
+    {
+      "source": "/Maharashtra/",
+      "destination": "/maharashtra/",
+      "permanent": true
+    }
+  ]
 }

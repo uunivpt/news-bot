@@ -242,7 +242,7 @@ def _section_html(category="all"):
  if first_image.startswith(("http://","https://","/")):
   first_media='<img src="'+html.escape(first_image,quote=True)+'" alt="" loading="eager" decoding="async">'
  jump=[]
- for cat in ("india","politics","world","business","technology","sports","entertainment","hindi"):
+ for cat in ("maharashtra","india","politics","world","hindi"):
   jump.append('<a href="/'+cat+'/">'+cat.title()+'<small>'+str(sum(1 for r in rows if str(r.get("category") or "").lower()==cat))+'</small></a>')
  just_in=[]
  for row in rows[1:4]:
@@ -873,6 +873,10 @@ def newsletter_daily():
 @app.get("/<category>/", strict_slashes=False)
 def seo_section(category):
  category=category.lower().strip()
+ if category in {"business","technology","sports","entertainment","science","health"}:
+  return redirect("/", code=301)
+ if category=="maharashtra":
+  return redirect("/maharashtra/",code=302)
  if category not in set(CATEGORY_SLUGS.values()):
   if request.path.startswith("/api/"):return jsonify({"error":"not found"}),404
   return send_from_directory(app.static_folder,category)
@@ -935,7 +939,7 @@ def health():
 def maharashtra_public_feed():
  from api.maharashtra_feed import get_feed
  try:
-  response=jsonify(get_feed())
+  response=jsonify(get_feed(request.args.get('lang','mr')))
   # The published RSS headlines are refreshed at most once per 20 minutes.
   response.headers["Cache-Control"]="public, max-age=0, s-maxage=1200, stale-while-revalidate=60"
   return response

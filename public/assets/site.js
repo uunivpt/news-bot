@@ -1,6 +1,6 @@
 
-const CATS=[['all','Home'],['maharashtra','महाराष्ट्र'],['india','India'],['politics','Politics'],['world','World'],['business','Business'],['technology','Technology'],['sports','Sports'],['entertainment','Entertainment'],['science','Science'],['health','Health'],['hindi','Hindi']];
-const TABS=[['all','All'],['politics','Politics'],['india','India'],...CATS.slice(3)];
+const CATS=[['all','Home'],['maharashtra','Maharashtra'],['india','India'],['politics','Politics'],['world','World'],['hindi','Hindi']];
+const TABS=[['all','All'],['maharashtra','Maharashtra'],['politics','Politics'],['india','India'],['world','World'],['hindi','Hindi']];
 const ENDPOINTS={api:'/api/news?category=all&limit=120',item:'/api/news/',search:'/api/search',snap:'/news-data.json'};
 // Editorially verified one-off story stays visible even during a DB quota outage.
 const MUSK_STARLINK={id:'202610090923',title:'Elon Musk targets Mukesh Ambani over Starlink India launch delay',category:'india',source:'PoliticsHub News Desk / Reuters',source_name:'PoliticsHub News Desk',date:'2026-10-09T23:23:00+05:30',published_at_site:'2026-10-09T23:23:00+05:30',summary:'In a sarcastic X post, Elon Musk called Mukesh Ambani “Prime Minister Ambani” and alleged obstacles to Starlink. India denies favouritism, citing mandatory security and spectrum approvals.',image:'',url:'https://www.reuters.com/business/media-telecom/india-rejects-monopoly-claim-after-musk-accuses-ambani-blocking-starlink-launch-2026-10-09/',editorial_pick:true};
