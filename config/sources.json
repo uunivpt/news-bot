@@ -96,6 +96,30 @@
       "timeout_seconds": 12,
       "max_items": 50,
       "note": "Publisher-provided RSS metadata only: headline, short excerpt and original link; no article scraping or image republication."
+    },
+    {
+      "name": "TV9 Marathi - Maharashtra",
+      "url": "https://www.tv9marathi.com/maharashtra/feed",
+      "source_class": "rss",
+      "category": "india",
+      "enabled": true,
+      "public_source": true,
+      "timeout_seconds": 12,
+      "max_items": 35,
+      "check_every_minutes": 20,
+      "note": "Official Marathi RSS headlines and source links only. No article text/image republication."
+    },
+    {
+      "name": "ABP Majha - Maharashtra",
+      "url": "https://marathi.abplive.com/news/maharashtra/feed",
+      "source_class": "rss",
+      "category": "india",
+      "enabled": true,
+      "public_source": true,
+      "timeout_seconds": 12,
+      "max_items": 35,
+      "check_every_minutes": 20,
+      "note": "Official ABP Majha RSS directory feed. Source attribution and links only, no full-text copying."
     }
   ],
   "telegram": [

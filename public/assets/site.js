@@ -1,5 +1,5 @@
 
-const CATS=[['all','Home'],['india','India'],['politics','Politics'],['world','World'],['business','Business'],['technology','Technology'],['sports','Sports'],['entertainment','Entertainment'],['science','Science'],['health','Health'],['hindi','Hindi']];
+const CATS=[['all','Home'],['maharashtra','महाराष्ट्र'],['india','India'],['politics','Politics'],['world','World'],['business','Business'],['technology','Technology'],['sports','Sports'],['entertainment','Entertainment'],['science','Science'],['health','Health'],['hindi','Hindi']];
 const TABS=[['all','All'],['politics','Politics'],['india','India'],...CATS.slice(3)];
 const ENDPOINTS={api:'/api/news?category=all&limit=120',item:'/api/news/',search:'/api/search',snap:'/news-data.json'};
 // Editorially verified one-off story stays visible even during a DB quota outage.
@@ -219,6 +219,7 @@ function settings(sub){setActive('');document.title='Settings — PoliticsHub.in
  <div class="row"><span>Last update</span><span>${last?fmt(last):'Unknown'}</span></div></section></div>`;
  if(sub)$('#'+sub)?.scrollIntoView()}
 function render(background=false){
+ if(location.pathname.replace(/\/+$/,'')==='/maharashtra'){location.replace('/maharashtra/');return;}
  const path=location.pathname.split('/').filter(Boolean); const hash=location.hash.slice(1).split('/').filter(Boolean); const p=path.length>=2&&/^\d+-/.test(path[1])?['article',path[1].split('-')[0]]:(path.length===1&&CATS.some(x=>x[0]===path[0])?['c',path[0]]:hash); if(!background){closeAll();window.scrollTo(0,0)}
  const m=$('#app');m.style.animation='';
  if(p[0]==='article')article(decodeURIComponent(p[1]||''));else if(p[0]==='settings')settings(p[1]);

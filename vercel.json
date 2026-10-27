@@ -43,6 +43,14 @@
   ],
   "rewrites": [
     {
+      "source": "/maharashtra",
+      "destination": "/maharashtra/index.html"
+    },
+    {
+      "source": "/maharashtra/",
+      "destination": "/maharashtra/index.html"
+    },
+    {
       "source": "/musk-starlink-news.jpg",
       "destination": "/api/article_poster"
     },

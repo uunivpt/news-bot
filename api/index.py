@@ -930,6 +930,18 @@ def health():
   newest=max((_public_timestamp(r) for r in rows),default=0)
   return jsonify({"ok":False,"mode":"snapshot" if rows else "unavailable","latest_published_at":datetime.fromtimestamp(newest,timezone.utc).isoformat() if newest else None}),503
 
+
+@app.get("/api/maharashtra")
+def maharashtra_public_feed():
+ from api.maharashtra_feed import get_feed
+ try:
+  response=jsonify(get_feed())
+  # The published RSS headlines are refreshed at most once per 20 minutes.
+  response.headers["Cache-Control"]="public, max-age=0, s-maxage=1200, stale-while-revalidate=60"
+  return response
+ except Exception:
+  return jsonify({"items":[],"sources":{},"status":"unavailable","refresh_minutes":20}),503
+
 @app.get("/api/news")
 def news():
  if not _public_rate_allowed():return jsonify({"error":"rate limit exceeded"}),429
