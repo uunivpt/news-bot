@@ -81,7 +81,10 @@ class SEOIndexingTests(unittest.TestCase):
         for path in STATIC_PAGES:
             if path=="/archive/":
                 continue  # Server-rendered dynamic archive, not a static HTML file.
-            source=Path("public/index.html" if path=="/" else "public"+path).read_text(encoding="utf-8")
+            source_path = "public/index.html" if path=="/" else "public"+path
+            if source_path.endswith("/"):
+                source_path += "index.html"
+            source=Path(source_path).read_text(encoding="utf-8")
             expected='<link rel="canonical" href="'+SITE_ORIGIN+path+'">'
             with self.subTest(path=path):
                 self.assertIn(expected,source)
