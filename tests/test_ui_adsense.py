@@ -58,12 +58,16 @@ class UIAdSenseTests(unittest.TestCase):
         with patch('api.index._public_rows_for_section', return_value=[row]), \
              patch('api.index._public_row_by_id', return_value=row), \
              patch('api.index._published_sitemap_rows', return_value=[row]):
-            for path in ['/india/', '/india/44-india-parliament-passes-a-new-public-services-law', '/archive/']:
+            for path in ['/india/', '/india/44-india-parliament-passes-a-new-public-services-law']:
                 with self.subTest(path=path):
                     response = client.get(path)
                     self.assertEqual(response.status_code, 200)
                     self.assert_adsense_head(response.get_data(as_text=True))
                     self.assertIn('https://pagead2.googlesyndication.com', response.headers['Content-Security-Policy'])
+            # A collection/links-only archive must not be monetized like an article.
+            archive = client.get('/archive/')
+            self.assertEqual(archive.status_code, 200)
+            self.assertEqual(AdSenseScripts(archive.get_data(as_text=True)).scripts, [])
 
     def test_utility_and_admin_documents_do_not_include_advertising(self):
         client = app.test_client()
