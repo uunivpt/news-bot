@@ -526,7 +526,11 @@ def _public_row_by_id(item_id):
  return proxied.get_json(silent=True) if proxied is not None and proxied.status_code<400 else None
 
 def _article_html(row):
- row=dict(row); robots_meta = "" if is_indexable(row) else '<meta name="robots" content="noindex,follow">'
+ row=dict(row)
+ indexable=is_indexable(row)
+ robots_meta = "" if indexable else '<meta name="robots" content="noindex,follow">'
+ # Don't serve advertising scripts on pages containing only RSS headline excerpts.
+ article_ad_code = ('<meta name="google-adsense-account" content="ca-pub-1752666987448533"><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1752666987448533" crossorigin="anonymous"></script>' if indexable else '')
  title=str(row.get("title") or "PoliticsHub.in"); category=str(row.get("category") or "India")
  canonical=SITE_ORIGIN+article_path(row)
  published=row.get("published_at_iso") or row.get("published_at_site") or row.get("published_at")
@@ -554,7 +558,7 @@ def _article_html(row):
 <meta name="description" content="{html.escape(summary[:160])}">
 <meta name="robots" content="max-image-preview:large">
 <link rel="canonical" href="{html.escape(canonical)}">
-<meta name="google-adsense-account" content="ca-pub-1752666987448533"><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1752666987448533" crossorigin="anonymous"></script><meta property="og:type" content="article"><meta property="og:site_name" content="PoliticsHub.in">
+{article_ad_code}<meta property="og:type" content="article"><meta property="og:site_name" content="PoliticsHub.in">
 <meta property="og:title" content="{html.escape(title)}"><meta property="og:description" content="{html.escape(summary[:200])}">
 <meta property="og:url" content="{html.escape(canonical)}"><meta property="og:image" content="{html.escape(image)}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="{html.escape(title)}"><meta name="twitter:description" content="{html.escape(summary[:200])}"><meta name="twitter:image" content="{html.escape(image)}">
@@ -568,6 +572,7 @@ def _article_html(row):
 <div class="by"><span>By <a href="/author/politicshub-news-desk">{EDITORIAL_DESK}</a></span><time datetime="{html.escape(pub_iso,quote=True)}">{html.escape(str(published or ""))}</time><span>{html.escape(source)}</span></div></div>
 {"<div class='ahero'><img src='"+html.escape(str(_public_image_path(row)))+"' alt='"+html.escape(title)+"' loading='eager' onerror='this.parentElement.remove()'></div>" if _public_image_path(row) else ""}
 <div class="body">{paras}</div>
+{"<div class='src'><strong>Publisher excerpt:</strong> This page is a source-linked summary, not an independently reported PoliticsHub article. The original source link below contains the complete report.</div>" if not indexable else ""}
 <div class="src"><strong>Source transparency:</strong> This is a source-linked brief prepared from the originating report. When multiple independent sources are available, PoliticsHub compares their reported details; otherwise no independent reporting claim is made.</div>
 <div class="src">Source: {html.escape(source)}. {"<a href='"+html.escape(str(row.get("url")))+"' rel='nofollow noopener' target='_blank'>Read the original report</a>" if row.get("url") else ""}</div>
 <button type="button" class="article-share" data-share-title="{html.escape(title,quote=True)}" data-share-url="{html.escape(canonical,quote=True)}" aria-haspopup="dialog"><span>↗</span><b>Share this story</b></button>
@@ -1415,11 +1420,10 @@ def seo_archive():
   stories=eligible_articles([_publicize(r) for r in _published_sitemap_rows()])
  except RuntimeError:
   return Response("Archive temporarily unavailable",status=503,headers={"Retry-After":"300"})
- if not stories:
-  return Response("Archive temporarily unavailable",status=503,headers={"Retry-After":"300"})
+ # Avoid HTTP 503 for a public archive during a database outage.
  per_page=100
  start=(page-1)*per_page
- if start>=len(stories):return Response("Not found",status=404)
+ if start>=len(stories) and not (page==1 and not stories):return Response("Not found",status=404)
  shown=stories[start:start+per_page]
  canonical=SITE_ORIGIN+"/archive/"+("?page="+str(page) if page>1 else "")
  items=[]
@@ -1434,13 +1438,17 @@ def seo_archive():
  pager=""
  if page==1:
   for story in STANDALONE_NEWS:
-   items.insert(0,'<li><article><a href="'+html.escape(story["path"],quote=True)+'"><h2>'+html.escape(story["title"])+'</h2></a><p>India · PoliticsHub News Desk · '+html.escape(story["published_at"])+'</p><p>Verified report, with links to Reuters and Associated Press.</p></article></li>')
+   items.insert(0,'<li><article><a href="'+html.escape(story["path"],quote=True)+'"><h2>'+html.escape(story["title"])+'</h2></a><p>India · PoliticsHub News Desk · '+html.escape(story["published_at"])+'</p><p>Dated report, with sources linked on the article page.</p></article></li>')
  if page>1:
   prev="/archive/" if page==2 else "/archive/?page="+str(page-1)
   pager+='<a href="'+prev+'">← Newer stories</a> '
  if start+per_page<len(stories):
   pager+='<a href="/archive/?page='+str(page+1)+'">Older stories →</a>'
- page_html='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>News Archive'+(" · Page "+str(page) if page>1 else "")+' — PoliticsHub.in</title><meta name="description" content="Browse the source-linked, published news reports from PoliticsHub.in."><link rel="canonical" href="'+html.escape(canonical,quote=True)+'"><link rel="stylesheet" href="/assets/site.css?v=phui22"><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/assets/polish.css?v=phui19"><script src="/assets/ui.js?v=phui19" defer></script><meta name="google-adsense-account" content="ca-pub-1752666987448533"><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1752666987448533" crossorigin="anonymous"></script></head><body><header id="hd"><div class="top"><a class="logo" href="/"><img src="/favicon.svg" alt="PoliticsHub.in"></a><nav><a href="/">Home</a> · <a href="/india/">India</a> · <a href="/politics/">Politics</a> · <a href="/world/">World</a></nav></div></header><main class="wrap" style="max-width:1000px;padding:38px 22px"><h1>News Archive</h1><p>Browse individual published reports. Every headline opens its dedicated article page.</p><ol style="list-style:none;padding:0">'+''.join(items)+'</ol><nav aria-label="Archive pages">'+pager+'</nav></main><footer><div class="wrap"><p>PoliticsHub.in · <a href="/">Home</a> · <a href="/editorial-policy.html">Editorial policy</a> · <a href="/contact.html">Contact</a></p></div></footer></body></html>'
+ if not stories and page==1:
+  items.append('<li><p>No additional long-form reports are currently available. Read our <a href="/guides/election-results.html">election verification guide</a> or visit <a href="/maharashtra/">Maharashtra coverage</a>.</p></li>')
+ page_html='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>News Archive'+(" · Page "+str(page) if page>1 else "")+' — PoliticsHub.in</title><meta name="description" content="Browse the source-linked, published news reports from PoliticsHub.in."><link rel="canonical" href="'+html.escape(canonical,quote=True)+'"><link rel="stylesheet" href="/assets/site.css?v=phui22"><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/assets/polish.css?v=phui19"><script src="/assets/ui.js?v=phui19" defer></script></head><body><header id="hd"><div class="top"><a class="logo" href="/"><img src="/favicon.svg" alt="PoliticsHub.in"></a><nav><a href="/">Home</a> · <a href="/india/">India</a> · <a href="/politics/">Politics</a> · <a href="/world/">World</a></nav></div></header><main class="wrap" style="max-width:1000px;padding:38px 22px"><h1>News Archive</h1><p>Browse individual published reports. Every headline opens its dedicated article page.</p><ol style="list-style:none;padding:0">'+''.join(items)+'</ol><nav aria-label="Archive pages">'+pager+'</nav></main><footer><div class="wrap"><p>PoliticsHub.in · <a href="/">Home</a> · <a href="/editorial-policy.html">Editorial policy</a> · <a href="/contact.html">Contact</a></p></div></footer></body></html>'
+ if not stories:
+  page_html=page_html.replace("<head>","<head><meta name='robots' content='noindex,follow'>",1)
  return Response(page_html,mimetype="text/html",headers={"Cache-Control":"public,max-age=60,s-maxage=180"})
 
 @app.get("/sitemap.xml")
