@@ -110,7 +110,7 @@ def _valid_translation(original: str, translated: str) -> bool:
     return (
         10 <= len(translated) <= 380
         and bool(re.search(r"[A-Za-z]{3}", translated))
-        and not _dev_re.search(translated)
+        and not _devanagari.search(translated)
         and _digits(original) == _digits(translated)
     )
 
