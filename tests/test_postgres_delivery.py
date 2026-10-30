@@ -100,6 +100,26 @@ class PostgresDeliveryTests(unittest.TestCase):
         self.assertEqual(response.headers['Retry-After'], '30')
         self.assertNotIn('private SQL', response.get_data(as_text=True))
 
+    def test_admin_workspace_and_paginated_queue_use_small_projections(self):
+        client = api.app.test_client()
+        api._PUBLIC_RATE.clear()
+        with client.session_transaction() as session:
+            session['admin_user'] = 'synthetic_audit_owner'
+        with patch.object(api, 'db', return_value=self.database), patch.object(self.database, 'close'):
+            workspace = client.get('/api/admin/workspace')
+            first = client.get('/api/admin/stories?source=Audit%20source&page=1')
+            second = client.get('/api/admin/stories?source=Audit%20source&page=2')
+        self.assertEqual(workspace.status_code, 200)
+        self.assertGreaterEqual(workspace.json['stats']['total'], 100000)
+        self.assertLessEqual(len(workspace.json['stories']), 200)
+        self.assertLess(len(workspace.data), 500000)
+        self.assertTrue(workspace.json['capabilities']['publish'])
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.json['total'], 100000)
+        self.assertEqual(len(first.json['stories']), 25)
+        self.assertFalse({row['id'] for row in first.json['stories']} & {row['id'] for row in second.json['stories']})
+        self.assertTrue(all('bot_article' not in row for row in first.json['stories']))
+
 
 if __name__ == '__main__':
     unittest.main()

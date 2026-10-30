@@ -16,6 +16,8 @@ from app.article_fetcher import enrich_source_text
 from app.database import NewsDatabase, DatabaseUnavailable, DatabaseBusy
 from app.public_delivery import WindowLimiter, read_json_rows, remote_rows
 from app.public_sessions import PublicSessionInterface
+from app.admin_access import configured_users, verify_recovery_owner
+from app.admin_workspace import LIST_FIELDS as ADMIN_LIST_FIELDS, EDITORIAL_FIELDS, editorial_revision, project_rows as admin_project_rows, coverage as admin_coverage
 from app.category_routing import normalize_category
 from app.seo_indexing import is_indexable, eligible_articles, news_sitemap_xml, google_news_sitemap_xml, standalone_sitemap_url_xml, STANDALONE_NEWS, SITE_ORIGIN as CANONICAL_ORIGIN
 from app.models import NewsItem
@@ -41,6 +43,34 @@ app.secret_key=_secret
 app.config["MAX_CONTENT_LENGTH"]=1*1024*1024
 app.config.update(SESSION_COOKIE_NAME="__Host-politicshub_admin_session",SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SECURE=True,SESSION_COOKIE_SAMESITE="Strict",SESSION_COOKIE_PATH="/",SESSION_COOKIE_REFRESH_EACH_REQUEST=False)
 _LOGIN_WINDOW_SECONDS=300; _LOGIN_MAX_FAILURES=8; _SETUP_MAX_FAILURES=5; _login_failures={}
+_ADMIN_LOGIN_RATE=WindowLimiter(capacity=2048)
+
+
+def recovery_session():
+ return bool(session.get('admin_user') and session.get('admin_scope')=='recovery')
+
+
+@app.before_request
+def enforce_admin_session_scope():
+ expiry=session.get('admin_expires_at')
+ if expiry and time.time()>=expiry:session.clear()
+ if request.method not in {'GET','HEAD','OPTIONS'} and (request.path.startswith('/api/admin/') or request.path.startswith('/api/news/')):
+  origin=request.headers.get('Origin')
+  if origin and origin.rstrip('/')!=request.host_url.rstrip('/'):
+   return jsonify({'error':'Cross-origin admin requests are not allowed'}),403
+ if recovery_session() and request.path.startswith('/api/'):
+  if request.method not in {'GET','HEAD','OPTIONS'} and request.path not in {'/api/admin/logout','/api/admin/login'}:
+   return jsonify({'error':'Recovery access is read-only. Restore the database and sign in again to make changes.','code':'recovery_read_only'}),403
+
+
+def _signed_in(username, role, scope='owner'):
+ session.clear()
+ session.update(admin_user=username,admin_role=role,admin_scope=scope,
+  admin_expires_at=int(time.time())+(3600 if scope=='recovery' else 28800),
+  csrf_token=secrets.token_urlsafe(32))
+ return jsonify({'ok':True,'username':username,'role':role,'scope':scope,
+  'read_only':scope=='recovery','csrf_token':session['csrf_token'],
+  'expires_at':session['admin_expires_at']})
 
 
 @app.before_request
@@ -354,10 +384,15 @@ def db():
  return database
 
 def admin_ok():
+ if recovery_session():return False
  if session.get("admin_user"):return True
  token=os.getenv("ADMIN_TOKEN",""); supplied=request.headers.get("X-Admin-Token",""); return bool(token and supplied and secrets.compare_digest(supplied,token))
 
-def require_admin():return None if admin_ok() else (jsonify({"error":"admin authentication required"}),401)
+def require_admin():
+ if recovery_session():
+  if request.path=='/api/admin/workspace':return None
+  return jsonify({'error':'This section needs a live database owner session. Recovery access is read-only.','code':'recovery_read_only'}),403
+ return None if admin_ok() else (jsonify({"error":"admin authentication required"}),401)
 def require_csrf():
  if not session.get("admin_user"):return None
  token=request.headers.get("X-CSRF-Token",""); expected=session.get("csrf_token",""); return None if token and expected and secrets.compare_digest(token,expected) else (jsonify({"error":"invalid CSRF token"}),403)
@@ -673,10 +708,7 @@ def rows_json(rows,compact=False):
   out.append(item)
  return out
 def users():
- try:
-  configured=json.loads(os.getenv("ADMIN_USERS_JSON","{}"))
-  return configured if isinstance(configured,dict) else {}
- except Exception:return {}
+ return configured_users()
 def _client_key():return _public_rate_key()
 def _auth_key(username):return "login:user:"+str(username).strip().lower()[:128]
 def _ip_key():return "login:ip:"+_client_key()
@@ -716,7 +748,7 @@ def security_headers(response):
  if response.status_code==429:
   response.headers["Retry-After"]="60"
  # Never let a logged-in browser populate a shared public HTML cache either.
- if admin_ok():
+ if session.get('admin_user') or admin_ok():
   response.headers["Cache-Control"]="private, no-store"
   response.headers["Vercel-CDN-Cache-Control"]="no-store"
   response.vary.add("Cookie")
@@ -750,7 +782,15 @@ def login():
  body=request.get_json(silent=True) or request.form.to_dict() or {}
  username=str(body.get("username","")).strip()
  password=str(body.get("password",""))
- database=db()
+ if not re.fullmatch(r'[A-Za-z0-9._-]{3,40}',username) or not 1<=len(password)<=256:
+  return jsonify({'error':'invalid username or password'}),401
+ # This guard works even when the persistent login-attempt table is unavailable.
+ if not _ADMIN_LOGIN_RATE.allow(('ip',_client_key()),20,300) or not _ADMIN_LOGIN_RATE.allow(('user',username),12,300):
+  return jsonify({'error':'too many login attempts; try again later'}),429
+ try:database=db()
+ except (DatabaseUnavailable,PostgresError):
+  if verify_recovery_owner(username,password):return _signed_in(username,'recovery','recovery')
+  return jsonify({'error':'invalid username or password'}),401
  attempt_key=_auth_key(username)
  ip_attempt_key=_ip_key()
  try:
@@ -766,11 +806,10 @@ def login():
    return jsonify({"error":"invalid username or password"}),401
   _auth_clear(database,attempt_key)
   _auth_clear(database,ip_attempt_key)
-  session.clear()
-  session["admin_user"]=username
-  session["admin_role"]=role or "owner"
-  session["csrf_token"]=secrets.token_urlsafe(32)
-  return jsonify({"ok":True,"username":username,"role":role or "owner","csrf_token":session["csrf_token"]})
+  return _signed_in(username,role or 'owner')
+ except (DatabaseUnavailable,PostgresError):
+  if verify_recovery_owner(username,password):return _signed_in(username,'recovery','recovery')
+  return jsonify({'error':'invalid username or password'}),401
  finally:
   database.close()
 
@@ -1021,7 +1060,79 @@ def logout():
  session.clear(); return jsonify({"ok":True})
 
 @app.get("/api/admin/me")
-def me():return jsonify({"authenticated":bool(session.get("admin_user")),"username":session.get("admin_user"),"role":session.get("admin_role"),"csrf_token":session.get("csrf_token") if session.get("admin_user") else None})
+def me():return jsonify({"authenticated":bool(session.get("admin_user")),"username":session.get("admin_user"),"role":session.get("admin_role"),"scope":session.get('admin_scope','owner'),"read_only":recovery_session(),"expires_at":session.get('admin_expires_at'),"csrf_token":session.get("csrf_token") if session.get("admin_user") else None})
+
+
+@app.get('/api/admin/workspace')
+def admin_workspace():
+ err=require_admin()
+ if err:return err
+ if not _public_rate_allowed(30,60):return jsonify({'error':'Workspace refresh limit reached. Please wait.'}),429
+ started=time.monotonic(); database=None; connected=False; stats={}; settings={}; activity=[]
+ try:
+  database=db(); connected=True
+  if not recovery_session():
+   # Transfer a bounded projection, never 200 complete articles per refresh.
+   fields=','.join(ADMIN_LIST_FIELDS)
+   raw=database.conn.execute(f"SELECT {fields},LENGTH(COALESCE(bot_article,'')) AS article_length FROM news_items ORDER BY id DESC LIMIT 200").fetchall()
+   counts=database.conn.execute("SELECT COUNT(*) AS total,COALESCE(SUM(CASE WHEN status='published' THEN 1 ELSE 0 END),0) AS published,COALESCE(SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END),0) AS pending,COALESCE(SUM(CASE WHEN fact_check_status='needs_review' THEN 1 ELSE 0 END),0) AS review_needed FROM news_items").fetchone()
+   stats={key:int(counts[key]) for key in ('total','published','pending','review_needed')}
+   settings=database.get_settings()
+   activity=[dict(row) for row in database.recent_activity(8)]
+   rows=admin_project_rows(raw)
+ except (DatabaseUnavailable,PostgresError):
+  connected=False
+ finally:
+  if database:database.close()
+ snapshot=not connected or recovery_session()
+ if snapshot:
+  rows=admin_project_rows(sorted(_snapshot_rows(),key=_public_timestamp,reverse=True)[:200],snapshot=True)
+  stats={'total':None,'published':len(rows),'pending':None,'review_needed':None}
+ now=datetime.now(timezone.utc)
+ latest=max((r['timestamp'] for r in rows if r['timestamp'] is not None),default=None)
+ writable=connected and not recovery_session()
+ return jsonify({'version':2,'generated_at':now.isoformat(),'mode':'snapshot' if snapshot else 'live',
+  'access':{'username':session.get('admin_user') or 'API token','scope':'recovery' if recovery_session() else 'owner','read_only':not writable,'expires_at':session.get('admin_expires_at')},
+  'capabilities':{'publish':writable,'settings':writable,'telemetry':writable,'export':True},
+  'health':{'database':'connected' if connected else 'unavailable','snapshot_available':bool(rows) if snapshot else None,
+   'latest_published_at':datetime.fromtimestamp(latest,timezone.utc).isoformat() if latest else None,
+   'latest_age_seconds':max(0,int(now.timestamp()-latest)) if latest else None,
+   'response_ms':round((time.monotonic()-started)*1000),'reauthenticate':connected and recovery_session()},
+  'stats':stats,'settings':settings,'activity':activity,'stories':rows,'coverage':admin_coverage(rows),
+  'limits':{'stories':200,'coverage_scope':'loaded stories','refresh_seconds':60},
+  'notice':('Database restored. Sign out and sign in again for owner access.' if connected and recovery_session() else
+   'Database unavailable. Showing the latest public snapshot; editorial changes are paused.' if snapshot else '')})
+
+
+@app.get('/api/admin/stories')
+def admin_story_queue():
+ err=require_admin()
+ if err:return err
+ if not _public_rate_allowed(60,60):return jsonify({'error':'Please wait before refreshing the queue.'}),429
+ try:
+  page=max(1,min(int(request.args.get('page','1')),1000))
+ except ValueError:return jsonify({'error':'Invalid page'}),400
+ filters={key:str(request.args.get(key,'all')).strip()[:120] for key in ('category','source','status','review')}
+ if filters['status'] not in {'all','pending','published','rejected'}:return jsonify({'error':'Invalid publication status'}),400
+ query=str(request.args.get('search','')).strip()[:120]
+ database=db()
+ try:
+  ph='%s' if database._postgres else '?'; clauses=[]; params=[]
+  for key,column in (('category','category'),('source','source_name'),('status','status'),('review','fact_check_status')):
+   if filters[key]!='all':clauses.append(f'{column}={ph}');params.append(filters[key])
+  if query:
+   clauses.append(f'(LOWER(title) LIKE LOWER({ph}) OR LOWER(COALESCE(summary,bot_summary,\'\')) LIKE LOWER({ph}) OR LOWER(source_name) LIKE LOWER({ph}))')
+   params.extend([f'%{query}%']*3)
+  quality="(COALESCE(NULLIF(bot_summary,''),summary,'')='' OR COALESCE(image_url,'')='' OR COALESCE(url,'')='' OR COALESCE(bot_article,'')='' OR fact_check_status='needs_review')"
+  if request.args.get('quality')=='1':clauses.append(quality)
+  where=' WHERE '+' AND '.join(clauses) if clauses else ''
+  sorts={'newest':'id DESC','oldest':'id ASC','views':'COALESCE(view_count,0) DESC,id DESC','quality':f'CASE WHEN {quality} THEN 1 ELSE 0 END DESC,id DESC'}
+  order=sorts.get(request.args.get('sort','newest'),'id DESC')
+  count=database.conn.execute('SELECT COUNT(*) AS total FROM news_items'+where,tuple(params)).fetchone()['total']
+  fields=','.join(ADMIN_LIST_FIELDS)
+  raw=database.conn.execute(f"SELECT {fields},LENGTH(COALESCE(bot_article,'')) AS article_length FROM news_items{where} ORDER BY {order} LIMIT {ph} OFFSET {ph}",(*params,25,(page-1)*25)).fetchall()
+  return jsonify({'stories':admin_project_rows(raw),'total':int(count),'page':page,'page_size':25,'mode':'live'})
+ finally:database.close()
 
 @app.get("/api/health")
 def health():
@@ -1404,8 +1515,9 @@ def change(item_id,status=None,**extra):
  database=db()
  try:
   fields=dict(extra);
+  existing=database.get_by_id(item_id)
+  if not existing:return jsonify({'error':'story not found'}),404
   if status=="published":
-   existing=database.get_by_id(item_id)
    if existing and existing["source_type"]=="x" and existing["fact_check_status"]!="reviewed":
     return jsonify({"error":"X post needs source and context review before publishing"}),409
   if status is not None:fields["status"]=status
@@ -1428,8 +1540,41 @@ def edit_news(item_id):
  body=request.get_json(silent=True) or {}; fields={k:str(body[k] or "").strip() for k in ("title","summary","category","image_url","bot_summary","bot_article") if k in body}
  if not fields:return jsonify({"error":"no editable fields supplied"}),400
  if "title" in fields and not fields["title"]:return jsonify({"error":"title cannot be empty"}),400
+ if 'title' in fields and len(fields['title'])>500:return jsonify({'error':'Headline must be at most 500 characters'}),400
+ if any(len(fields.get(key,''))>6000 for key in ('summary','bot_summary')):return jsonify({'error':'Summary must be at most 6000 characters'}),400
+ if 'category' in fields and fields['category'] not in {'general','india','world','politics','business','technology','sports','entertainment','science','health','hindi','maharashtra'}:
+  return jsonify({'error':'Invalid editorial desk'}),400
  database=db()
- try:database.update(item_id,**fields); log_admin(database,"news.edit",item_id,",".join(fields.keys())); return jsonify({"ok":True,"fields":fields})
+ try:
+  existing=database.get_by_id(item_id)
+  if not existing:return jsonify({'error':'story not found'}),404
+  revision=request.headers.get('If-Match','').strip('"')
+  if revision:
+   current=dict(existing)
+   if revision!=editorial_revision(current):return jsonify({'error':'This story changed in another session. Reopen the inspector before saving.'}),409
+   ph='%s' if database._postgres else '?'
+   assignments=','.join(f'{key}={ph}' for key in fields)
+   conditions=' AND '.join(f"COALESCE({key},'')={ph}" for key in EDITORIAL_FIELDS)
+   updated=database.conn.execute(f'UPDATE news_items SET {assignments} WHERE id={ph} AND {conditions}',(*fields.values(),item_id,*(str(current.get(key) or '') for key in EDITORIAL_FIELDS))).rowcount
+   if not database._postgres:database.conn.commit()
+   if not updated:return jsonify({'error':'This story changed during your edit. Reopen the inspector before saving.'}),409
+  else:database.update(item_id,**fields)
+  log_admin(database,"news.edit",item_id,",".join(fields.keys())); return jsonify({"ok":True,"fields":fields})
+ finally:database.close()
+
+
+@app.get('/api/admin/story/<int:item_id>')
+def admin_editorial_draft(item_id):
+ err=require_admin()
+ if err:return err
+ database=db()
+ try:
+  row=database.get_by_id(item_id)
+  if not row:return jsonify({'error':'story not found'}),404
+  row=dict(row)
+  return jsonify({'id':item_id,'title':row.get('title') or '',
+   'summary':row.get('bot_summary') or row.get('summary') or '',
+   'category':row.get('category') or 'general','revision':editorial_revision(row)})
  finally:database.close()
 
 def _editorial_source_packets(database, row, limit=4):

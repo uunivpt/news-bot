@@ -23,11 +23,12 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import re
+          from urllib.parse import urlsplit
           html=Path("public/admin/index.html").read_text(encoding="utf-8")
           scripts=re.findall(r'<script[^>]+src=["\']([^"\']+)["\']',html,re.I)
           if not scripts:
               raise SystemExit("No external admin script found")
-          admin=next((x for x in scripts if x.rstrip("/") == "/admin.js"), None)
+          admin=next((x for x in scripts if urlsplit(x).path.rstrip("/") == "/admin.js"), None)
           if not admin:
               raise SystemExit("Expected /admin.js entrypoint not found")
           path=Path("public/admin.js")
