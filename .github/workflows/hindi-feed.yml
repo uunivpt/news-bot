@@ -1,0 +1,47 @@
+name: Hindi News Hourly
+
+on:
+  schedule:
+    - cron: "7 * * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/hindi-feed.yml"
+      - "scripts/build_hindi_feed.py"
+      - "config/sources.json"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hindi-news-hourly
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install RSS dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Build current Hindi publisher-link feed
+        env:
+          PYTHONPATH: .
+        run: python scripts/build_hindi_feed.py
+      - name: Publish only changed Hindi stories
+        run: |
+          if git diff --quiet -- public/hindi-news.json; then
+            echo "No new Hindi source stories."
+            exit 0
+          fi
+          git config user.name "politicshub-feed-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/hindi-news.json
+          git commit -m "Refresh Hindi headline feed"
+          git pull --rebase origin main
+          git push origin HEAD:main

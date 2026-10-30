@@ -67,6 +67,10 @@ def collect_once(config: dict[str, Any], db: NewsDatabase) -> tuple[int, int]:
     healthy = 0
     failures = []
     for source_type, sources in config.items():
+        # Hindi RSS is fetched by an independent hourly feed workflow.
+        # Do not consume the English newsroom publishing queue with it.
+        if source_type == "hindi_rss":
+            continue
         collector = COLLECTORS.get(source_type)
         if collector is None:
             logger.warning("Unknown source type: %s", source_type)

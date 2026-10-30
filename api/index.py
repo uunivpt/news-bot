@@ -118,6 +118,39 @@ def _proxy_public(path):
 _snapshot_remote_cache={"until":0.0,"payload":[]}
 PUBLIC_FEED_URL="https://raw.githubusercontent.com/uunivpt/news-bot/main/public/news-data.json"
 
+# GitHub Actions publishes a link-only Hindi feed hourly, separately from Neon.
+PUBLIC_HINDI_FEED_URL="https://raw.githubusercontent.com/uunivpt/news-bot/main/public/hindi-news.json"
+_hindi_feed_cache={"until":0.0,"payload":[]}
+
+def _hindi_rows():
+ now=time.monotonic()
+ if now < _hindi_feed_cache["until"]:
+  return [dict(row) for row in _hindi_feed_cache["payload"]]
+ path=Path(app.static_folder or "public") / "hindi-news.json"
+ local=[]
+ try:
+  candidate=json.loads(path.read_text(encoding="utf-8"))
+  if isinstance(candidate,list):local=candidate
+ except (OSError,ValueError):
+  pass
+ payload=_hindi_feed_cache["payload"] or local
+ if os.getenv("VERCEL")=="1":
+  try:
+   import requests
+   response=requests.get(PUBLIC_HINDI_FEED_URL,timeout=(2,5),headers={"Accept":"application/json"})
+   response.raise_for_status()
+   if len(response.content)<=1_500_000:
+    candidate=response.json()
+    if isinstance(candidate,list) and all(isinstance(x,dict) for x in candidate):
+     payload=candidate
+  except Exception as exc:
+   print(f"Hindi feed refresh unavailable: {type(exc).__name__}")
+ rows=[dict(row) for row in payload if isinstance(row,dict) and
+       row.get("title") and str(row.get("category") or "").lower()=="hindi" and row.get("url")]
+ _hindi_feed_cache.update(until=now+300,payload=rows)
+ return [dict(row) for row in rows]
+
+
 def _snapshot_rows(category="all", search=None):
  path=Path(app.static_folder or "public") / "news-data.json"
  payload=[]
@@ -200,6 +233,7 @@ def _rank_public(rows):
  items.sort(key=lambda item:(_public_timestamp(item),int(item.get("id") or 0)),reverse=True)
  return dedupe_story_rows(items)
 def _public_rows_for_section(category="all",limit=200):
+ if category=="hindi":return _rank_public(_hindi_rows())[:limit]
  try:
   database=db()
   try:
@@ -508,6 +542,9 @@ def _archive_row(item_id,database=None):
  return row
 
 def _public_row_by_id(item_id):
+ # Stable, content-addressed IDs for the Hindi RSS desk live outside Neon.
+ for item in _hindi_rows():
+  if str(item.get("id"))==str(item_id):return _publicize(item)
  try:
   database=db()
   try:
@@ -910,7 +947,13 @@ def seo_article(category,item_id,slug):
    database=db()
    database.close()
   except RuntimeError:
-   return Response("Article temporarily unavailable",status=503,headers={"Retry-After":"300","Cache-Control":"no-store"})
+   message=('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+    '<title>Story currently unavailable — PoliticsHub.in</title><body style="font:16px/1.6 system-ui;max-width:680px;margin:8vh auto;padding:24px">'
+    '<a href="/">PoliticsHub.in</a><h1>This story is temporarily unavailable</h1>'
+    '<p>Our archive is temporarily unable to retrieve this article. It has not been deleted. '
+    'Try again later, or browse the latest India, World and Politics news.</p>'
+    '<a href="/">Back to latest news</a></body></html>')
+   return Response(message,status=503,mimetype="text/html",headers={"Retry-After":"300","Cache-Control":"no-store"})
   return jsonify({"error":"not found"}),404
  canonical_path=article_path(row); requested=f"/{category}/{item_id}-{slug}"
  if requested.rstrip("/")!=canonical_path.rstrip("/"):return redirect(SITE_ORIGIN+canonical_path,code=301)
@@ -950,6 +993,13 @@ def maharashtra_public_feed():
   return response
  except Exception:
   return jsonify({"items":[],"sources":{},"status":"unavailable","refresh_minutes":20}),503
+
+@app.get("/api/hindi-feed")
+def public_hindi_feed():
+ rows=_rank_public(_hindi_rows())[:120]
+ response=jsonify(rows)
+ response.headers["Cache-Control"]="public, max-age=60, s-maxage=300"
+ return response
 
 @app.get("/api/news")
 def news():

@@ -1,7 +1,7 @@
 
 const CATS=[['all','Home'],['maharashtra','Maharashtra'],['india','India'],['politics','Politics'],['world','World'],['hindi','Hindi']];
 const TABS=[['all','All'],['maharashtra','Maharashtra'],['politics','Politics'],['india','India'],['world','World'],['hindi','Hindi']];
-const ENDPOINTS={api:'/api/news?category=all&limit=120',item:'/api/news/',search:'/api/search',snap:'/news-data.json'};
+const ENDPOINTS={api:'/api/news?category=all&limit=120',item:'/api/news/',search:'/api/search',snap:'/news-data.json',hindi:'/api/hindi-feed'};
 // Editorially verified one-off story stays visible even during a DB quota outage.
 const MUSK_STARLINK={id:'202610090923',title:'Elon Musk targets Mukesh Ambani over Starlink India launch delay',category:'india',source:'PoliticsHub News Desk / Reuters',source_name:'PoliticsHub News Desk',date:'2026-10-09T23:23:00+05:30',published_at_site:'2026-10-09T23:23:00+05:30',summary:'In a sarcastic X post, Elon Musk called Mukesh Ambani “Prime Minister Ambani” and alleged obstacles to Starlink. India denies favouritism, citing mandatory security and spectrum approvals.',image:'',url:'https://www.reuters.com/business/media-telecom/india-rejects-monopoly-claim-after-musk-accuses-ambani-blocking-starlink-launch-2026-10-09/',editorial_pick:true};
 const NANA_TRIBUTE={id:'nana-tribute',title:'Nana Patekar dies at 75 in Goa, leaving a lasting cinema legacy',category:'india',source:'Reuters / AP',source_name:'Reuters',date:'2026-10-08T06:00:00+05:30',published_at_site:'2026-10-08T06:00:00+05:30',summary:'Veteran actor Nana Patekar died in Goa on 8 October 2026, aged 75. His celebrated films included Parinda, Krantiveer, Ab Tak Chhappan and Natsamrat.',image:'',url:'https://www.reuters.com/business/media-telecom/bollywood-actor-nana-patekar-dies-75-2026-10-08/',is_breaking:true};
@@ -39,8 +39,13 @@ function newsCategory(category,title,summary){
  const raw=String(category||'india').trim().toLowerCase();
  const text=String(title||'')+' '+String(summary||'');
  if(/\bnana\s+patekar\b/i.test(text))return'india';
- if(raw==='entertainment'&&/\b(?:india|indian|bollywood|marathi|maharashtra|hindi cinema|indian cinema|telugu cinema|tamil cinema|malayalam cinema|bengali cinema|padma shri|padma bhushan)\b/i.test(text)&&/\b(?:dies|died|death|dead|passes? away|passed away|passing|demise|obituary|no more|last rites|funeral|laid to rest|mourns?|condolences?|tributes? to (?:late|veteran))\b/i.test(text))return'india';
- return raw;
+ if(['entertainment','business','technology','sports','science','health'].includes(raw)){
+  if(/\b(?:elections?|vot(?:e|es|ing)|polling|ballot|politic(?:s|al|ian)|parliament|lok sabha|rajya sabha|assembly|bjp|congress|cabinet|coalition|prime minister|chief minister|minister|opposition|manifesto)\b|चुनाव|राजनीति|संसद|विधानसभा|प्रधानमंत्री|मुख्यमंत्री/i.test(text))return'politics';
+  if(/\b(?:hollywood|oscars?|grammys?|k[- ]?pop|korea|china|japan|united states|usa|american|british|united kingdom|london|europe|russia|ukraine|israel|gaza|iran|france|germany|canada|australia|international|global|world)\b|अमेरिका|ब्रिटेन|चीन|रूस|यूक्रेन|दुनिया|विदेश/i.test(text)
+     && !/\b(?:india|indian|bollywood|marathi|maharashtra|hindi cinema|indian cinema|telugu cinema|tamil cinema|malayalam cinema|bengali cinema|padma shri|padma bhushan|deepika|ranveer)\b|भारत|भारतीय|महाराष्ट्र|बॉलीवुड|मुंबई|दिल्ली/i.test(text))return'world';
+  return'india';
+ }
+ return raw||'india';
 }
 function norm(a,i){const id=a.id??a.slug??a._id??'n'+i;const img=a.image||a.image_url||a.imageUrl||a.urlToImage||a.thumbnail||a.img||'';
  return{...a,id:String(id),title:a.title||a.headline||'Untitled',summary:a.summary||a.description||a.excerpt||'',body:a.article||a.bot_article||a.content||a.body||a.text||'',image:typeof img==='string'?img:'',category:newsCategory(a.category||a.section||'General',a.title||a.headline,a.summary||a.description||a.excerpt),source:(a.source&&a.source.name)||a.source||a.publisher||'',date:a.published_at_iso||a.publishedAt||a.pubDate||a.date||a.published_at||a.created_at||'',url:a.url||a.link||'',author:a.author||a.author_name||'PoliticsHub Editorial Desk'}}
@@ -75,7 +80,7 @@ function ck(item){
  if(key.includes('business')||key.includes('econom'))return'business';
  if(key.includes('tech'))return'technology';
  if(key.includes('sport'))return'sports';
- if(key.includes('entertain'))return'entertainment';
+ if(key.includes('entertain'))return'india';
  if(key.includes('science'))return'science';
  if(key.includes('health'))return'health';
  if(key.includes('hindi'))return'hindi';
@@ -157,7 +162,7 @@ function mergeFeeds(a,b){
  return [...seen.values()].sort((x,y)=>ts(y.date)-ts(x.date)||0)
 }
 async function load(opts={}){
- let a=[],b=[],painted=false,apiOK=false;
+ let a=[],b=[],h=[],painted=false,apiOK=false;
  const early=!!opts.early;
  const paintFirst=(rows,mode)=>{
   if(!early||painted||S.items.length||!rows?.length)return;
@@ -165,20 +170,21 @@ async function load(opts={}){
  };
  const apiP=get(ENDPOINTS.api).then(rows=>{a=rows;apiOK=true;S.api=a.length?'ok':'empty';paintFirst(a,'api')}).catch(()=>{S.api='bad'});
  const snapP=get(ENDPOINTS.snap).then(rows=>{b=rows;S.snap=b.length?'ok':'empty';paintFirst(b,'snapshot')}).catch(()=>{S.snap='bad'});
- await Promise.allSettled([apiP,snapP]);
+ const hindiP=get(ENDPOINTS.hindi).then(rows=>{h=rows}).catch(()=>{});
+ await Promise.allSettled([apiP,snapP,hindiP]);
  const existing=S.items.slice();
  // Prefer today's published snapshot to stale browser storage when the database
  // is unavailable; cached stories may have URLs that no longer resolve.
  const serverRows=apiOK?a:b;
- const hasServerFeed=apiOK||b.length>0;
- S.items=apiOK?mergeFeeds(a,[]):(b.length?mergeFeeds(b,[]):mergeFeeds(existing,[]));
+ const hasServerFeed=apiOK||b.length>0||h.length>0;
+ S.items=mergeFeeds(apiOK?a:(b.length?b:existing),h);
  if(S.items.length){
-  S.mode=apiOK?(S.apiMode==='snapshot'?'snapshot':'api'):(b.length?'snapshot':'cached');
+  S.mode=apiOK?(S.apiMode==='snapshot'?'snapshot':'api'):(b.length||h.length?'snapshot':'cached');
   if(hasServerFeed)cacheSave(S.items);
  } else {S.mode='empty'}
  updateFeedStatus();
 }
-function home(c){setActive(c);document.title=(c==='all'?'':CATS.find(x=>x[0]===c)?.[1]+' — ')+'PoliticsHub.in';
+function home(c){document.documentElement.lang=c==='hindi'?'hi':'en';setActive(c);document.title=(c==='all'?'':CATS.find(x=>x[0]===c)?.[1]+' — ')+'PoliticsHub.in';
  const list=S.items.filter(i=>inCat(i,c));const f=list[0];const rest=list.filter(i=>i!==f);
  const tabs=`<div class="tabs" role="tablist" aria-label="Categories">${TABS.map(([k,l])=>`<a role="tab" href="${hl(k)}" data-c="${k}" data-k="${k}" class="${k===c?'on':''}" aria-selected="${k===c}">${l}</a>`).join('')}</div>`;
  if(!f){$('#app').innerHTML=tabs+`<div class="msg"><h3>No stories here yet</h3><p>Nothing in ${esc(c)} right now. Try another section or check back soon.</p></div>`;return}
