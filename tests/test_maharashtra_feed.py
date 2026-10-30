@@ -68,6 +68,26 @@ class MaharashtraFeedTests(unittest.TestCase):
         self.assertEqual(result["items"], [])
         self.assertEqual(result["status"], "unavailable")
 
+    def test_temporary_source_failure_preserves_dated_headlines(self):
+        from requests import Timeout
+        original = {'items':[{'title':'पुण्यात महत्त्वाची बातमी','url':'https://www.tv9marathi.com/maharashtra/a','source_name':'TV9 Marathi'}],
+                    'sources':{},'last_checked':'2026-10-27T13:00:00Z','status':'ok','refresh_minutes':20}
+        mh._cache['original']={'result':original,'expires':0}
+        with patch.object(mh,'_read_one',side_effect=Timeout('temporary')):
+            result=mh.get_feed('mr')
+        self.assertEqual(result['items'],original['items'])
+        self.assertEqual(result['status'],'stale')
+        self.assertEqual(result['last_checked'],original['last_checked'])
+        self.assertFalse(result['sources']['TV9 Marathi']['available'])
+
+    def test_failed_translations_back_off_instead_of_retrying_per_reader(self):
+        original=[{'title':'पुण्यात महत्त्वाची बातमी','url':'https://www.tv9marathi.com/maharashtra/a','source_name':'TV9 Marathi'}]
+        mh._cache['original']={'result':{'items':original,'sources':{},'refresh_minutes':20},'expires':mh.time.monotonic()+1000}
+        with patch.object(mh,'_translate_batch',return_value={}) as translator:
+            for _ in range(10):
+                self.assertEqual(mh.get_feed('en')['translation_status'],'unavailable')
+        translator.assert_called_once()
+
     def test_route_forwards_language(self):
         from api.index import app
         with patch("api.maharashtra_feed.get_feed", return_value={"language":"en","items":[],"sources":{}}) as fake:

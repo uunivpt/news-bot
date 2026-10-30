@@ -38,15 +38,16 @@ class AuditRegressions(unittest.TestCase):
    for _ in range(2):
     with self.assertRaises(DatabaseUnavailable):api.db()
    self.assertEqual(connect.call_count,1)
- def test_snapshot_outage_is_visible_and_not_cached(self):
+ def test_snapshot_outage_is_visible_with_bounded_public_cache(self):
   with patch.object(api,'db',side_effect=DatabaseUnavailable('down')):
    response=self.client.get('/api/news')
    self.assertEqual(response.status_code,200)
    self.assertEqual(response.headers['X-News-Mode'],'snapshot')
-   self.assertEqual(response.headers['Cache-Control'],'no-store')
+   self.assertIn('s-maxage=60',response.headers['Cache-Control'])
    health=self.client.get('/api/health')
    self.assertEqual(health.status_code,503)
    self.assertFalse(health.json['ok'])
+   self.assertEqual(health.headers['Cache-Control'],'no-store')
  def test_missing_runtime_snapshot_returns_unavailable(self):
   with patch.object(api,'db',side_effect=DatabaseUnavailable('down')),patch.object(api.app,'_static_folder',self.tmp.name):
    response=self.client.get('/api/news')

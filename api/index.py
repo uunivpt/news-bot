@@ -2,16 +2,20 @@
 # Controlled production release: public quality, attribution and image-safety gates enabled.
 from __future__ import annotations
 
-import json, os, re, secrets, time, html, io
+import json, os, re, secrets, time, html, io, threading
+from ipaddress import ip_address
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from email.utils import parsedate_to_datetime
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 from flask import Flask, jsonify, request, session, send_from_directory, redirect, Response
 from werkzeug.security import check_password_hash, generate_password_hash
+from psycopg import Error as PostgresError
 from app.article_fetcher import enrich_source_text
-from app.database import NewsDatabase, DatabaseUnavailable
+from app.database import NewsDatabase, DatabaseUnavailable, DatabaseBusy
+from app.public_delivery import WindowLimiter, read_json_rows, remote_rows
+from app.public_sessions import PublicSessionInterface
 from app.category_routing import normalize_category
 from app.seo_indexing import is_indexable, eligible_articles, news_sitemap_xml, google_news_sitemap_xml, standalone_sitemap_url_xml, STANDALONE_NEWS, SITE_ORIGIN as CANONICAL_ORIGIN
 from app.models import NewsItem
@@ -30,6 +34,7 @@ from app.newsletter import (
 )
 
 app=Flask(__name__, static_folder="../public", static_url_path="")
+app.session_interface=PublicSessionInterface()
 _secret=os.getenv("FLASK_SECRET_KEY") or os.getenv("ADMIN_TOKEN") or os.getenv("ADMIN_SETUP_KEY")
 if not _secret:_secret=secrets.token_urlsafe(32)
 app.secret_key=_secret
@@ -38,8 +43,34 @@ app.config.update(SESSION_COOKIE_NAME="__Host-politicshub_admin_session",SESSION
 _LOGIN_WINDOW_SECONDS=300; _LOGIN_MAX_FAILURES=8; _SETUP_MAX_FAILURES=5; _login_failures={}
 
 
+@app.before_request
+def validate_json_object():
+ if request.method in {"POST","PUT","PATCH","DELETE"} and request.is_json:
+  body=request.get_json(silent=True)
+  if not isinstance(body,dict):
+   return jsonify({"error":"Request body must be a JSON object"}),400
+
+
+@app.errorhandler(DatabaseUnavailable)
+@app.errorhandler(PostgresError)
+def database_request_unavailable(error):
+ # Includes query cancellation and an unavailable admin database. Never return
+ # driver messages, hostnames or SQL to a public browser.
+ return jsonify({"error":"News database temporarily unavailable. Please retry shortly."}),503,{"Retry-After":"30"}
+
+
 def _ensure_admin_users(database):
  database.conn.execute("CREATE TABLE IF NOT EXISTS admin_users (username TEXT PRIMARY KEY,password_hash TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'owner',created_at TEXT NOT NULL)")
+ configured=users()
+ if configured:
+  row=database.conn.execute('SELECT COUNT(*) AS count FROM admin_users').fetchone()
+  if int(row['count'])==0:
+   ph='%s' if database._postgres else '?'
+   for username,password_hash in configured.items():
+    if not re.fullmatch(r'[A-Za-z0-9._-]{3,40}',str(username)):continue
+    if not isinstance(password_hash,str) or not password_hash.startswith(('scrypt:','pbkdf2:')) or password_hash.count('$')!=2 or not 60<=len(password_hash)<=1000:continue
+    database.conn.execute(f'INSERT INTO admin_users (username,password_hash,role,created_at) VALUES ({ph},{ph},{ph},{ph}) ON CONFLICT(username) DO NOTHING',
+     (username,password_hash,'owner',datetime.now(timezone.utc).isoformat()))
  if not database._postgres:database.conn.commit()
 
 def _bootstrap_news_snapshot(database):
@@ -85,20 +116,20 @@ def _bootstrap_news_snapshot(database):
 
 PUBLIC_BACKEND_ORIGIN=os.getenv("PUBLIC_BACKEND_ORIGIN","").rstrip("/")
 _PUBLIC_API_TIMEOUT=8
-_PUBLIC_RATE={}
+_PUBLIC_RATE=WindowLimiter()
 
 def _public_rate_key():
+ # Vercel overwrites its own forwarding header. Outside that runtime, do not
+ # trust arbitrary client-supplied proxy headers.
+ if os.getenv("VERCEL")=="1":
+  forwarded=request.headers.get("X-Vercel-Forwarded-For","").split(",",1)[0].strip()
+  try:return str(ip_address(forwarded))
+  except ValueError:pass
  return (request.remote_addr or "unknown")[:128]
 
 def _public_rate_allowed(limit=120,window=60):
- key=(_public_rate_key(),request.endpoint,limit,window); now=time.time(); bucket=_PUBLIC_RATE.get(key)
- if len(_PUBLIC_RATE)>5000:
-  for old_key,old_bucket in list(_PUBLIC_RATE.items()):
-   if now-old_bucket[0]>=old_key[3]:_PUBLIC_RATE.pop(old_key,None)
- if not bucket or now-bucket[0]>=window:
-  _PUBLIC_RATE[key]=[now,1]; return True
- if bucket[1]>=limit:return False
- bucket[1]+=1; return True
+ key=(_public_rate_key(),request.endpoint,limit,window)
+ return _PUBLIC_RATE.allow(key,limit,window)
 
 def _proxy_public(path):
  if not PUBLIC_BACKEND_ORIGIN:return None
@@ -116,80 +147,51 @@ def _proxy_public(path):
 # During a database outage, read the latest production-branch snapshot without
 # requiring a new Vercel deployment for every feed refresh.
 _snapshot_remote_cache={"until":0.0,"payload":[]}
+_snapshot_refresh_lock=threading.Lock()
 PUBLIC_FEED_URL="https://raw.githubusercontent.com/uunivpt/news-bot/main/public/news-data.json"
 
 # GitHub Actions publishes a link-only Hindi feed hourly, separately from Neon.
 PUBLIC_HINDI_FEED_URL="https://raw.githubusercontent.com/uunivpt/news-bot/main/public/hindi-news.json"
 _hindi_feed_cache={"until":0.0,"payload":[]}
+_hindi_refresh_lock=threading.Lock()
 
 def _hindi_rows():
  now=time.monotonic()
  if now < _hindi_feed_cache["until"]:
-  return [dict(row) for row in _hindi_feed_cache["payload"]]
+  return _validated_hindi_rows(_hindi_feed_cache['payload'])
  path=Path(app.static_folder or "public") / "hindi-news.json"
- local=[]
- try:
-  candidate=json.loads(path.read_text(encoding="utf-8"))
-  if isinstance(candidate,list):local=candidate
- except (OSError,ValueError):
-  pass
+ local=read_json_rows(path)
  payload=_hindi_feed_cache["payload"] or local
  if os.getenv("VERCEL")=="1":
-  try:
-   import requests
-   response=requests.get(PUBLIC_HINDI_FEED_URL,timeout=(2,5),headers={"Accept":"application/json"})
-   response.raise_for_status()
-   if len(response.content)<=1_500_000:
-    candidate=response.json()
-    if isinstance(candidate,list) and all(isinstance(x,dict) for x in candidate):
-     payload=candidate
-  except Exception as exc:
-   print(f"Hindi feed refresh unavailable: {type(exc).__name__}")
- rows=[dict(row) for row in payload if isinstance(row,dict) and
-       row.get("title") and str(row.get("category") or "").lower()=="hindi" and row.get("url")]
- _hindi_feed_cache.update(until=now+300,payload=rows)
+  payload=remote_rows(_hindi_feed_cache,_hindi_refresh_lock,local,
+   (PUBLIC_HINDI_FEED_URL,),ttl=300,max_bytes=1_500_000,allow_empty=True)
+ rows=_validated_hindi_rows(payload)
+ if os.getenv("VERCEL")!="1":_hindi_feed_cache.update(until=now+300,payload=rows)
  return [dict(row) for row in rows]
+
+def _validated_hindi_rows(payload):
+ return [dict(row) for row in payload if isinstance(row,dict) and row.get('title') and
+  str(row.get('category') or '').lower()=='hindi' and row.get('status','published')=='published' and _safe_source_url(row.get('url'))]
 
 
 def _snapshot_rows(category="all", search=None):
  path=Path(app.static_folder or "public") / "news-data.json"
- payload=[]
- if path.is_file():
-  try:payload=json.loads(path.read_text(encoding="utf-8"))
-  except (OSError,ValueError):pass
+ payload=read_json_rows(path)
  if os.getenv("VERCEL")=="1":
-  now=time.monotonic()
-  if now < _snapshot_remote_cache["until"]:
-   payload=_snapshot_remote_cache["payload"]
-  else:
-   previous=_snapshot_remote_cache["payload"]
-   if previous:payload=previous
-   _snapshot_remote_cache.update(until=now+15,payload=payload)
-   import requests
-   for url in (PUBLIC_FEED_URL, SITE_ORIGIN+"/news-data.json"):
-    try:
-     response=requests.get(url,timeout=(2,5),headers={"Accept":"application/json"})
-     response.raise_for_status()
-     if len(response.content)<=2_000_000:
-      incoming=response.json()
-      if isinstance(incoming,list) and incoming and all(isinstance(x,dict) and x.get("title") for x in incoming):
-       payload=incoming
-       _snapshot_remote_cache.update(until=now+90,payload=incoming)
-       break
-    except Exception:
-     continue
+  payload=remote_rows(_snapshot_remote_cache,_snapshot_refresh_lock,payload,
+   (PUBLIC_FEED_URL,SITE_ORIGIN+"/news-data.json"),ttl=90,max_bytes=2_000_000)
  # Keep manually verified election reports independent of rotating news snapshots.
  # These time-stamped leads are NOT certified final election results.
  if not isinstance(payload,list):payload=[]
  curated_path=Path(app.static_folder or "public") / "maharashtra-mlc-2026-verified.json"
  try:
-  curated=json.loads(curated_path.read_text(encoding="utf-8"))
+  curated=read_json_rows(curated_path)
   if isinstance(curated,list):
    present={str(x.get("id")) for x in payload if isinstance(x,dict)}
    payload=[x for x in curated if isinstance(x,dict) and x.get("title") and str(x.get("id")) not in present] + payload
  except (OSError,ValueError):
   pass
- rows=[dict(x) for x in payload if isinstance(x,dict) and x.get("title")]
+ rows=[dict(x) for x in payload if isinstance(x,dict) and x.get("title") and x.get("status","published")=="published"]
  for row in rows:
   row.setdefault("status","published")
   row["category"]=normalize_category(row.get("category"), row.get("title"), row.get("bot_summary") or row.get("summary") or "")
@@ -220,18 +222,17 @@ def _public_timestamp(row):
     return datetime.strptime(normalized,fmt).replace(tzinfo=ZoneInfo("Asia/Kolkata")).timestamp()
    except ValueError:
     pass
- try:return float(row.get("id") or 0)
- except (TypeError,ValueError):return 0.0
+ return 0.0
 
 
-def _rank_public(rows):
+def _rank_public(rows,threshold=0.82):
  items=[dict(r) for r in rows]
  for item in items:
   item["category"]=normalize_category(item.get("category"),item.get("title"),item.get("bot_summary") or item.get("summary") or "")
   item["news_score"]=story_score(item.get("title",""),item.get("bot_summary") or item.get("summary") or "",item.get("category") or "general",item.get("source_name") or "")
   item["is_breaking"]=is_breaking(item.get("title",""),item.get("bot_summary") or item.get("summary") or "",item["news_score"])
  items.sort(key=lambda item:(_public_timestamp(item),int(item.get("id") or 0)),reverse=True)
- return dedupe_story_rows(items)
+ return dedupe_story_rows(items,threshold=threshold)
 def _public_rows_for_section(category="all",limit=200):
  if category=="hindi":return _rank_public(_hindi_rows())[:limit]
  try:
@@ -294,7 +295,7 @@ def _section_html(category="all"):
  if category in ("india","all"):
   body+='<section aria-label="Verified report" style="margin:20px 0"><h2>Verified India report</h2><p><a href="/nana-patekar-tribute.html">Nana Patekar dies at 75 in Goa: report and sources</a></p></section>'
  body+='<div class="sh"><h2>Latest stories</h2><span class="lbl">'+str(len(rows))+' stories</span></div><div class="grid">'+"".join(cards)+'</div>'
- return '<!doctype html><html lang="en" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta name="google-adsense-account" content="ca-pub-1752666987448533"><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1752666987448533" crossorigin="anonymous"></script><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui22"><link rel="stylesheet" href="/assets/editorial.css?v=phui19"><link rel="stylesheet" href="/assets/polish.css?v=phui19"><script src="/assets/ui.js?v=phui19" defer></script></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/archive/">All News Archive</a></p><p><a href="/nana-patekar-tribute.html">Nana Patekar report</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="/settings.html">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=phui23"></script><script src="/assets/editorial-home.js?v=phui19"></script></body></html>'
+ return '<!doctype html><html lang="en" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta name="google-adsense-account" content="ca-pub-1752666987448533"><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1752666987448533" crossorigin="anonymous"></script><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/editorial.css?v=phui19"><link rel="stylesheet" href="/assets/polish.css?v=phui30"><script src="/assets/ui.js?v=phui30" defer></script></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/archive/">All News Archive</a></p><p><a href="/nana-patekar-tribute.html">Nana Patekar report</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="/settings.html">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=phui30"></script><script src="/assets/editorial-home.js?v=phui30"></script></body></html>'
 
 
 def _enhance_section_seo(document, category):
@@ -335,13 +336,21 @@ def db():
  if time.monotonic() < _db_retry_after:
   raise DatabaseUnavailable("Database temporarily unavailable")
  try:
-  database=NewsDatabase()
+  # Public HTTP requests fail over quickly; background collectors keep their
+  # longer retry budget. Queries also have a server-side execution deadline.
+  database=NewsDatabase(connect_attempts=1,connect_timeout=3,statement_timeout=5000,
+   use_pool=True,initialize_schema=os.getenv("VERCEL")!="1")
+ except DatabaseBusy:
+  raise
  except DatabaseUnavailable:
   _db_retry_after=time.monotonic()+30
   raise
  # Public reads must never seed old snapshots into a production database.
  if request.path.startswith("/api/admin/"):
-  _ensure_admin_users(database)
+  try:_ensure_admin_users(database)
+  except Exception:
+   database.close()
+   raise
  return database
 
 def admin_ok():
@@ -395,6 +404,7 @@ def _publicize(row):
   article_text=_strip_promo_nav(source_text)
   article_text=re.sub(r"(?:\n|\s)*Why it matters:\s*$","",article_text,flags=re.I).strip()
   r["article"]=article_text
+  r["url"]=_safe_source_url(r.get("url"))
   # Website images are source-only. Separately generated images
   # (Wikimedia/Openverse/etc.) must never appear on the website.
   r["image_url"]=_public_image_path(r)
@@ -405,6 +415,13 @@ def _publicize(row):
  score=story_score(r.get("title",""),r.get("summary",""),r.get("category") or "general",r.get("source_name") or "")
  r["news_score"]=score; r["is_breaking"]=is_breaking(r.get("title",""),r.get("summary",""),score)
  return r
+
+
+def _safe_source_url(value):
+ try:
+  parts=urlsplit(str(value or "").strip())
+  return str(value).strip() if parts.scheme in {"http","https"} and parts.hostname and not parts.username and not parts.password else ""
+ except ValueError:return ""
 
 
 def _is_source_supplied_image(row):
@@ -521,10 +538,23 @@ def article_path(row):
  category=CATEGORY_SLUGS.get(category,"india")
  return f"/{category}/{int(row['id'])}-{_slugify(row.get('title'))}"
 
-def _archive_rows(database=None, search=None):
- rows=public_archive.rows(search)
+_archive_discovery_cache=(None,())
+_archive_discovery_until=0.0
+
+def _archive_rows(database=None, search=None,discovery=False):
+ global _archive_discovery_cache,_archive_discovery_until
+ if discovery:
+  records=public_archive._load()
+  if _archive_discovery_cache[0] is not records or time.monotonic()>=_archive_discovery_until:
+   normalized=[_discovery_row(row) for row in records]
+   eligible=eligible_articles(normalized)
+   for row in eligible:row['_discovery_ready']=True
+   _archive_discovery_cache=(records,tuple(eligible))
+   _archive_discovery_until=time.monotonic()+300
+  rows=[dict(row) for row in _archive_discovery_cache[1]]
+ else:rows=public_archive.rows(search)
  if database is not None:
-  overrides=[dict(row) for row in database.archive_overrides()]
+  overrides=[dict(row) for row in database.archive_overrides(rows)]
   ids={str(row["id"]) for row in overrides}
   urls={row["url"] for row in overrides}
   rows=[row for row in rows if str(row["id"]) not in ids and row["url"] not in urls]
@@ -535,7 +565,7 @@ def _archive_row(item_id,database=None):
  if row is None:return None
  if database is not None:
   # Honor current publication status, including a changed ID after migration.
-  overrides=[dict(record) for record in database.archive_overrides()]
+  overrides=[dict(record) for record in database.archive_overrides([row])]
   for record in overrides:
    if str(record["id"])==str(item_id) or record["url"]==row["url"]:
     return database.get_by_id(record["id"],"published") if record["status"]=="published" else None
@@ -575,6 +605,7 @@ def _article_html(row):
  summary=str(row.get("summary") or row.get("bot_summary") or "")
  body=str(row.get("article") or row.get("bot_article") or row.get("body") or summary)
  source=str(row.get("source_name") or "PoliticsHub.in")
+ source_url=_safe_source_url(row.get("url"))
  image=SITE_ORIGIN+"/api/og/"+str(row.get("id"))+"?v=20261022"
  pub_iso=str(published or datetime.now(timezone.utc).isoformat())
  if pub_iso and not re.search(r"[+-]\d\d:\d\d|Z$",pub_iso): pub_iso=pub_iso+"Z"
@@ -600,22 +631,22 @@ def _article_html(row):
 <meta property="og:url" content="{html.escape(canonical)}"><meta property="og:image" content="{html.escape(image)}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="{html.escape(title)}"><meta name="twitter:description" content="{html.escape(summary[:200])}"><meta name="twitter:image" content="{html.escape(image)}">
 <meta property="article:section" content="{html.escape(category)}"><meta property="article:published_time" content="{html.escape(pub_iso)}">
-<link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui22"><link rel="stylesheet" href="/assets/share.css?v=phshare2">
+<link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/share.css?v=phshare2">
 <script type="application/ld+json">{json_ld}</script>
-<link rel="stylesheet" href="/assets/polish.css?v=phui19"><script src="/assets/ui.js?v=phui19" defer></script><script src="/assets/share.js?v=phshare2" defer></script></head><body>
+<link rel="stylesheet" href="/assets/polish.css?v=phui30"><script src="/assets/ui.js?v=phui30" defer></script><script src="/assets/share.js?v=phshare2" defer></script></head><body>
 <header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><div class="acts"><a class="ib" href="/" aria-label="Home">⌂</a><a class="ib" href="/about.html" aria-label="About">i</a></div></div></header>
 <main class="wrap"><article class="art" data-k="{html.escape(category.lower())}">
 <div class="ah"><span class="chip">{html.escape(category)}</span><h1>{html.escape(title)}</h1><p class="dek">{html.escape(summary)}</p>
 <div class="by"><span>By <a href="/author/politicshub-news-desk">{EDITORIAL_DESK}</a></span><time datetime="{html.escape(pub_iso,quote=True)}">{html.escape(str(published or ""))}</time><span>{html.escape(source)}</span></div></div>
-{"<div class='ahero'><img src='"+html.escape(str(_public_image_path(row)))+"' alt='"+html.escape(title)+"' loading='eager' onerror='this.parentElement.remove()'></div>" if _public_image_path(row) else ""}
+{"<div class='ahero'><img src='"+html.escape(str(_public_image_path(row)),quote=True)+"' alt='"+html.escape(title,quote=True)+"' loading='eager'></div>" if _public_image_path(row) else ""}
 <div class="body">{paras}</div>
 {"<div class='src'><strong>Publisher excerpt:</strong> This page is a source-linked summary, not an independently reported PoliticsHub article. The original source link below contains the complete report.</div>" if not indexable else ""}
 <div class="src"><strong>Source transparency:</strong> This is a source-linked brief prepared from the originating report. When multiple independent sources are available, PoliticsHub compares their reported details; otherwise no independent reporting claim is made.</div>
-<div class="src">Source: {html.escape(source)}. {"<a href='"+html.escape(str(row.get("url")))+"' rel='nofollow noopener' target='_blank'>Read the original report</a>" if row.get("url") else ""}</div>
+<div class="src">Source: {html.escape(source)}. {"<a href='"+html.escape(source_url,quote=True)+"' rel='nofollow noopener noreferrer' target='_blank'>Read the original report</a>" if source_url else ""}</div>
 <button type="button" class="article-share" data-share-title="{html.escape(title,quote=True)}" data-share-url="{html.escape(canonical,quote=True)}" aria-haspopup="dialog"><span>↗</span><b>Share this story</b></button>
 </article></main>
 <footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><p class="ser">Source-linked news. Clearly.</p></div><div><h4>Navigate</h4><ul><li><a href="/">Home</a></li><li><a href="/archive/">News Archive</a></li><li><a href="/about.html">About</a></li><li><a href="/editorial-policy.html">Editorial Policy</a></li><li><a href="/corrections.html">Corrections</a></li><li><a href="/contact.html">Contact</a></li><li><a href="/disclaimer.html">Disclaimer</a></li><li><a href="/privacy.html">Privacy</a></li><li><a href="/cookies.html">Cookies</a></li><li><a href="/terms.html">Terms</a></li><li><a href="/newsletter.html">Newsletter</a></li><li><a href="/settings.html">Settings</a></li><li><a href="/debug.html">System Status</a></li></ul></div><div><h4>Contact</h4><ul><li><a href="mailto:politicshub.in@gmail.com">politicshub.in@gmail.com</a></li></ul></div></div></footer>
-<script src="/assets/story-page.js"></script>
+<script src="/assets/story-page.js?v=phview1"></script>
 </body></html>"""
 
 def _og_image(item_id):
@@ -630,7 +661,7 @@ def _editorial_page(title,lead,kind="page"):
  hrefs={"Home":"/","About":"/about.html","Editorial Policy":"/editorial-policy.html","Corrections":"/corrections.html","Contact":"/contact.html","Disclaimer":"/disclaimer.html","Privacy":"/privacy.html","Cookies":"/cookies.html","Terms":"/terms.html","Newsletter":"/newsletter.html","Settings":"/settings.html","System Status":"/debug.html"}
  nav="<ul>"+"".join("<li><a href=\""+hrefs[x]+"\">"+html.escape(x)+"</a></li>" for x in links)+"</ul>"
  body="<p>PoliticsHub.in is a source-linked digital newsroom focused on politics, public affairs, India and the world.</p>" if kind=="author" else ""
- page='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(title)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(lead[:160])+'"><link rel="canonical" href="'+SITE_ORIGIN+request.path+'"><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/assets/site.css?v=phui22"><link rel="stylesheet" href="/assets/polish.css?v=phui19"><script src="/assets/ui.js?v=phui19" defer></script></head><body><header id="hd"><div class="top"><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a></div></header><main class="wrap"><article class="art"><div class="ah"><span class="lbl red">PoliticsHub.in</span><h1>'+html.escape(title)+'</h1><p class="dek">'+html.escape(lead)+'</p></div><div class="body">'+body+'</div></article></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><p class="ser">What matters, clearly.</p></div><div><h4>Navigate</h4>'+nav+'</div></div></footer></body></html>'
+ page='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(title)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(lead[:160])+'"><link rel="canonical" href="'+SITE_ORIGIN+request.path+'"><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/polish.css?v=phui30"><script src="/assets/ui.js?v=phui30" defer></script></head><body><header id="hd"><div class="top"><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a></div></header><main class="wrap"><article class="art"><div class="ah"><span class="lbl red">PoliticsHub.in</span><h1>'+html.escape(title)+'</h1><p class="dek">'+html.escape(lead)+'</p></div><div class="body">'+body+'</div></article></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><p class="ser">What matters, clearly.</p></div><div><h4>Navigate</h4>'+nav+'</div></div></footer></body></html>'
  return Response(page,mimetype="text/html")
 def rows_json(rows,compact=False):
  out=[]
@@ -642,9 +673,11 @@ def rows_json(rows,compact=False):
   out.append(item)
  return out
 def users():
- try:return json.loads(os.getenv("ADMIN_USERS_JSON","{}"))
+ try:
+  configured=json.loads(os.getenv("ADMIN_USERS_JSON","{}"))
+  return configured if isinstance(configured,dict) else {}
  except Exception:return {}
-def _client_key():return (request.remote_addr or "unknown").strip()[:128]
+def _client_key():return _public_rate_key()
 def _auth_key(username):return "login:user:"+str(username).strip().lower()[:128]
 def _ip_key():return "login:ip:"+_client_key()
 def _setup_key():return "setup:global"
@@ -680,6 +713,16 @@ def security_headers(response):
   response.headers["Cache-Control"]="no-store"
  elif request.method=="GET" and request.path.startswith("/api/") and "Cache-Control" not in response.headers:
   response.headers["Cache-Control"]="public, max-age=10, s-maxage=10, stale-while-revalidate=20"
+ if response.status_code==429:
+  response.headers["Retry-After"]="60"
+ # Never let a logged-in browser populate a shared public HTML cache either.
+ if admin_ok():
+  response.headers["Cache-Control"]="private, no-store"
+  response.headers["Vercel-CDN-Cache-Control"]="no-store"
+  response.vary.add("Cookie")
+ if request.method in ("GET","HEAD") and response.status_code==200 and response.cache_control.public and not response.is_streamed:
+  response.add_etag()
+  response.make_conditional(request)
  return response
 
 @app.post("/api/admin/setup")
@@ -754,13 +797,25 @@ def og_image(item_id):
 
 @app.get("/api/newsletter")
 def newsletter_status():
- return jsonify({"ok":True, "available":mail_configured(), "double_opt_in":True, "daily_brief":True})
+ delivery=mail_configured(); storage=False; database=None
+ if delivery:
+  try:
+   database=db(); database.conn.execute('SELECT 1'); storage=True
+  except (RuntimeError,PostgresError):pass
+  finally:
+   if database is not None:database.close()
+ available=delivery and storage
+ message='' if available else ('Subscriptions are temporarily unavailable. Please try again later.' if delivery else 'Email delivery is being activated. Please check back soon.')
+ response=jsonify({"ok":True,"available":available,"delivery_configured":delivery,"storage_available":storage,
+  "message":message,"double_opt_in":True,"daily_brief":True})
+ response.headers['Cache-Control']='public, max-age=15, s-maxage=60, stale-while-revalidate=30'
+ return response
 
 def _newsletter_page(title, lead, form="", notice=""):
  """Unsubscribe and confirmation links never activate on a GET from a mail scanner."""
  body = ('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
  '<meta name="robots" content="noindex,nofollow"><title>'+html.escape(title)+' — PoliticsHub.in</title>'
- '<link rel="stylesheet" href="/assets/site.css?v=phui22"><link rel="stylesheet" href="/assets/polish.css?v=phui19"><script src="/assets/ui.js?v=phui19" defer></script></head><body><main class="wrap" style="max-width:690px;padding:70px 24px">'
+ '<link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/polish.css?v=phui30"><script src="/assets/ui.js?v=phui30" defer></script></head><body><main class="wrap" style="max-width:690px;padding:70px 24px">'
  '<a href="/" class="lbl">PoliticsHub.in</a><article class="art"><div class="ah"><span class="lbl red">PoliticsHub Brief</span>'
  '<h1>'+html.escape(title)+'</h1><p class="dek">'+html.escape(lead)+'</p></div><div class="body">'+form+
  '<p style="margin-top:25px"><a href="/newsletter.html">Newsletter</a> · <a href="/privacy.html">Privacy Policy</a></p></div></article></main></body></html>')
@@ -918,7 +973,7 @@ def seo_section(category):
  if category in {"business","technology","sports","entertainment","science","health"}:
   return redirect("/", code=301)
  if category=="maharashtra":
-  return redirect("/maharashtra/",code=302)
+  return send_from_directory(app.static_folder,"maharashtra/index.html")
  if category not in set(CATEGORY_SLUGS.values()):
   if request.path.startswith("/api/"):return jsonify({"error":"not found"}),404
   return send_from_directory(app.static_folder,category)
@@ -987,9 +1042,11 @@ def health():
 def maharashtra_public_feed():
  from api.maharashtra_feed import get_feed
  try:
-  response=jsonify(get_feed(request.args.get('lang','mr')))
+  data=get_feed(request.args.get('lang','mr'))
+  response=jsonify(data)
   # The published RSS headlines are refreshed at most once per 20 minutes.
-  response.headers["Cache-Control"]="public, max-age=0, s-maxage=1200, stale-while-revalidate=60"
+  ttl=60 if data.get('status') in {'stale','unavailable'} else 1200
+  response.headers["Cache-Control"]=f"public, max-age=0, s-maxage={ttl}, stale-while-revalidate=60"
   return response
  except Exception:
   return jsonify({"items":[],"sources":{},"status":"unavailable","refresh_minutes":20}),503
@@ -1002,7 +1059,11 @@ def public_hindi_feed():
  return response
 
 @app.get("/api/news")
+@app.get("/api/admin/news")
 def news():
+ if request.path.startswith('/api/admin/'):
+  err=require_admin()
+  if err:return err
  if not _public_rate_allowed():return jsonify({"error":"rate limit exceeded"}),429
  category=request.args.get("category","all").lower().strip(); status=request.args.get("status","published"); review=request.args.get("review_status","all"); search=request.args.get("search"); compact=request.args.get("compact","0")=="1"
  if category!="all" and category not in {"general","india","world","politics","business","technology","sports","entertainment","science","health","hindi"}:return jsonify({"error":"invalid category"}),400
@@ -1015,10 +1076,14 @@ def news():
   # When the database is unavailable, publish only a valid saved snapshot.
   rows=_snapshot_rows(category,search)
   if not rows:return jsonify({"error":"news backend unavailable"}),503
-  rows=dedupe_story_rows(_rank_public(rows),threshold=0.78)
-  response=jsonify(rows_json(rows[:limit],compact=compact))
+  rows=_rank_public(rows,threshold=0.78)
+  payload=rows_json(rows[:limit],compact=compact)
+  if not admin_ok():
+   for item in payload:
+    for key in ("article","bot_article","bot_summary"):item.pop(key,None)
+  response=jsonify(payload)
   response.headers["X-News-Mode"]="snapshot"
-  response.headers["Cache-Control"]="no-store"
+  response.headers["Cache-Control"]="public, max-age=15, s-maxage=60, stale-while-revalidate=120"
   return response
  try:
   public_listing=not admin_ok()
@@ -1027,15 +1092,13 @@ def news():
    records=database.latest_public(max(limit*3,limit),"all" if category in ("india","entertainment") else category,search)
   else:
    records=database.latest(max(limit*6,limit),"all" if category in ("india","entertainment") else category,status,search,review)
-  rows=_rank_public(records)
+  rows=_rank_public(records,threshold=0.78)
   if category!="all":rows=[x for x in rows if x.get("category")==category]
   # A healthy database is authoritative; never resurrect removed stories.
-  rows=_rank_public(rows)
-  rows=dedupe_story_rows(rows,threshold=0.78)
   payload=rows_json(rows[:limit],compact=compact)
   if public_listing:
    for item in payload:
-    item.pop("article",None)
+    for key in ('article','bot_article','bot_summary'):item.pop(key,None)
   response=jsonify(payload)
   # Public news is refreshed by a 30-minute collection cadence. CDN caching
   # avoids waking a free-tier Postgres compute on every visitor refresh.
@@ -1055,6 +1118,13 @@ def public_search():
   offset=max(int(request.args.get("offset","0")),0)
  except ValueError:return jsonify({"error":"Invalid search pagination"}),400
  category=str(request.args.get("category","all")).lower()
+ if category not in {"all","india","world","politics","hindi","maharashtra"}:
+  return jsonify({"error":"Invalid search category"}),400
+ if offset>100000:return jsonify({"error":"Search offset is too large"}),400
+ source=str(request.args.get("source","")).strip()[:120].casefold()
+ period=str(request.args.get("period","all"))
+ if period not in {"all","day","week","month"}:return jsonify({"error":"Invalid search period"}),400
+ cutoff=time.time()-{"day":1,"week":7,"month":30}[period]*86400 if period!="all" else 0
  database=None
  try:
   database=db()
@@ -1070,11 +1140,17 @@ def public_search():
   ids.add(str(row["id"])); urls.add(row.get("url"))
   row["category"]=normalize_category(row.get("category"),row.get("title"),row.get("bot_summary") or row.get("summary"))
   if category!="all" and row["category"]!=category:continue
+  if source and str(row.get("source_name") or row.get("source") or "").casefold()!=source:continue
+  if cutoff and _public_timestamp(row)<cutoff:continue
   unique.append(row)
  unique.sort(key=lambda row:(public_archive.timestamp(row),int(row["id"])),reverse=True)
- response=jsonify(rows_json(unique[offset:offset+limit]))
+ payload=rows_json(unique[offset:offset+limit])
+ if not admin_ok():
+  for item in payload:
+   for key in ("article","bot_article","bot_summary"):item.pop(key,None)
+ response=jsonify(payload)
  response.headers["X-Search-Total"]=str(len(unique))
- response.headers["Cache-Control"]="no-store"
+ response.headers["Cache-Control"]="public, max-age=0, s-maxage=30, stale-while-revalidate=30"
  return response
 
 @app.get("/api/trending")
@@ -1091,7 +1167,7 @@ def trending():
   response.headers["X-News-Mode"]="snapshot"
   response.headers["Cache-Control"]="no-store"
   return response
- try:return jsonify(rows_json(_rank_public(database.trending(limit*2))[:limit]))
+ try:return jsonify(rows_json([dict(row) for row in database.trending(limit)]))
  finally:database.close()
 
 @app.get("/api/breaking")
@@ -1117,9 +1193,8 @@ def article_view(item_id):
  try:database=db()
  except RuntimeError:return jsonify({"ok":False,"tracked":False}),200
  try:
-  row=database.get_by_id(item_id,"published")
-  if not row:return jsonify({"error":"not found"}),404
-  database.increment_view(item_id); return jsonify({"ok":True,"tracked":True})
+  if not database.increment_view(item_id):return jsonify({"error":"not found"}),404
+  return jsonify({"ok":True,"tracked":True})
  finally:database.close()
 
 @app.get("/api/news/<int:item_id>")
@@ -1250,9 +1325,9 @@ def admin_operations():
  if err:return err
  database=db()
  try:
-  cluster_stories(database,250)
-  with __import__("app.phase_system",fromlist=["run"]).run(database,"reporting","generate_operations_report"):
-   ops=phase_analytics(database,7)
+  # A dashboard refresh is a read, not a completed reporting-agent task.
+  # Collection workers own clustering and the actual task telemetry.
+  ops=phase_analytics(database,7)
   recent_errors=[dict(r) for r in database.conn.execute("SELECT agent_id,operation,error,started_at FROM ph_agent_runs WHERE status='failed' ORDER BY id DESC LIMIT 20").fetchall() if r["agent_id"] in AGENTS]
   clusters=cluster_summary(database)
   total=database.count()
@@ -1448,14 +1523,31 @@ def _published_sitemap_rows():
    rows=database.conn.execute(
     "SELECT id,title,category,published_at_site,published_at,bot_article,"
     "bot_summary,summary,source_type,public_source,url,status "
-    "FROM news_items WHERE status='published' "
-    "ORDER BY COALESCE(published_at_site,published_at) DESC,id DESC"
+    "FROM news_items WHERE status='published' AND public_source<>0 "
+    "AND LOWER(COALESCE(source_type,''))<>'telegram' "
+    "AND LENGTH(COALESCE(NULLIF(bot_summary,''),summary,''))>=80 "
+    "AND LENGTH(COALESCE(NULLIF(bot_article,''),NULLIF(bot_summary,''),summary,''))>=300 "
+    "ORDER BY COALESCE(NULLIF(published_at_site,''),published_at) DESC,id DESC"
    ).fetchall()
-   return [dict(r) for r in rows]+_archive_rows(database)
+   return [dict(r) for r in rows]+_archive_rows(database,discovery=True)
   finally:
    database.close()
  except RuntimeError:
-  return _snapshot_rows("all")+_archive_rows()
+  return _snapshot_rows("all")+_archive_rows(discovery=True)
+
+
+def _discovery_row(row):
+ # Sitemap/archive listings need canonical titles and indexability, not image
+ # work, score computation, local-time formatting or a duplicate article body.
+ item=dict(row)
+ if item.get('_discovery_ready'):return item
+ source_text=item.get('bot_article') or item.get('bot_summary') or item.get('summary') or ''
+ item['title']=_public_title(item.get('title'),_strip_promo_nav(source_text))
+ item['summary']=_strip_promo_nav(item.get('bot_summary') or item.get('summary') or '')
+ item['bot_summary']=item['summary']
+ item['article']=_strip_promo_nav(source_text)
+ item['category']=normalize_category(item.get('category'),item['title'],item['summary'])
+ return item
 
 
 @app.get("/api/seo-archive")
@@ -1467,7 +1559,7 @@ def seo_archive():
   return Response("Not found",status=404)
  page=int(raw)
  try:
-  stories=eligible_articles([_publicize(r) for r in _published_sitemap_rows()])
+  stories=eligible_articles([_discovery_row(r) for r in _published_sitemap_rows()])
  except RuntimeError:
   return Response("Archive temporarily unavailable",status=503,headers={"Retry-After":"300"})
  # Avoid HTTP 503 for a public archive during a database outage.
@@ -1496,7 +1588,7 @@ def seo_archive():
   pager+='<a href="/archive/?page='+str(page+1)+'">Older stories →</a>'
  if not stories and page==1:
   items.append('<li><p>No additional long-form reports are currently available. Read our <a href="/guides/election-results.html">election verification guide</a> or visit <a href="/maharashtra/">Maharashtra coverage</a>.</p></li>')
- page_html='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>News Archive'+(" · Page "+str(page) if page>1 else "")+' — PoliticsHub.in</title><meta name="description" content="Browse the source-linked, published news reports from PoliticsHub.in."><link rel="canonical" href="'+html.escape(canonical,quote=True)+'"><link rel="stylesheet" href="/assets/site.css?v=phui22"><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/assets/polish.css?v=phui19"><script src="/assets/ui.js?v=phui19" defer></script></head><body><header id="hd"><div class="top"><a class="logo" href="/"><img src="/favicon.svg" alt="PoliticsHub.in"></a><nav><a href="/">Home</a> · <a href="/india/">India</a> · <a href="/politics/">Politics</a> · <a href="/world/">World</a></nav></div></header><main class="wrap" style="max-width:1000px;padding:38px 22px"><h1>News Archive</h1><p>Browse individual published reports. Every headline opens its dedicated article page.</p><ol style="list-style:none;padding:0">'+''.join(items)+'</ol><nav aria-label="Archive pages">'+pager+'</nav></main><footer><div class="wrap"><p>PoliticsHub.in · <a href="/">Home</a> · <a href="/editorial-policy.html">Editorial policy</a> · <a href="/contact.html">Contact</a></p></div></footer></body></html>'
+ page_html='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>News Archive'+(" · Page "+str(page) if page>1 else "")+' — PoliticsHub.in</title><meta name="description" content="Browse the source-linked, published news reports from PoliticsHub.in."><link rel="canonical" href="'+html.escape(canonical,quote=True)+'"><link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/assets/polish.css?v=phui30"><script src="/assets/ui.js?v=phui30" defer></script></head><body><header id="hd"><div class="top"><a class="logo" href="/"><img src="/favicon.svg" alt="PoliticsHub.in"></a><nav><a href="/">Home</a> · <a href="/india/">India</a> · <a href="/politics/">Politics</a> · <a href="/world/">World</a></nav></div></header><main class="wrap" style="max-width:1000px;padding:38px 22px"><h1>News Archive</h1><p>Browse individual published reports. Every headline opens its dedicated article page.</p><ol style="list-style:none;padding:0">'+''.join(items)+'</ol><nav aria-label="Archive pages">'+pager+'</nav></main><footer><div class="wrap"><p>PoliticsHub.in · <a href="/">Home</a> · <a href="/editorial-policy.html">Editorial policy</a> · <a href="/contact.html">Contact</a></p></div></footer></body></html>'
  if not stories:
   page_html=page_html.replace("<head>","<head><meta name='robots' content='noindex,follow'>",1)
  return Response(page_html,mimetype="text/html",headers={"Cache-Control":"public,max-age=60,s-maxage=180"})
@@ -1520,7 +1612,7 @@ def news_sitemap_first():
 @app.get("/google-news.xml")
 def google_news_sitemap_page():
  rows=_published_sitemap_rows()
- selected=[_publicize(r) for r in rows]
+ selected=[_discovery_row(r) for r in rows]
  body=google_news_sitemap_xml(selected)
  return Response(body,mimetype="application/xml",headers={"Cache-Control":"public,max-age=300,s-maxage=300"})
 
@@ -1535,7 +1627,7 @@ def _news_sitemap_page(page):
   return Response("Sitemap temporarily unavailable",status=503,headers={"Retry-After":"300"})
  # Build sitemap URLs from the same public headline representation served
  # on article pages. Long/cleaned headlines otherwise yield divergent slugs.
- selected=eligible_articles([_publicize(r) for r in rows])
+ selected=eligible_articles([_discovery_row(r) for r in rows])
  chunk=40000
  if (page-1)*chunk >= len(selected) and page!=1:
   return Response("Not found",status=404)
@@ -1654,10 +1746,6 @@ def ai_assistant():
     except Exception as exc:
         return jsonify({"error":str(exc)[:500]}),503
 
-
-@app.get("/")
-def public_home():
- return send_from_directory(app.static_folder,"index.html")
 
 @app.route("/<path:path>")
 def _render_public(path):

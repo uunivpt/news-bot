@@ -654,23 +654,29 @@ def is_breaking(title, summary="", score=None):
 
 def dedupe_story_rows(rows, threshold=0.82):
     """Collapse near-identical headlines while preserving the highest-scoring copy."""
-    kept=[]
+    kept=[]; token_sets=[]
     for row in rows:
         title=str(row.get("title") or "")
         words=set(_words(title))
         if not words:
             continue
         duplicate=False
-        for prior in kept:
-            other=set(_words(str(prior.get("title") or "")))
+        for index,other in enumerate(token_sets):
+            # Jaccard similarity cannot exceed the ratio of set sizes. Most
+            # differently sized headlines can skip the intersection entirely.
+            if min(len(words),len(other))/max(len(words),len(other),1)<threshold:
+                continue
             overlap=len(words & other)/max(1,len(words|other))
             if overlap>=threshold:
                 duplicate=True
+                prior=kept[index]
                 prior_score=int(prior.get("news_score") or 0)
                 row_score=int(row.get("news_score") or 0)
                 if row_score>prior_score:
-                    kept[kept.index(prior)]=row
+                    kept[index]=row
+                    token_sets[index]=words
                 break
         if not duplicate:
             kept.append(row)
+            token_sets.append(words)
     return kept

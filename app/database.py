@@ -1,6 +1,7 @@
 from __future__ import annotations
 import os
 import sqlite3
+import threading
 from pathlib import Path
 from typing import Iterable, Any
 from datetime import datetime, timedelta
@@ -51,6 +52,12 @@ CREATE INDEX IF NOT EXISTS idx_news_category ON news_items(category);
 CREATE INDEX IF NOT EXISTS idx_news_status ON news_items(status);
 CREATE INDEX IF NOT EXISTS idx_news_review ON news_items(fact_check_status);
 CREATE INDEX IF NOT EXISTS idx_news_views ON news_items(view_count DESC, published_at DESC);
+CREATE INDEX IF NOT EXISTS idx_news_public_id ON news_items(id DESC) WHERE status='published';
+CREATE INDEX IF NOT EXISTS idx_news_public_category_id ON news_items(category,id DESC) WHERE status='published';
+CREATE INDEX IF NOT EXISTS idx_news_public_time ON news_items(COALESCE(NULLIF(published_at_site,''),published_at) DESC,id DESC) WHERE status='published';
+CREATE INDEX IF NOT EXISTS idx_news_public_category_time ON news_items(category,COALESCE(NULLIF(published_at_site,''),published_at) DESC,id DESC) WHERE status='published';
+CREATE INDEX IF NOT EXISTS idx_news_url ON news_items(url);
+CREATE INDEX IF NOT EXISTS idx_news_public_views ON news_items(view_count DESC,COALESCE(NULLIF(published_at_site,''),published_at) DESC,id DESC) WHERE status='published' AND view_count>0;
 CREATE INDEX IF NOT EXISTS idx_admin_login_attempts_key_time ON admin_login_attempts(attempt_key, attempted_at);
 """
 MIGRATIONS = {
@@ -71,6 +78,9 @@ DEFAULT_SETTINGS={"website_enabled":"true"}
 class DatabaseUnavailable(RuntimeError):
  """Safe, actionable connection failure without credentials or host details."""
 
+class DatabaseBusy(DatabaseUnavailable):
+ """Local connection capacity is busy; do not trip the provider circuit breaker."""
+
 def _active_database_target(url):
  try:
   parts=urlsplit(str(url or ""))
@@ -86,7 +96,9 @@ def database_url_from_environment():
 
 class NewsDatabase:
  _schema_initialized=set()
- def __init__(self,path="data/news.db",database_url=None):
+ _schema_lock=threading.Lock()
+ def __init__(self,path="data/news.db",database_url=None,*,connect_attempts=3,connect_timeout=5,statement_timeout=None,use_pool=False,initialize_schema=True):
+  self._pool=None; self._closed=False
   self.database_url=database_url or database_url_from_environment(); self._postgres=bool(self.database_url)
   if self._postgres:
    if database_url_from_environment() and (os.getenv("VERCEL")=="1" or os.getenv("GITHUB_ACTIONS")=="true") and not _active_database_target(self.database_url):
@@ -99,12 +111,22 @@ class NewsDatabase:
    # Mobile DNS/Wi-Fi can briefly lose the database hostname. Retry the initial
    # connection here so a transient network drop does not kill the whole worker.
    last_error = None
-   for attempt, delay in enumerate((0, 1, 2), start=1):
+   delays=(0,1,2)[:max(1,min(int(connect_attempts),3))]
+   for attempt, delay in enumerate(delays, start=1):
     if delay:
      import time
      time.sleep(delay)
     try:
-     self.conn=psycopg.connect(self.database_url,row_factory=dict_row,connect_timeout=5)
+     options={"options":f"-c statement_timeout={int(statement_timeout)} -c lock_timeout=2000"} if statement_timeout else {}
+     if use_pool:
+      from psycopg_pool import PoolTimeout, TooManyRequests
+      from .web_database_pool import get_pool
+      self._pool=get_pool(self.database_url,connect_timeout,statement_timeout)
+      try:self.conn=self._pool.getconn(timeout=2)
+      except (PoolTimeout,TooManyRequests):
+       raise DatabaseBusy("News database is busy; please retry shortly") from None
+     else:
+      self.conn=psycopg.connect(self.database_url,row_factory=dict_row,connect_timeout=connect_timeout,**options)
      break
     except psycopg.OperationalError as exc:
      last_error = exc
@@ -113,19 +135,25 @@ class NewsDatabase:
       raise DatabaseUnavailable("Database quota exhausted; restore capacity in the database provider console.") from None
      if "password authentication failed" in detail:
       raise DatabaseUnavailable("Database credentials rejected; check DATABASE_3URL.") from None
-     print(f"Database connection attempt {attempt}/3 failed")
+     print(f"Database connection attempt {attempt}/{len(delays)} failed")
    else:
-    raise DatabaseUnavailable("Database connection unavailable after three attempts") from None
+    raise DatabaseUnavailable("Database connection unavailable after retry budget") from None
    self.conn.autocommit=True
-   schema_key="postgres:"+self.database_url
-   if schema_key not in self._schema_initialized:
-    for statement in (SCHEMA, ADMIN_SCHEMA, ACTIVITY_SCHEMA, NEWSLETTER_SCHEMA, AUTH_SCHEMA):
-     self.conn.execute(statement.strip())
-    self._migrate_postgres()
-    for statement in INDEXES.split(";"):
-     if statement.strip(): self.conn.execute(statement.strip())
-    self._seed_settings()
-    self._schema_initialized.add(schema_key)
+   if initialize_schema:
+    try:
+     with self._schema_lock:
+      schema_key="postgres:"+self.database_url
+      if schema_key not in self._schema_initialized:
+       for statement in (SCHEMA, ADMIN_SCHEMA, ACTIVITY_SCHEMA, NEWSLETTER_SCHEMA, AUTH_SCHEMA):
+        self.conn.execute(statement.strip())
+       self._migrate_postgres()
+       for statement in INDEXES.split(";"):
+        if statement.strip(): self.conn.execute(statement.strip())
+       self._seed_settings()
+       self._schema_initialized.add(schema_key)
+    except Exception:
+     self.close()
+     raise
   else:
    # Vercel's filesystem is read-only. SQLite is only a local-development fallback.
    if os.getenv("VERCEL") and not self.database_url:
@@ -176,7 +204,11 @@ class NewsDatabase:
   ph="%s" if self._postgres else "?"
   self.conn.execute(f"DELETE FROM admin_login_attempts WHERE attempt_key = {ph}",(attempt_key,))
   if not self._postgres:self.conn.commit()
- def close(self):self.conn.close()
+ def close(self):
+  if self._closed:return
+  self._closed=True
+  if self._pool is not None:self._pool.putconn(self.conn)
+  else:self.conn.close()
  def subscribe_newsletter(self,email,source="website",confirmed=True):
   email=str(email or "").strip().lower()
   now=NewsItem.now_iso()
@@ -195,14 +227,15 @@ class NewsDatabase:
  def increment_view(self,item_id:int,at_iso=None):
   at_iso=at_iso or NewsItem.now_iso()
   ph="%s" if self._postgres else "?"
-  self.conn.execute(f"UPDATE news_items SET view_count=COALESCE(view_count,0)+1,last_viewed_at={ph} WHERE id = {ph} AND status='published'",(at_iso,item_id))
+  updated=self.conn.execute(f"UPDATE news_items SET view_count=COALESCE(view_count,0)+1,last_viewed_at={ph} WHERE id = {ph} AND status='published'",(at_iso,item_id)).rowcount
   if not self._postgres:self.conn.commit()
+  return updated==1
  def trending(self,limit=10):
   try:limit=max(1,min(int(limit),50))
   except (TypeError,ValueError):limit=10
   ph="%s" if self._postgres else "?"
   fields=",".join(self.PUBLIC_LIST_FIELDS)
-  return self.conn.execute(f"SELECT {fields} FROM news_items WHERE status='published' ORDER BY COALESCE(view_count,0) DESC, COALESCE(published_at_site,published_at) DESC LIMIT {ph}",(limit,)).fetchall()
+  return self.conn.execute(f"SELECT {fields} FROM news_items WHERE status='published' AND view_count>0 ORDER BY view_count DESC,COALESCE(NULLIF(published_at_site,''),published_at) DESC,id DESC LIMIT {ph}",(limit,)).fetchall()
  def insert(self,item:NewsItem)->bool:
   normalized_url=normalize_url(item.url); url_hash,title_hash=fingerprint(normalized_url,item.title); params=(item.source_name,item.source_type,item.title.strip(),item.url,normalized_url,item.published_at,item.summary,item.external_id,url_hash,title_hash,NewsItem.now_iso(),item.category or "general",item.image_url,1 if item.public_source else 0); sql="INSERT INTO news_items (source_name,source_type,title,url,normalized_url,published_at,summary,external_id,url_hash,title_hash,collected_at,category,image_url,public_source) VALUES ({p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p})"
   if self._postgres:return self.conn.execute(sql.format(p="%s")+" ON CONFLICT DO NOTHING",params).rowcount==1
@@ -248,7 +281,7 @@ class NewsDatabase:
   max_rows=min(max(1,int(limit)),1000)
   fields=",".join(self.PUBLIC_LIST_FIELDS)
   return self.conn.execute(
-   f"SELECT {fields} FROM news_items WHERE "+" AND ".join(clauses)+f" ORDER BY id DESC LIMIT {ph}",
+   f"SELECT {fields} FROM news_items WHERE "+" AND ".join(clauses)+f" ORDER BY COALESCE(NULLIF(published_at_site,''),published_at) DESC,id DESC LIMIT {ph}",
    (*params,max_rows)
   ).fetchall()
  def search_public(self,query):
@@ -257,9 +290,20 @@ class NewsDatabase:
   columns=("title","summary","bot_summary","bot_article","source_name")
   where=" OR ".join(f"LOWER(COALESCE({column},'')) LIKE LOWER({ph})" for column in columns)
   return self.conn.execute(f"SELECT {fields} FROM news_items WHERE status='published' AND ({where})",tuple(f"%{query}%" for _ in columns)).fetchall()
- def archive_overrides(self):
+ def archive_overrides(self,candidates=None):
   # Even an unpublished live record takes precedence over a saved public copy.
-  return self.conn.execute("SELECT id,url,status FROM news_items").fetchall()
+  if candidates is None:
+   return self.conn.execute("SELECT id,url,status FROM news_items").fetchall()
+  candidates=list(candidates)
+  ph="%s" if self._postgres else "?"; result=[]
+  # Match only archived candidates, using indexed identities. This avoids a
+  # complete live-table transfer for every historical article or archive search.
+  for start in range(0,len(candidates),200):
+   batch=candidates[start:start+200]
+   ids=[int(row["id"]) for row in batch]; urls=[str(row.get("url") or "") for row in batch]
+   slots=",".join([ph]*len(batch))
+   result.extend(self.conn.execute(f"SELECT id,url,status FROM news_items WHERE id IN ({slots}) OR url IN ({slots})",(*ids,*urls)).fetchall())
+  return result
  def latest_identities(self,limit=250):
   """Clustering and duplicate detection need identity fields, never articles."""
   ph="%s" if self._postgres else "?"

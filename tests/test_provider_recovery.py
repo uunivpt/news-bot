@@ -61,6 +61,7 @@ class ProviderRecoveryTests(unittest.TestCase):
         self.assertTrue(all("SELECT *" not in q for q in reads))
 
     def test_public_lists_do_not_transfer_private_article_fields(self):
+        self.db.increment_view(1)
         with patch.object(api, "db", return_value=self.db), patch.object(self.db, "close"), \
              patch.object(self.db, "latest", side_effect=AssertionError("Full-row listing must not be used")):
             client = api.app.test_client()
