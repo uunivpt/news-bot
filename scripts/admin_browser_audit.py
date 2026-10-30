@@ -177,6 +177,7 @@ def run(output):
             page.locator('#logout').click()
             page.wait_for_selector('#login:not(.hidden)')
             assert page.request.get(base+'/api/admin/workspace').status==401
+            assert page.evaluate("visibleRows.length === 0 && rows.length === 0 && document.body.style.overflow === ''")
         check('logout clears authenticated workspace access',signout)
         verifier=generate_password_hash(password)
         with patch.dict(os.environ,{'ADMIN_USERS_JSON':json.dumps({'audit_owner':verifier})}),patch.object(api,'db',side_effect=DatabaseUnavailable('Synthetic quota outage')):

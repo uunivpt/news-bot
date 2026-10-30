@@ -56,7 +56,10 @@ def enforce_admin_session_scope():
  if expiry and time.time()>=expiry:session.clear()
  if request.method not in {'GET','HEAD','OPTIONS'} and (request.path.startswith('/api/admin/') or request.path.startswith('/api/news/')):
   origin=request.headers.get('Origin')
-  if origin and origin.rstrip('/')!=request.host_url.rstrip('/'):
+  expected_origins={request.host_url.rstrip('/')}
+  # TLS terminates at Vercel before the Python runtime's internal HTTP hop.
+  if os.getenv('VERCEL')=='1':expected_origins.add('https://'+request.host)
+  if origin and origin.rstrip('/') not in expected_origins:
    return jsonify({'error':'Cross-origin admin requests are not allowed'}),403
  if recovery_session() and request.path.startswith('/api/'):
   if request.method not in {'GET','HEAD','OPTIONS'} and request.path not in {'/api/admin/logout','/api/admin/login'}:

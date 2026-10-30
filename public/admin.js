@@ -7,7 +7,7 @@ const views = {overview:'Overview',news:'Newsroom',sources:'Source coverage',ope
 let csrf = '', settings = {}, workspace = null, rows = [], currentView = 'overview';
 let pageNumber = 1, pageTotal = 0, queue = 'all', selected = new Set(), visibleRows = [];
 let workspacePromise = null, newsController = null, newsSequence = 0, inspectorSequence = 0;
-let newsTimer, liveTimer, noticeTimer, loginBusy = false, mutationBusy = false;
+let newsTimer, liveTimer, noticeTimer, loginBusy = false, mutationBusy = false, sessionVersion = 0;
 const pending = new Map();
 
 function notice(message, type = 'ok') {
@@ -17,20 +17,25 @@ function notice(message, type = 'ok') {
   noticeTimer = setTimeout(() => $('notice').classList.add('hidden'), 5500);
 }
 function showLogin(message = '') {
+  sessionVersion++;
+  closeMenu();
   clearInterval(liveTimer); liveTimer = null;
-  newsController?.abort(); inspectorSequence++;
+  newsController?.abort(); inspectorSequence++; newsSequence++;
+  pending.clear(); workspacePromise = null;
   for (const id of ['inspector','commandDialog','confirmDialog']) if ($(id).open) $(id).close();
-  workspace = null; rows = []; selected.clear(); csrf = '';
-  for (const id of ['newsList','recentStories','activityList','inspectorBody','agents','errors','upgradeAlerts','upgradeScores','upgradeSources','upgradeEvents']) $(id).replaceChildren();
+  workspace = null; rows = []; visibleRows = []; settings = {}; selected.clear(); csrf = '';
+  for (const id of ['newsList','recentStories','activityList','inspectorBody','agents','errors','overviewMetrics','health','attentionList','sourceMetrics','sourceChart','sourceTable','qualityChart','deskChart','opsTotals','opsPhases','quality','advancedReport','upgradeMetrics','upgradeAlerts','upgradeScores','upgradeSources','upgradeEvents','upgradePreviews','upgradeResources','upgradeHistory','upgradeRegression','sessionDetails','systemChecks']) $(id).replaceChildren();
   $('shell').classList.add('hidden'); $('login').classList.remove('hidden');
   $('loginErr').textContent = message;
 }
 async function api(url, options = {}) {
   const method = options.method || 'GET';
   const request = async () => {
+    const version = sessionVersion;
     const response = await fetch(url, {credentials:'same-origin', cache:'no-store', signal:AbortSignal.timeout(15000), ...options});
     let data = {};
     try { data = await response.json(); } catch { /* HTTP status still determines success. */ }
+    if (version !== sessionVersion) throw new DOMException('Session changed','AbortError');
     if (!response.ok) {
       if (response.status === 401 && !url.endsWith('/login')) showLogin('Your session has ended. Please sign in again.');
       const error = new Error(data.error || `Request failed (${response.status})`);
@@ -42,7 +47,7 @@ async function api(url, options = {}) {
   // Share identical read requests; search requests have their own abort lifecycle.
   if (method !== 'GET' || options.signal) return request();
   if (pending.has(url)) return pending.get(url);
-  const promise = request().finally(() => pending.delete(url));
+  const promise = request().finally(() => { if (pending.get(url) === promise) pending.delete(url); });
   pending.set(url, promise);
   return promise;
 }
@@ -146,11 +151,12 @@ function fillOptions(id, items, label) {
 }
 async function loadOverview(silent = false) {
   if (workspacePromise) return workspacePromise;
+  const version = sessionVersion;
   $('refresh').disabled = true;
   workspacePromise = (async () => {
     try { const data = await api('/api/admin/workspace'); if ($('shell').classList.contains('hidden')) return; workspace = data; renderWorkspace(); return data; }
-    catch (error) { if (error.status !== 401) { if (!silent) notice(error.message,'err'); $('connectionBadge').className = 'pill amber'; $('connectionBadge').textContent = 'Refresh failed'; $('workspaceBanner').classList.remove('hidden'); $('workspaceBanner').textContent = 'Workspace refresh failed. Displayed data may be out of date. Retry with Refresh.'; } }
-    finally { workspacePromise = null; $('refresh').disabled = false; }
+    catch (error) { if (version === sessionVersion && error.status !== 401) { if (!silent) notice(error.message,'err'); $('connectionBadge').className = 'pill amber'; $('connectionBadge').textContent = 'Refresh failed'; $('workspaceBanner').classList.remove('hidden'); $('workspaceBanner').textContent = 'Workspace refresh failed. Displayed data may be out of date. Retry with Refresh.'; } }
+    finally { if (version === sessionVersion) { workspacePromise = null; $('refresh').disabled = false; } }
   })();
   return workspacePromise;
 }

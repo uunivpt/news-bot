@@ -109,6 +109,12 @@ class AdminWorkspaceTests(unittest.TestCase):
             response = self.client.post('/api/admin/login',json={'username':'fixture_owner','password':self.password},headers={'Origin':'https://untrusted.example'})
         self.assertEqual(response.status_code,403)
 
+    def test_vercel_tls_termination_accepts_the_same_https_host(self):
+        with patch.dict(os.environ,{'VERCEL':'1'}),patch.object(api,'db',side_effect=DatabaseUnavailable('unavailable')):
+            response=self.client.post('/api/admin/login',json={'username':'fixture_owner','password':self.password},headers={'Origin':'https://localhost'})
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.json['scope'],'recovery')
+
     def test_outage_attempts_are_bounded_without_persistent_storage(self):
         with patch.object(api,'db',side_effect=DatabaseUnavailable('down')):
             for _ in range(12):
