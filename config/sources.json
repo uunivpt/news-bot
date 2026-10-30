@@ -335,12 +335,12 @@
   ],
   "hindi_rss": [
     {
-      "name": "PIB Hindi - Press Releases",
-      "url": "https://www.pib.gov.in/RssMain.aspx?ModId=6&Lang=2&Regid=3&reg=48",
+      "name": "BBC Hindi - Latest",
+      "url": "https://feeds.bbci.co.uk/hindi/rss.xml",
       "category": "hindi",
       "enabled": true,
       "public_source": true,
-      "source_class": "government",
+      "source_class": "rss",
       "timeout_seconds": 12,
       "max_items": 25,
       "check_every_minutes": 60
@@ -390,8 +390,8 @@
       "check_every_minutes": 60
     },
     {
-      "name": "Jansatta - Latest",
-      "url": "https://www.jansatta.com/feed/",
+      "name": "Aaj Tak Hindi - Latest",
+      "url": "https://www.aajtak.in/rssfeeds/?id=home",
       "category": "hindi",
       "enabled": true,
       "public_source": true,
