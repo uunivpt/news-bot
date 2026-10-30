@@ -2,7 +2,8 @@ name: News Collector
 
 on:
   schedule:
-    - cron: "12,32,52 * * * *"
+    # 48 collection slots/day, leaving room for Hindi and code releases.
+    - cron: "12,42 * * * *"
   workflow_dispatch:
   push:
     branches: [main]

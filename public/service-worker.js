@@ -1,6 +1,6 @@
-const CACHE="politicshub-shell-v18";
+const CACHE="politicshub-shell-v19";
 const MAX_ENTRIES=80;
-const SHELL=["/","/offline.html","/saved.html","/manifest.webmanifest","/assets/site.css?v=phui22","/assets/site.js?v=phui30","/assets/editorial-home.js?v=phui30","/assets/editorial.css?v=phui19","/assets/polish.css?v=phui30","/assets/ui.js?v=phui30","/assets/reading-list.js?v=ph30","/assets/reader.js?v=ph30","/favicon.svg"];
+const SHELL=["/","/offline.html","/saved.html","/manifest.webmanifest","/assets/site.css?v=phui23","/assets/site.js?v=phui30","/assets/editorial-home.js?v=phui30","/assets/editorial.css?v=phui19","/assets/polish.css?v=phui30","/assets/ui.js?v=phui30","/assets/reading-list.js?v=ph30","/assets/reader.js?v=ph30","/favicon.svg"];
 async function remember(req,response){
  const cache=await caches.open(CACHE);await cache.put(req,response);
  const keys=await cache.keys();

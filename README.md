@@ -24,6 +24,13 @@ Generate admin hashes with `python scripts/hash_password.py`.
 
 Both collection paths receive news API keys. Source failures appear in the Actions summary and warnings; complete source failure fails the run. HTTP 403 responses from government sites require an approved accessible feed or permission from the provider; they are not bypassed.
 
+The collector runs every 30 minutes and already refreshes the emergency source
+feed when the database is quota-blocked. Independent emergency recovery runs
+every three hours; Hindi remains hourly. This permits at most 80 scheduled
+data-refresh commits/day (48 + 8 + 24), rather than overlapping 20-minute
+collectors that can exhaust a 100-deployment daily allowance. GitHub schedules
+are best-effort; code releases and other projects also use deployment capacity.
+
 Image acquisition tries up to five relevant licensed candidates before falling back to a text-only Reel. Article text retains the lead fact even when the headline repeats it; summaries still avoid headline repetition.
 
 ## Local test

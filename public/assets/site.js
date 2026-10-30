@@ -403,7 +403,7 @@ function updateFeedStatus(){
  else if(mode==='cached'||mode==='cache')label.textContent='Connection unavailable. Showing previously loaded stories.'+newestLabel;
  else label.textContent='News is temporarily unavailable. Please retry.';
  box.append(label);
- const retry=document.createElement('button');retry.type='button';retry.className='btn secondary';retry.textContent='Refresh news';retry.onclick=()=>refreshLatest(true);box.append(retry);
+ const retry=document.createElement('button');retry.type='button';retry.className='btn secondary';retry.textContent='Refresh news';retry.onclick=async()=>{retry.disabled=true;retry.textContent='Refreshing…';try{await refreshLatest(true)}finally{retry.disabled=false;retry.textContent='Refresh news'}};box.append(retry);
 }
 document.addEventListener('error',event=>{
  const image=event.target;if(!(image instanceof HTMLImageElement))return;

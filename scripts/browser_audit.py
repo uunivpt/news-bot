@@ -235,6 +235,35 @@ def run(base, output,admin_fixture=False):
             require(page.locator('.source-reference:visible').count() == 12, 'Reset source filter failed')
         check('source directory filtering and reset', directory)
 
+        def maharashtra():
+            failed=[False]
+            def feed(route):
+                if failed[0]:
+                    route.fulfill(status=503,json={'error':'temporary fixture failure'})
+                    return
+                language='en' if 'lang=en' in route.request.url else 'mr'
+                route.fulfill(json={'language':language,'status':'ok','refresh_minutes':20,
+                    'last_checked':'2026-10-30T12:00:00Z',
+                    'translation_status':'unavailable' if language=='en' else 'original',
+                    'sources':{'TV9 Marathi':{'available':True},'ABP माझा':{'available':True}},
+                    'items':[{'title':'पुण्यात सार्वजनिक वाहतुकीबाबत महत्त्वाची माहिती',
+                              'url':'https://www.tv9marathi.com/maharashtra/audit-report',
+                              'source_name':'TV9 Marathi','published_at':'2026-10-30T12:00:00Z'}]})
+            page.route('**/api/maharashtra?*',feed)
+            visit('/maharashtra/')
+            page.wait_for_selector('.mh-lead')
+            original=page.locator('.mh-card-actions a').first.get_attribute('href')
+            page.locator('.mh-lang [data-language="en"]').click()
+            page.wait_for_function("() => document.documentElement.lang==='en' && !document.querySelector('#mhTranslationNote').hidden")
+            require(page.locator('.mh-card-actions a').first.get_attribute('href')==original,'Language changed the original publisher')
+            require('original Marathi' in page.locator('#mhTranslationNote').inner_text(),'Unavailable translation was not disclosed')
+            failed[0]=True
+            page.locator('#mhRefresh').click()
+            page.wait_for_function("() => document.querySelector('#mhStatus').textContent.includes('previously loaded')")
+            require(page.locator('.mh-lead').count()==1,'A failed refresh erased previously loaded headlines')
+            require(page.evaluate('document.documentElement.scrollWidth <= innerWidth'),'Maharashtra page overflows')
+        check('Maharashtra language, attribution and failed-refresh recovery',maharashtra)
+
         def revoke():
             visit('/cookies.html')
             page.locator('[data-consent-choice="essential"]').click()
@@ -272,6 +301,17 @@ def run(base, output,admin_fixture=False):
         require(not errors, 'Browser errors: ' + repr(errors))
         context.close()
 
+        def without_javascript():
+            plain=browser.new_context(java_script_enabled=False,viewport={'width':390,'height':844})
+            plain.route('**/*',lambda route:route.continue_() if route.request.url.startswith(base+'/') else route.abort())
+            plain_page=plain.new_page()
+            plain_page.goto(base+'/india/',wait_until='domcontentloaded')
+            card=plain_page.locator('.card').first
+            require(card.count()==1,'Server-rendered cards are missing')
+            require(card.evaluate('(node)=>Number(getComputedStyle(node).opacity)')==1,'Server-rendered cards require JavaScript to become visible')
+            plain.close()
+        check('server-rendered reports remain readable without JavaScript',without_javascript)
+
         offline = browser.new_context(viewport={'width': 390, 'height': 844}, reduced_motion='reduce')
         offline.route('**/*', lambda route: route.continue_() if route.request.url.startswith(base + '/') else route.abort())
         offline_page = offline.new_page()
@@ -286,6 +326,18 @@ def run(base, output,admin_fixture=False):
             require('Connection interrupted' in offline_page.locator('h1').inner_text(), 'Offline message missing')
             offline.set_offline(False)
         check('uncached offline navigation has an honest offline page', offline_fallback)
+
+        def bounded_cache():
+            offline_page.goto(base,wait_until='domcontentloaded')
+            offline_page.evaluate("""async () => {
+                for(let i=0;i<90;i++)await fetch('/assets/site.css?audit='+i);
+            }""")
+            offline_page.wait_for_function("""async () => {
+                const cache=await caches.open('politicshub-shell-v19');
+                const keys=await cache.keys();
+                return keys.length<=80 && keys.some(key=>key.url.endsWith('?audit=89'));
+            }""")
+        check('service-worker cache remains bounded after 90 distinct assets',bounded_cache)
         offline.close()
         browser.close()
     report = {'base_url': base, 'checks': checks, 'browser_errors': errors,

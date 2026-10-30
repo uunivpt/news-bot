@@ -2,7 +2,9 @@ name: Emergency Public News Feed (No Database)
 
 on:
   schedule:
-    - cron: "11,31,51 * * * *"
+    # The regular collector already publishes this fallback on quota failure.
+    # Keep an independent recovery path without duplicating every collection.
+    - cron: "11 */3 * * *"
   workflow_dispatch:
   push:
     branches: [main]

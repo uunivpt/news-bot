@@ -84,6 +84,7 @@ input[type=email],input[type=search]{background:var(--card);color:var(--ink);fon
 
 /* Quiet reading utilities and reference pages. */
 .most-read{padding-left:22px;margin-top:20px}.most-read li{padding:0 0 18px 5px;font-size:15px;line-height:1.5}.most-read small{display:block;font-size:11px;color:var(--mut);margin-top:7px}
+@media(max-width:600px){.feed-status{flex-direction:row;align-items:center;gap:12px;padding-block:12px}.feed-status>span{min-width:0}.feed-status .btn{max-width:105px}}
 .search-options{display:flex;flex-wrap:wrap;gap:14px;margin:16px 0}.search-options label{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mut);max-width:100%}.search-options select{min-width:0;max-width:240px;padding:9px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);font:inherit}
 .reader-page{max-width:1120px;padding-top:48px;padding-bottom:48px}.reader-page>h1{font:750 clamp(36px,6vw,66px)/1.08 var(--display);letter-spacing:-.045em;margin:16px 0 22px;max-width:18ch}.reader-intro{max-width:64ch;color:var(--mut);font-size:19px;line-height:1.7;margin-bottom:30px}
 .reader-heading{display:flex;justify-content:space-between;gap:16px;align-items:center;border-bottom:1px solid var(--line);padding:16px 0}.reader-heading button,.saved-story button,.source-filters button,.reader-tools button,.reader-tools select{font:600 13px var(--sans);padding:10px 14px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);cursor:pointer}.reader-heading button:disabled{cursor:default}
