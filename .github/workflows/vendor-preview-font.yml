@@ -1,0 +1,44 @@
+name: Bundle Noto Devanagari for social previews
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/social_preview.py'
+      - '.github/workflows/vendor-preview-font.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bundle-font:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Download SIL OFL Devanagari font and license
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p app/fonts
+          curl -fL --retry 3 --connect-timeout 10 --max-time 90 \
+            'https://raw.githubusercontent.com/google/fonts/main/ofl/notosansdevanagari/NotoSansDevanagari%5Bwdth%2Cwght%5D.ttf' \
+            -o app/fonts/NotoSansDevanagari.ttf
+          curl -fL --retry 3 --connect-timeout 10 --max-time 60 \
+            'https://raw.githubusercontent.com/google/fonts/main/ofl/notosansdevanagari/OFL.txt' \
+            -o app/fonts/OFL.txt
+          test "$(wc -c < app/fonts/NotoSansDevanagari.ttf)" -gt 100000
+          test "$(wc -c < app/fonts/OFL.txt)" -gt 1000
+      - name: Commit font assets for reliable Vercel rendering
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add app/fonts/NotoSansDevanagari.ttf app/fonts/OFL.txt
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'Bundle OFL Devanagari font for reliable previews'
+            git push
+          fi
