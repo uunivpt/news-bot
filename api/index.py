@@ -644,7 +644,7 @@ def _article_html(row):
  body=str(row.get("article") or row.get("bot_article") or row.get("body") or summary)
  source=str(row.get("source_name") or "PoliticsHub.in")
  source_url=_safe_source_url(row.get("url"))
- image=SITE_ORIGIN+"/api/og/"+str(row.get("id"))+"?v=20261022"
+ image=SITE_ORIGIN+"/api/og/"+str(row.get("id"))+"?v=20261031-deva"
  pub_iso=str(published or datetime.now(timezone.utc).isoformat())
  if pub_iso and not re.search(r"[+-]\d\d:\d\d|Z$",pub_iso): pub_iso=pub_iso+"Z"
  data={
