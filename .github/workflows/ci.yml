@@ -51,3 +51,5 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Check responsive UI and reader flows with isolated fixtures
         run: python scripts/browser_audit.py --serve-fixture --base-url http://127.0.0.1:8010 --output artifacts/browser
+      - name: Check owner and database-outage Admin Room flows
+        run: python scripts/admin_browser_audit.py --output artifacts/admin-browser
