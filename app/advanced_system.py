@@ -3,6 +3,7 @@
 No LLM/API dependency. All decisions are rule/score/hash based and persisted.
 """
 from __future__ import annotations
+from app.schema_cache import schema_once
 import hashlib, json, re
 from email.utils import parsedate_to_datetime
 from datetime import datetime, timedelta, timezone
@@ -26,24 +27,27 @@ def val(row,key,default=None):
     except Exception:return default
 
 def ensure_schema(db):
-    stmts=[
-      f"""CREATE TABLE IF NOT EXISTS ph_news_scores(item_id BIGINT PRIMARY KEY, score REAL NOT NULL, freshness REAL, coverage REAL, importance REAL, duplicate_risk REAL, verification REAL, breaking INTEGER DEFAULT 0, reason TEXT, updated_at TEXT NOT NULL)""",
-      """CREATE TABLE IF NOT EXISTS ph_source_reliability(source_name TEXT PRIMARY KEY, attempts INTEGER DEFAULT 0, successes INTEGER DEFAULT 0, broken_links INTEGER DEFAULT 0, corrections INTEGER DEFAULT 0, coverage_events INTEGER DEFAULT 0, last_seen_at TEXT, updated_at TEXT NOT NULL)""",
-      """CREATE TABLE IF NOT EXISTS ph_events(event_id TEXT PRIMARY KEY, canonical_title TEXT NOT NULL, category TEXT, priority REAL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, status TEXT DEFAULT 'active')""",
-      """CREATE TABLE IF NOT EXISTS ph_event_items(event_id TEXT NOT NULL, item_id BIGINT PRIMARY KEY, relation TEXT NOT NULL, first_seen_at TEXT NOT NULL)""",
-      """CREATE TABLE IF NOT EXISTS ph_bot_failures(id BIGSERIAL PRIMARY KEY, bot TEXT NOT NULL, item_id BIGINT, step TEXT NOT NULL, error TEXT, attempt INTEGER DEFAULT 1, action TEXT, resolved INTEGER DEFAULT 0, created_at TEXT NOT NULL)""",
-      """CREATE TABLE IF NOT EXISTS ph_alerts(id BIGSERIAL PRIMARY KEY, severity TEXT NOT NULL, bot TEXT, step TEXT, item_id BIGINT, message TEXT NOT NULL, resolved INTEGER DEFAULT 0, created_at TEXT NOT NULL)""",
-      """CREATE TABLE IF NOT EXISTS ph_publish_locks(item_id BIGINT PRIMARY KEY, story_key TEXT NOT NULL UNIQUE, website_published INTEGER DEFAULT 0, locked_at TEXT NOT NULL)""",
-      """CREATE TABLE IF NOT EXISTS ph_resource_snapshots(id BIGSERIAL PRIMARY KEY, captured_at TEXT NOT NULL, payload TEXT NOT NULL)""",
-      """CREATE TABLE IF NOT EXISTS ph_reel_previews(item_id BIGINT PRIMARY KEY, video_path TEXT, preview_path TEXT, qa TEXT, layout_id TEXT, created_at TEXT NOT NULL)""",
-      """CREATE TABLE IF NOT EXISTS ph_regression_runs(id BIGSERIAL PRIMARY KEY, commit_ref TEXT, status TEXT NOT NULL, results TEXT, created_at TEXT NOT NULL)""",
-      """CREATE TABLE IF NOT EXISTS ph_event_updates(id BIGSERIAL PRIMARY KEY, event_id TEXT NOT NULL, item_id BIGINT, label TEXT NOT NULL, created_at TEXT NOT NULL)""",
-    ]
-    for s in stmts:
-        if not getattr(db,"_postgres",False):
-            s=s.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")
-        db.conn.execute(s)
-    if not getattr(db,"_postgres",False): db.conn.commit()
+    with schema_once(db, 'advanced-system-v1') as required:
+        if not required:
+            return
+        stmts=[
+          f"""CREATE TABLE IF NOT EXISTS ph_news_scores(item_id BIGINT PRIMARY KEY, score REAL NOT NULL, freshness REAL, coverage REAL, importance REAL, duplicate_risk REAL, verification REAL, breaking INTEGER DEFAULT 0, reason TEXT, updated_at TEXT NOT NULL)""",
+          """CREATE TABLE IF NOT EXISTS ph_source_reliability(source_name TEXT PRIMARY KEY, attempts INTEGER DEFAULT 0, successes INTEGER DEFAULT 0, broken_links INTEGER DEFAULT 0, corrections INTEGER DEFAULT 0, coverage_events INTEGER DEFAULT 0, last_seen_at TEXT, updated_at TEXT NOT NULL)""",
+          """CREATE TABLE IF NOT EXISTS ph_events(event_id TEXT PRIMARY KEY, canonical_title TEXT NOT NULL, category TEXT, priority REAL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, status TEXT DEFAULT 'active')""",
+          """CREATE TABLE IF NOT EXISTS ph_event_items(event_id TEXT NOT NULL, item_id BIGINT PRIMARY KEY, relation TEXT NOT NULL, first_seen_at TEXT NOT NULL)""",
+          """CREATE TABLE IF NOT EXISTS ph_bot_failures(id BIGSERIAL PRIMARY KEY, bot TEXT NOT NULL, item_id BIGINT, step TEXT NOT NULL, error TEXT, attempt INTEGER DEFAULT 1, action TEXT, resolved INTEGER DEFAULT 0, created_at TEXT NOT NULL)""",
+          """CREATE TABLE IF NOT EXISTS ph_alerts(id BIGSERIAL PRIMARY KEY, severity TEXT NOT NULL, bot TEXT, step TEXT, item_id BIGINT, message TEXT NOT NULL, resolved INTEGER DEFAULT 0, created_at TEXT NOT NULL)""",
+          """CREATE TABLE IF NOT EXISTS ph_publish_locks(item_id BIGINT PRIMARY KEY, story_key TEXT NOT NULL UNIQUE, website_published INTEGER DEFAULT 0, locked_at TEXT NOT NULL)""",
+          """CREATE TABLE IF NOT EXISTS ph_resource_snapshots(id BIGSERIAL PRIMARY KEY, captured_at TEXT NOT NULL, payload TEXT NOT NULL)""",
+          """CREATE TABLE IF NOT EXISTS ph_reel_previews(item_id BIGINT PRIMARY KEY, video_path TEXT, preview_path TEXT, qa TEXT, layout_id TEXT, created_at TEXT NOT NULL)""",
+          """CREATE TABLE IF NOT EXISTS ph_regression_runs(id BIGSERIAL PRIMARY KEY, commit_ref TEXT, status TEXT NOT NULL, results TEXT, created_at TEXT NOT NULL)""",
+          """CREATE TABLE IF NOT EXISTS ph_event_updates(id BIGSERIAL PRIMARY KEY, event_id TEXT NOT NULL, item_id BIGINT, label TEXT NOT NULL, created_at TEXT NOT NULL)""",
+        ]
+        for s in stmts:
+            if not getattr(db,"_postgres",False):
+                s=s.replace("BIGSERIAL PRIMARY KEY","INTEGER PRIMARY KEY AUTOINCREMENT")
+            db.conn.execute(s)
+        if not getattr(db,"_postgres",False): db.conn.commit()
 
 def _words(text):
     return set(re.findall(r"[a-z0-9]{3,}",str(text or "").lower()))

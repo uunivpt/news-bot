@@ -93,7 +93,7 @@ class UIAdSenseTests(unittest.TestCase):
                 continue
             html = path.read_text()
             assert '/assets/polish.css?v=' in html, path
-            assert '/assets/ui.js?v=phui19' in html, path
+            assert '/assets/ui.js?v=phui30' in html, path
             assert 'PH.bindChrome()' not in html
             assert 'googletagmanager.com/gtag/js' not in html
         home = (root/'index.html').read_text()

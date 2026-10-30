@@ -33,4 +33,40 @@ Image acquisition tries up to five relevant licensed candidates before falling b
 
 The worker uses PostgreSQL from `DATABASE_3URL` (or legacy `DATABASE_URL`) and uses SQLite as a local-development fallback.
 
+## Reader tools and reliability checks
+
+`/sources.html` links to original publishers and official records. `/saved.html`
+stores up to 100 article links on the reader's browser after optional preferences
+are allowed. Article pages include text-size controls, a print layout and the
+existing share sheet. These features do not require an account.
+
+Public API cards omit full articles; `/api/news/<id>` returns the article body.
+The command center uses the uncached `/api/admin/news` endpoint for private
+listing/filtering. Anonymous public responses avoid `Vary: Cookie`, which would
+disable Vercel CDN caching. Authenticated responses remain `private, no-store`.
+
+Web PostgreSQL connections use a process-local pool capped at 4 connections and
+16 waiters, with a 2-second acquisition timeout and 5-second statement deadline.
+Use Neon's pooled endpoint for web traffic. Core schema migration is skipped by
+Vercel web requests; the existing collection/migration worker initializes the
+schema. Component telemetry setup is cached once per database/process.
+
+`ADMIN_USERS_JSON` can bootstrap hashed owner credentials only into an empty
+admin-user table. Existing owners are never overwritten or supplemented from a
+stale environment variable. Plaintext passwords are rejected.
+
+```bash
+python -m unittest discover -s tests -v
+node --test tests/*.test.cjs reel/scripts/layout.test.mjs
+pip install -r requirements-dev.txt
+python -m playwright install chromium
+python scripts/browser_audit.py --serve-fixture --base-url http://127.0.0.1:8010
+```
+
+Set `TEST_POSTGRES_URL` to an isolated local PostgreSQL database to enable the
+100,000-record integration checks. The fixtures refuse a remote database host.
+CI runs these checks on PostgreSQL 18 and runs browser flows with a temporary
+SQLite fixture. `scripts/load_public.py` provides a small local HTTP benchmark.
+See [the audit and capacity notes](docs/AUDIT_2026-10-30.md) for scope and limits.
+
 <!-- deployment refresh -->

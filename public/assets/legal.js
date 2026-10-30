@@ -7,7 +7,7 @@
     try {
       localStorage.setItem('ph-consent-v1', mode);
       if (mode === 'essential') {
-        ['ph-news-cache','ph-news-cache-v6','ph-news-cache-v5','ph-news-cache-v4','ph-theme','ph-cookie','ph-ls'].forEach(key => localStorage.removeItem(key));
+        ['ph-news-cache','ph-news-cache-v6','ph-news-cache-v5','ph-news-cache-v4','ph-theme','ph-cookie','ph-ls','ph-reading-list-v1'].forEach(key => localStorage.removeItem(key));
         document.documentElement.dataset.theme = 'light';
       }
     } catch (_) {}
@@ -34,10 +34,10 @@
   const newsletter = $('#newsletterForm');
   bind(newsletter, $('#newsletterMessage'), 'POST', () => ({email:$('#newsletterEmail').value,consent:$('#newsletterPrivacy').checked,adult:$('#newsletterAdult').checked}));
   bind($('#unsubscribeForm'), $('#unsubscribeMessage'), 'DELETE', () => ({email:$('#unsubscribeEmail').value}));
-  if (newsletter) fetch('/api/newsletter', {cache:'no-store'}).then(r => r.json()).then(status => {
+  if (newsletter) fetch('/api/newsletter', {cache:'default'}).then(r => r.json()).then(status => {
     if (status.available === false) {
-      const button = newsletter.querySelector('button[type="submit"]'); button.disabled = true; button.textContent = 'Coming soon';
-      $('#newsletterMessage').textContent = 'Email delivery is being activated. Please check back soon.';
+      const button = newsletter.querySelector('button[type="submit"]'); button.disabled = true; button.textContent = status.delivery_configured ? 'Temporarily unavailable' : 'Coming soon';
+      $('#newsletterMessage').textContent = status.message || 'Subscription is temporarily unavailable. Please try again later.';
     }
   }).catch(() => {});
 })();

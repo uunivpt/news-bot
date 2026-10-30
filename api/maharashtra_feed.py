@@ -5,6 +5,7 @@ import html
 import re
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
 import feedparser
@@ -125,13 +126,17 @@ def get_feed(language="mr") -> dict:
             base = cached["result"]
         else:
             items, statuses = [], {}
-            for name, url, hosts in FEEDS:
-                try:
-                    found = _read_one(name, url, hosts, language="mr")
-                    statuses[name] = {"available": bool(found), "count": len(found)}
-                    items.extend(found)
-                except (requests.RequestException, ValueError, TypeError):
-                    statuses[name] = {"available": False, "count": 0}
+            # Independent publishers share one bounded refresh, in parallel.
+            with ThreadPoolExecutor(max_workers=len(FEEDS)) as executor:
+                pending = [(name, executor.submit(_read_one, name, url, hosts, language="mr"))
+                           for name, url, hosts in FEEDS]
+                for name, future in pending:
+                    try:
+                        found = future.result()
+                        statuses[name] = {"available": bool(found), "count": len(found)}
+                        items.extend(found)
+                    except (requests.RequestException, ValueError, TypeError):
+                        statuses[name] = {"available": False, "count": 0}
             unique, seen = [], set()
             for item in items:
                 key = item["url"].split("?")[0].rstrip("/")
@@ -146,12 +151,22 @@ def get_feed(language="mr") -> dict:
                 "refresh_minutes": 20,
                 "status": "ok" if unique else "unavailable",
             }
-            _cache["original"] = {"result": base, "expires": now + CACHE_SECONDS}
+            if not unique and cached and cached['result'].get('items'):
+                base.update(items=cached['result']['items'], status='stale',
+                            last_checked=cached['result'].get('last_checked'),
+                            last_attempt=datetime.now(timezone.utc).isoformat())
+            _cache["original"] = {"result": base, "expires": now + (CACHE_SECONDS if unique else 60)}
 
         items = [dict(item) for item in base["items"]]
         translated_count = 0
         if language == "en" and items:
             translations = _cache.setdefault("translations", {})
+            for title in list(translations):
+                if translations[title]['expires'] <= now:
+                    translations.pop(title, None)
+            # Bound process memory even when a publisher changes every headline.
+            while len(translations) > 1000:
+                translations.pop(next(iter(translations)))
             missing = []
             for row in items:
                 title = row["title"]
@@ -160,6 +175,10 @@ def get_feed(language="mr") -> dict:
                     if title not in missing:
                         missing.append(title)
             if missing:
+                # Failed model responses must not trigger a new model call for
+                # every reader. Keep originals and retry translations later.
+                for title in missing[:30]:
+                    translations[title] = {'title': None, 'expires': now + 300}
                 try:
                     # One bounded model call; untranslated headlines remain available.
                     translated = _translate_batch(missing[:30])

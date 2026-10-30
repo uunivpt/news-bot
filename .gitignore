@@ -6,6 +6,7 @@ config/sources.json
 data/*.db
 data/*.sqlite3
 .pytest_cache/
+artifacts/
 
 reel/node_modules/
 reel/out/
