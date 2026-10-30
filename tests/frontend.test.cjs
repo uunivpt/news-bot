@@ -65,7 +65,9 @@ test('Nana Patekar and Indian obituaries are India news, not Entertainment',()=>
  assert.equal(vm.runInContext('NANA_TRIBUTE.category',ctx),'india');
  assert.equal(vm.runInContext("newsCategory('entertainment','Nana Patekar dies at 75','')",ctx),'india');
  assert.equal(vm.runInContext("newsCategory('entertainment','Indian actor dies at 82','Bollywood mourns')",ctx),'india');
- assert.equal(vm.runInContext("newsCategory('entertainment','New Bollywood movie announced','')",ctx),'entertainment');
+ assert.equal(vm.runInContext("newsCategory('entertainment','New Bollywood movie announced','')",ctx),'india');
+ assert.equal(vm.runInContext("newsCategory('entertainment','Hollywood awards show','')",ctx),'world');
+ assert.equal(vm.runInContext("newsCategory('entertainment','Film actor joins election campaign','')",ctx),'politics');
  assert.equal(vm.runInContext("inCat(NANA_TRIBUTE,'india')",ctx),true);
  assert.equal(vm.runInContext("inCat(NANA_TRIBUTE,'entertainment')",ctx),false);
 });
