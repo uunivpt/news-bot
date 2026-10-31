@@ -15,18 +15,8 @@ def handler(request):
     except (TypeError, ValueError):
         limit = 200
 
-    try:
-        from app.database import NewsDatabase
-        database = NewsDatabase()
-        try:
-            rows = [dict(row) for row in database.latest_public(limit, category)]
-        finally:
-            database.close()
-        # A successful empty database read is authoritative too.
-        return jsonify(rows)
-    except Exception as exc:
-        print(f"/api/news database fallback: {exc}")
-
+    # This compatibility handler must never connect to Neon. Public data is
+    # published from the private Termux database through approved GitHub JSON.
     snapshot = Path(__file__).resolve().parent.parent / "public" / "news-data.json"
     try:
         payload = json.loads(snapshot.read_text(encoding="utf-8"))

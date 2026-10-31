@@ -369,6 +369,11 @@ _db_retry_after=0.0
 
 def db():
  global _db_retry_after
+ # Vercel's news website consumes GitHub-published feed data. The only
+ # editable PostgreSQL database is on Termux; never connect to Neon here,
+ # even if legacy DATABASE_3URL environment secrets still exist.
+ if os.getenv("VERCEL") == "1" or os.getenv("POLITICSHUB_GITHUB_FEED_ONLY") == "1":
+  raise DatabaseUnavailable("Public website is GitHub-feed-only; editable data is local to Termux")
  if time.monotonic() < _db_retry_after:
   raise DatabaseUnavailable("Database temporarily unavailable")
  try:
@@ -1101,7 +1106,8 @@ def admin_workspace():
    'response_ms':round((time.monotonic()-started)*1000),'reauthenticate':connected and recovery_session()},
   'stats':stats,'settings':settings,'activity':activity,'stories':rows,'coverage':admin_coverage(rows),
   'limits':{'stories':200,'coverage_scope':'loaded stories','refresh_seconds':60},
-  'notice':('Database restored. Sign out and sign in again for owner access.' if connected and recovery_session() else
+  'notice':('Termux is the primary news database. This website reads the published GitHub feed; editorial changes happen on the phone.' if os.getenv("VERCEL")=="1" else
+   'Database restored. Sign out and sign in again for owner access.' if connected and recovery_session() else
    'Database unavailable. Showing the latest public snapshot; editorial changes are paused.' if snapshot else '')})
 
 
@@ -1137,6 +1143,13 @@ def admin_story_queue():
 
 @app.get("/api/health")
 def health():
+ if os.getenv("VERCEL") == "1" or os.getenv("POLITICSHUB_GITHUB_FEED_ONLY") == "1":
+  rows=_snapshot_rows("all")
+  newest=max((_public_timestamp(r) for r in rows),default=0)
+  result={"ok":bool(rows),"mode":"github_feed" if rows else "unavailable",
+   "storage":"termux","delivery":"github","stories":len(rows),
+   "latest_published_at":datetime.fromtimestamp(newest,timezone.utc).isoformat() if newest else None}
+  return jsonify(result),(200 if rows else 503)
  try:
   database=db()
   try:
