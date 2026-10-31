@@ -95,7 +95,7 @@ def run(base, output,admin_fixture=False):
                 require(page.evaluate('document.documentElement.scrollWidth <= innerWidth'), f'Homepage overflow at {width}px')
                 if width in (390, 1440):
                     page.screenshot(path=str(output / f'home-{width}.png'), animations='disabled')
-            for path in ('/sources.html', '/saved.html', '/about.html', '/newsletter.html', '/india/', '/world/', '/hindi/', '/archive/'):
+            for path in ('/briefing/', '/sources.html', '/saved.html', '/about.html', '/newsletter.html', '/india/', '/world/', '/hindi/', '/archive/'):
                 for width in (390, 1440):
                     page.set_viewport_size({'width': width, 'height': 900})
                     visit(path)
@@ -142,6 +142,39 @@ def run(base, output,admin_fixture=False):
                 page.locator('.ph14-more').click()
                 require(page.locator('.ph14-row').count() > before, 'Load more did not add reports')
         check('homepage load-more adds reports', pagination)
+
+        def briefing():
+            home()
+            page.locator('.ph-briefing-entry').click()
+            require(page.locator('h1').inner_text() == 'Quick Briefing', 'Briefing entry failed')
+            count = page.locator('.briefing-story').count()
+            require(0 < count <= 6, 'Briefing should show one to six recent reports')
+            require(page.locator('.briefing-story time[datetime]').count() == count, 'Publication dates missing')
+            require(page.locator('.briefing-story a[target="_blank"]').count() == count, 'Original source links missing')
+            require(all('<p ' not in text and '<strong>' not in text for text in page.locator('.briefing-summary').all_text_contents()), 'Publisher markup leaked into snippets')
+            for width in (320, 390, 1440):
+                page.set_viewport_size({'width': width, 'height': 900})
+                require(page.evaluate('document.documentElement.scrollWidth <= innerWidth'), f'Briefing overflow at {width}px')
+                if width == 390:
+                    page.screenshot(path=str(output / 'briefing-mobile.png'), animations='disabled')
+            page.screenshot(path=str(output / 'briefing-desktop.png'), animations='disabled')
+            page.locator('[name="desk"]').select_option('world')
+            page.locator('[name="period"]').select_option('week')
+            page.get_by_role('button', name='Update briefing').click()
+            require(page.locator('[name="desk"]').input_value() == 'world', 'Desk filter lost')
+            require(page.locator('[name="period"]').input_value() == 'week', 'Period filter lost')
+            require(all(value.lower() == 'world' for value in page.locator('.briefing-meta .lbl').all_text_contents()), 'Desk filter leaked other desks')
+            no_js = browser.new_context(java_script_enabled=False)
+            no_js.route('**/*', lambda route: route.continue_() if route.request.url.startswith(base + '/') else route.abort())
+            try:
+                plain = no_js.new_page()
+                plain.goto(base + '/briefing/', wait_until='domcontentloaded')
+                require(plain.locator('.briefing-story').count() == count, 'Briefing requires JavaScript')
+            finally:
+                no_js.close()
+            page.set_viewport_size({'width': 390, 'height': 844})
+            home()
+        check('quick briefing entry, dates, source links, filters and no-JavaScript reading', briefing)
 
         def article():
             visit(article_href)

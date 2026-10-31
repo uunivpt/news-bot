@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en" data-theme="light"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quick Briefing — PoliticsHub.in</title>
+<meta name="description" content="Catch up with up to six recent source-linked reports. Choose a desk and time window, read a short brief, then open the original source.">
+<meta name="robots" content="noindex,follow">
+<link rel="canonical" href="https://www.politicshub.in/briefing/">
+<link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/assets/site.css?v=phui23">
+<link rel="stylesheet" href="/assets/polish.css?v=phui30"><link rel="stylesheet" href="/assets/briefing.css?v=1">
+<script src="/assets/ui.js?v=phbrief1" defer></script>
+</head><body>
+<header id="hd"><div class="top"><a class="logo" href="/"><img src="/favicon.svg" alt="PoliticsHub.in"></a><div class="acts"><a class="btn secondary" href="/newsletter.html">Subscribe</a></div></div></header>
+<main class="wrap briefing-page">
+<div class="briefing-heading"><span class="lbl red">A LITTLE TIME. A CLEARER PICTURE.</span><h1>Quick Briefing</h1>
+<p class="reader-intro">Catch up with up to six recent reports, with the source and publication date beside every story.</p></div>
+<form class="briefing-filters" method="get" action="/briefing/" aria-label="Choose your briefing">
+<label>News desk<select name="desk">{% for value, label in desks %}<option value="{{ value }}"{% if desk == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+<label>Published within<select name="period"><option value="day"{% if period == 'day' %} selected{% endif %}>Past 24 hours</option><option value="week"{% if period == 'week' %} selected{% endif %}>Past 7 days</option></select></label>
+<button class="btn" type="submit">Update briefing</button></form>
+<p class="briefing-count">{{ stories|length }} {{ 'report' if stories|length == 1 else 'reports' }} · {{ desk_label }} · {{ 'Past 24 hours' if period == 'day' else 'Past 7 days' }}</p>
+{% if stories %}
+<ol class="briefing-list">{% for story in stories %}
+<li><article class="briefing-story"><div class="briefing-meta"><span class="lbl red">{{ story.category|title }}</span><span>{{ story.source }}</span></div>
+<h2><a href="{{ story.href }}">{{ story.title }}</a></h2>
+<p class="briefing-date">Published <time datetime="{{ story.iso }}">{{ story.date }} IST</time></p>
+{% if story.summary %}<p class="briefing-summary" dir="auto">{{ story.summary }}</p>{% endif %}
+<div class="briefing-story-links"><a href="{{ story.href }}">Read report →</a><a href="{{ story.url }}" target="_blank" rel="noopener noreferrer">Original source ↗</a></div>
+</article></li>{% endfor %}</ol>
+<div class="briefing-finish"><h2>You're caught up on this briefing.</h2><p>This is a short selection. Explore <a href="/archive/">the full archive</a> for more coverage.</p><a class="btn secondary" href="/newsletter.html">Get PoliticsHub Brief by email</a></div>
+{% else %}
+<section class="briefing-empty"><h2>No reports in this window</h2><p>We don't present older stories as fresh updates.</p>
+{% if period == 'day' %}<p><a class="btn secondary" href="/briefing/?desk={{ desk }}&amp;period=week">Look back over the past 7 days</a></p>{% endif %}
+<p><a href="/archive/">Browse the full archive →</a></p></section>
+{% endif %}
+<aside class="briefing-method"><h2>How this briefing is selected</h2><p>We take the newest available report from each desk, then fill remaining places by publication time, up to six reports. Filters apply to the latest 200 available published reports for your chosen desk, so this is not an exhaustive archive search.</p><p>The feed may use a saved snapshot during an outage. Dates stay attached to their reports; opening this page does not make an older report new. Source links identify the originating report and do not imply independent verification of every claim.</p><p><a href="/editorial-policy.html">Our editorial policy</a> · <a href="/corrections.html">Request a correction</a></p></aside>
+</main><footer><div class="wrap"><p>PoliticsHub.in · <a href="/">Latest news</a> · <a href="/sources.html">Sources & references</a> · <a href="/privacy.html">Privacy</a></p></div></footer>
+</body></html>

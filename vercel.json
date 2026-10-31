@@ -56,6 +56,14 @@
   ],
   "rewrites": [
     {
+      "source": "/briefing",
+      "destination": "/api/briefing"
+    },
+    {
+      "source": "/briefing/",
+      "destination": "/api/briefing"
+    },
+    {
       "source": "/maharashtra",
       "destination": "/maharashtra/index.html"
     },
@@ -212,7 +220,7 @@
   ],
   "functions": {
     "api/index.py": {
-      "includeFiles": "app/{data,fonts}/**"
+      "includeFiles": "app/{data,fonts,templates}/**"
     }
   },
   "redirects": [

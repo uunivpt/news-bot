@@ -9,13 +9,14 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from email.utils import parsedate_to_datetime
 from urllib.parse import quote, urlsplit
-from flask import Flask, jsonify, request, session, send_from_directory, redirect, Response
+from flask import Flask, jsonify, request, session, send_from_directory, redirect, Response, render_template
 from werkzeug.security import check_password_hash, generate_password_hash
 from psycopg import Error as PostgresError
 from app.article_fetcher import enrich_source_text
 from app.database import NewsDatabase, DatabaseUnavailable, DatabaseBusy
 from app.public_delivery import WindowLimiter, read_json_rows, remote_rows
 from app.public_sessions import PublicSessionInterface
+from app.briefing import DESKS as BRIEFING_DESKS, select_briefing, briefing_excerpt
 from app.admin_access import configured_users, verify_recovery_owner
 from app.admin_workspace import LIST_FIELDS as ADMIN_LIST_FIELDS, EDITORIAL_FIELDS, editorial_revision, project_rows as admin_project_rows, coverage as admin_coverage
 from app.category_routing import normalize_category
@@ -35,7 +36,7 @@ from app.newsletter import (
     email_unsubscribe_link, ensure_tables as ensure_newsletter_tables, send_daily, iso,
 )
 
-app=Flask(__name__, static_folder="../public", static_url_path="")
+app=Flask(__name__, static_folder="../public", static_url_path="", template_folder="../app/templates")
 app.session_interface=PublicSessionInterface()
 _secret=os.getenv("FLASK_SECRET_KEY") or os.getenv("ADMIN_TOKEN") or os.getenv("ADMIN_SETUP_KEY")
 if not _secret:_secret=secrets.token_urlsafe(32)
@@ -1007,6 +1008,29 @@ def newsletter_daily():
    return jsonify({"ok":True,"sent":sent,"story":story["title"]}),200
   finally:database.close()
  except RuntimeError:return jsonify({"error":"Newsletter database unavailable"}),503
+
+@app.get("/api/briefing")
+@app.get("/briefing/", strict_slashes=False)
+def quick_briefing():
+ desk=str(request.args.get("desk","all"))
+ period=str(request.args.get("period","day"))
+ if desk not in dict(BRIEFING_DESKS) or period not in {"day","week"}:
+  return redirect("/briefing/",code=302)
+ selected=select_briefing(_public_rows_for_section(desk,200),timestamp=_public_timestamp,
+                         desk=desk,days=7 if period=="week" else 1)
+ stories=[]
+ for row in selected:
+  published=datetime.fromtimestamp(_public_timestamp(row),timezone.utc)
+  item=_publicize(row)
+  summary=briefing_excerpt(item.get("summary"))
+  stories.append({"title":item["title"],"category":item["category"],"href":article_path(item),
+   "summary":summary,"source":item.get("source_name") or urlsplit(item["url"]).hostname,
+   "url":item["url"],"iso":published.isoformat(),
+   "date":published.astimezone(ZoneInfo("Asia/Kolkata")).strftime("%d %b %Y, %H:%M")})
+ return Response(render_template("briefing.html",stories=stories,desks=BRIEFING_DESKS,
+  desk=desk,desk_label=dict(BRIEFING_DESKS)[desk],period=period),mimetype="text/html",
+  headers={"Cache-Control":"public,max-age=60,s-maxage=180"})
+
 
 @app.get("/api/seo-section/<category>")
 @app.get("/<category>/", strict_slashes=False)

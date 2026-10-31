@@ -134,7 +134,7 @@ function moveInd(){
 function build(){
  const nav=$('nav.main'),drawer=$('#dl');
  if(nav)nav.innerHTML='<span id="ind" aria-hidden="true"></span>'+CATS.map(([k,l])=>'<a href="'+hl(k)+'" data-k="'+k+'">'+l+'</a>').join('');
- if(drawer)drawer.innerHTML=CATS.map(([k,l])=>'<a class="l" href="'+hl(k)+'" data-k="'+k+'">'+l+'</a>').join('')+'<a class="l" href="/sources.html">Sources & references</a><a class="l" href="/saved.html">Saved stories</a><a class="l" href="/archive/">Full archive</a>';
+ if(drawer)drawer.innerHTML=CATS.map(([k,l])=>'<a class="l" href="'+hl(k)+'" data-k="'+k+'">'+l+'</a>').join('')+'<a class="l" href="/briefing/">Quick Briefing</a><a class="l" href="/sources.html">Sources & references</a><a class="l" href="/saved.html">Saved stories</a><a class="l" href="/archive/">Full archive</a>';
  const y=$('#yr');if(y)y.textContent=new Date().getFullYear();
 }
 function ticker(){
