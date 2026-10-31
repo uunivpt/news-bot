@@ -20,6 +20,10 @@ from pathlib import Path
 from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
+# Running `python scripts/termux_local_admin.py` normally puts only scripts/
+# on sys.path, not the project root containing api/ and app/.
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 HOME = Path.home()
 PORT = 8765
 HOST = "127.0.0.1"
@@ -186,7 +190,8 @@ def start(reset=False):
             stdin=subprocess.DEVNULL, start_new_session=True,
         )
     pg_password = ""
-    for _ in range(14):
+    # Termux can cold-import many Python packages substantially slower than CI.
+    for _ in range(48):
         if child.poll() is not None:
             print("STOP: admin daemon failed; see", LOG)
             return 1
