@@ -111,6 +111,13 @@ class OfflineNewsFallbackTests(unittest.TestCase):
             "category": "india"
         }
 
+    def test_mobile_feed_accepts_admin_reviewed_only_when_approved(self):
+        row = self._mobile_row()
+        row["fact_check_status"] = "reviewed"
+        self.assertIsNotNone(mobile_reviewed_story(row, NOW))
+        row["approved_at"] = None
+        self.assertIsNone(mobile_reviewed_story(row, NOW))
+
     def test_mobile_feed_valid_approved_story(self):
         story = mobile_reviewed_story(self._mobile_row(), NOW)
         self.assertIsNotNone(story)
