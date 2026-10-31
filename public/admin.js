@@ -361,6 +361,37 @@ async function signedIn(data) {
   if (!liveTimer) liveTimer = setInterval(() => { if (!document.hidden && currentView === 'overview' && !mutationBusy) loadOverview(true); },60000);
 }
 
+function manualPayload() {
+ return {
+  title:$('newTitle').value.trim(), category:$('newCategory').value,
+  source_name:$('newSourceName').value.trim(), source_url:$('newSourceUrl').value.trim(),
+  summary:$('newSummary').value.trim(), article:$('newArticle').value.trim(),
+  image_url:$('newImageUrl').value.trim(), image_license:$('newImageLicense').value,
+  image_credit:$('newImageCredit').value.trim()
+ };
+}
+$('previewManual').onclick = () => {
+ const row = manualPayload();
+ $('manualPreview').replaceChildren();
+ const title = document.createElement('h2'); title.textContent = row.title || 'Untitled';
+ const summary = document.createElement('p'); summary.textContent = row.summary;
+ const article = document.createElement('div'); article.textContent = row.article;
+ article.style.whiteSpace = 'pre-wrap';
+ $('manualPreview').append(title,summary,article);
+ $('manualPreview').parentElement.open = true;
+};
+$('createArticleForm').onsubmit = async event => {
+ event.preventDefault();
+ if (workspace?.access.read_only) return notice('Remote write access is not connected yet. Open the authenticated phone admin or configure the secure bridge.','err');
+ const button = $('saveManual'); button.disabled = true;
+ try {
+  const result = await action('/api/admin/news/create',manualPayload());
+  $('createArticleForm').reset(); $('manualMessage').textContent = 'Draft #' + result.id + ' saved for human review.';
+  notice('New article draft #' + result.id + ' saved. Verify before publishing.');
+  await loadOverview(); await loadNews(true);
+ } catch(error) { $('manualMessage').textContent = error.message; notice(error.message,'err'); }
+ finally { button.disabled = false; applyCapabilities(); }
+};
 $('loginForm').onsubmit = async event => {
   event.preventDefault(); if (loginBusy) return; loginBusy = true;
   const submit = event.currentTarget.querySelector('[type=submit]'); submit.disabled = true; $('loginErr').textContent = 'Verifying your account…';
