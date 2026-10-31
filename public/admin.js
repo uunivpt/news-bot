@@ -52,7 +52,7 @@ async function api(url, options = {}) {
   return promise;
 }
 function action(url, body = {}, headers = {}) {
-  if (workspace?.access.read_only) return Promise.reject(new Error('Read-only access. Restore the database and sign in again to make changes.'));
+  if (workspace?.access.read_only) return Promise.reject(new Error(workspace?.data_origin === 'termux_github' ? 'Read-only public dashboard: edit stories on Termux instead.' : 'Read-only access. Restore the database and sign in again to make changes.'));
   return api(url, {method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':csrf,...headers}, body:JSON.stringify(body)});
 }
 function metric(label, value, detail = '') {
@@ -108,32 +108,33 @@ function go(view, updateHash = true) {
 }
 function applyCapabilities() {
   const writable = !!workspace && !workspace.access.read_only;
-  document.querySelectorAll('[data-write]').forEach(node => { node.disabled = !writable || mutationBusy; node.title = writable ? '' : 'Requires a live database and owner session'; });
+  document.querySelectorAll('[data-write]').forEach(node => { node.disabled = !writable || mutationBusy; node.title = writable ? '' : workspace?.data_origin === 'termux_github' ? 'Edits run on the Termux phone, not on the public website' : 'Requires a live database and owner session'; });
   $('status').disabled = !writable; $('review').disabled = !writable;
-  $('settingsState').textContent = writable ? '' : 'Read-only. Publishing controls require a live database owner session.';
+  $('settingsState').textContent = writable ? '' : workspace?.data_origin === 'termux_github' ? 'Read-only website. Review and approve stories using the local Termux workflow.' : 'Read-only. Publishing controls require a live database owner session.';
 }
 function renderWorkspace() {
   const data = workspace, health = data.health, stats = data.stats, sample = data.coverage.sample_size;
+  const githubOnly = data.data_origin === 'termux_github';
   rows = data.stories;
   settings = data.settings || {};
   $('userName').textContent = data.access.username;
   $('avatar').textContent = data.access.username.slice(0,1).toUpperCase();
-  $('sessionRole').textContent = data.access.scope === 'recovery' ? 'Recovery · read-only' : data.access.read_only ? 'Owner · database unavailable' : 'Owner session';
-  $('connectionBadge').className = 'pill ' + (data.mode === 'live' ? 'green' : 'amber');
-  $('connectionBadge').textContent = data.mode === 'live' ? 'Live database' : 'Snapshot mode';
+  $('sessionRole').textContent = data.access.scope === 'recovery' ? 'Recovery · read-only' : data.access.read_only ? (githubOnly ? 'Owner · GitHub feed view' : 'Owner · database unavailable') : 'Owner session';
+  $('connectionBadge').className = 'pill ' + (data.mode === 'live' || (githubOnly && sample) ? 'green' : 'amber');
+  $('connectionBadge').textContent = data.mode === 'live' ? 'Live database' : githubOnly ? 'GitHub news feed' : 'Snapshot mode';
   $('workspaceBanner').classList.toggle('hidden',!data.notice);
   $('workspaceBanner').innerHTML = data.notice ? `<p><b>${data.access.read_only ? 'Read-only workspace. ' : ''}</b>${esc(data.notice)}</p><button class="text-btn" data-view="system">View status ↗</button>` : '';
-  $('heroEyebrow').textContent = data.mode === 'live' ? 'EDITORIAL PULSE' : 'CONTINUITY MODE';
+  $('heroEyebrow').textContent = data.mode === 'live' ? 'EDITORIAL PULSE' : githubOnly ? 'PUBLIC FEED MONITOR' : 'CONTINUITY MODE';
   $('heroTitle').textContent = data.mode === 'live' ? (stats.review_needed ? `${number(stats.review_needed)} stories need a closer look.` : 'The next story starts here.') : 'The newsroom stays in view.';
-  $('heroDescription').textContent = data.mode === 'live' ? 'Review your queue, inspect source material and keep publication decisions accountable.' : 'Browse the latest saved public reports, inspect coverage and follow recovery status. Editorial changes resume when the database is restored.';
+  $('heroDescription').textContent = data.mode === 'live' ? 'Review your queue, inspect source material and keep publication decisions accountable.' : githubOnly ? 'Published news is delivered through GitHub. Private editing, reviews and PostgreSQL remain on your Termux phone; this website cannot access that local database.' : 'Browse the latest saved public reports, inspect coverage and follow recovery status. Editorial changes resume when the database is restored.';
   $('heroCount').textContent = number(sample);
-  $('heroCountLabel').textContent = data.mode === 'live' ? 'recent stories loaded' : 'public snapshot stories';
-  $('overviewMetrics').innerHTML = metric(data.mode === 'live' ? 'All stories' : 'Snapshot stories',number(data.mode === 'live' ? stats.total : sample),data.mode === 'live' ? 'Entire database' : 'Latest saved public copy') + metric('Published',number(stats.published),data.mode === 'live' ? 'Entire database' : 'In this snapshot') + metric('Needs review',number(stats.review_needed),data.mode === 'live' ? 'Verification queue' : 'Requires live moderation data') + metric('Pending',number(stats.pending),data.mode === 'live' ? 'Awaiting publication' : 'Requires live editorial data');
+  $('heroCountLabel').textContent = data.mode === 'live' ? 'recent stories loaded' : githubOnly ? 'published GitHub stories' : 'public snapshot stories';
+  $('overviewMetrics').innerHTML = metric(data.mode === 'live' ? 'All stories' : githubOnly ? 'Public feed stories' : 'Snapshot stories',number(data.mode === 'live' ? stats.total : sample),data.mode === 'live' ? 'Entire database' : 'Latest saved public copy') + metric('Published',number(stats.published),data.mode === 'live' ? 'Entire database' : 'In this snapshot') + metric('Needs review',number(stats.review_needed),data.mode === 'live' ? 'Verification queue' : 'Requires live moderation data') + metric('Pending',number(stats.pending),data.mode === 'live' ? 'Awaiting publication' : 'Requires live editorial data');
   $('queueBadge').textContent = stats.pending == null ? number(sample) : number(stats.pending);
   $('recentStories').innerHTML = rows.slice(0,5).map((row,index) => `<article class="recent-story"><span class="story-index">${String(index+1).padStart(2,'0')}</span><div><button data-inspect="${Number(row.id)}">${esc(row.title)}</button><div class="meta">${esc(row.source_name || 'Unknown source')} · ${esc(row.category || 'General')}</div></div></article>`).join('') || empty('No reports available','No saved public stories were found.');
   $('deskChart').innerHTML = barChart(data.coverage.categories,sample,6);
   $('coverageScope').textContent = `Based on ${sample} loaded stories. Distribution is not a count of the full archive.`;
-  $('health').innerHTML = `<div class="health-row"><div><b>Database</b><small>${health.database === 'connected' ? 'Connection available' : 'Persistent services are paused'}</small></div><span class="pill ${health.database === 'connected' ? 'green' : 'amber'}">${esc(health.database)}</span></div><div class="health-row"><div><b>Story delivery</b><small>Newest report: ${esc(date(health.latest_published_at))}</small></div><span class="pill ${health.latest_age_seconds != null && health.latest_age_seconds < 86400 ? 'green' : 'amber'}">${esc(age(health.latest_age_seconds))}</span></div><div class="health-row"><div><b>Editorial permissions</b><small>${data.access.read_only ? 'Changes are disabled server-side' : 'Authenticated owner access'}</small></div><span class="pill ${data.access.read_only ? 'amber' : 'green'}">${data.access.read_only ? 'Read-only' : 'Owner'}</span></div>`;
+  $('health').innerHTML = `<div class="health-row"><div><b>${githubOnly ? 'News storage' : 'Database'}</b><small>${githubOnly ? 'PostgreSQL is local to Termux; phone health is not checked here' : health.database === 'connected' ? 'Connection available' : 'Persistent services are paused'}</small></div><span class="pill ${health.database === 'connected' ? 'green' : 'amber'}">${githubOnly ? 'Termux' : esc(health.database)}</span></div><div class="health-row"><div><b>Story delivery</b><small>Newest report: ${esc(date(health.latest_published_at))}</small></div><span class="pill ${health.latest_age_seconds != null && health.latest_age_seconds < 86400 ? 'green' : 'amber'}">${esc(age(health.latest_age_seconds))}</span></div><div class="health-row"><div><b>Editorial permissions</b><small>${data.access.read_only ? 'Changes are disabled server-side' : 'Authenticated owner access'}</small></div><span class="pill ${data.access.read_only ? 'amber' : 'green'}">${data.access.read_only ? 'Read-only' : 'Owner'}</span></div>`;
   $('attentionList').innerHTML = data.coverage.quality.slice(0,4).map(item => `<div class="attention-row"><span>${esc(item.name)}</span><b>${number(item.count)} stories</b></div>`).join('') || '<p class="muted">No completeness flags in the loaded sample.</p>';
   const synced = new Date(data.generated_at).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit'});
   $('footerSync').textContent = `Updated ${synced} IST · Refreshes every 60s on overview`;
@@ -278,7 +279,7 @@ function telemetryAvailable(kind) {
   const available = !!workspace?.capabilities.telemetry;
   $(kind + 'Content').classList.toggle('hidden',!available);
   $(kind + 'Unavailable').classList.toggle('hidden',available);
-  if (!available) $(kind + 'Unavailable').innerHTML = '<h3>Live telemetry is unavailable</h3><p>Worker run history is stored in the database. Restore database access and sign in with an owner session to view recorded metrics. No success rates are inferred from the snapshot.</p><button class="btn" data-view="system">View system status</button>';
+  if (!available) $(kind + 'Unavailable').innerHTML = '<h3>Live telemetry is unavailable</h3><p>Worker history is private to the phone PostgreSQL database. This website serves the public GitHub feed only; review execution metrics locally in Termux.</p><button class="btn" data-view="system">View system status</button>';
   return available;
 }
 function telemetryError(kind, message) {
@@ -289,16 +290,16 @@ function telemetryError(kind, message) {
 }
 async function loadActivity() {
   if (!workspace) return;
-  if (!workspace.capabilities.telemetry) { $('activityList').innerHTML = empty('The audit trail needs the database','Public snapshots do not contain private admin activity. Restore access to inspect persisted actions.'); return; }
+  if (!workspace.capabilities.telemetry) { $('activityList').innerHTML = empty('The audit trail needs the database','The public GitHub feed does not expose private phone editing or audit history.'); return; }
   try { const items = await api('/api/admin/activity?limit=100'); $('activityList').innerHTML = arr(items).map(item => `<article class="activity-item"><h3>${esc(item.action)}</h3><div class="meta">${esc(date(item.created_at))} · ${esc(item.username || 'System')}${item.item_id ? ' · #'+Number(item.item_id) : ''}</div><p>${esc(item.details || '')}</p></article>`).join('') || empty('No activity recorded','Admin actions will appear here after they are saved.'); }
   catch (error) { notice(error.message,'err'); }
 }
 function renderSystem() {
   if (!workspace) return;
   const health = workspace.health, access = workspace.access;
-  $('systemChecks').innerHTML = metric('Database',health.database === 'connected' ? 'Connected' : 'Unavailable',health.database === 'connected' ? 'Connection verified' : 'Persistent writes are paused') + metric('Data mode',workspace.mode === 'live' ? 'Live' : 'Snapshot',workspace.mode === 'live' ? 'Database-backed newsroom' : 'Saved public reports') + metric('Latest report age',age(health.latest_age_seconds),date(health.latest_published_at)) + metric('Workspace response',health.response_ms + ' ms','Server processing time, not browser latency');
+  $('systemChecks').innerHTML = (workspace.data_origin === 'termux_github' ? metric('Primary storage','Termux PostgreSQL','Private phone database; not remotely checked') + metric('Public delivery','GitHub feed','Approved phone exports plus attributed public sources') : metric('Database',health.database === 'connected' ? 'Connected' : 'Unavailable',health.database === 'connected' ? 'Connection verified' : 'Persistent writes are paused') + metric('Data mode',workspace.mode === 'live' ? 'Live' : 'Snapshot',workspace.mode === 'live' ? 'Database-backed newsroom' : 'Saved public reports')) + metric('Latest report age',age(health.latest_age_seconds),date(health.latest_published_at)) + metric('Workspace response',health.response_ms + ' ms','Server processing time, not browser latency');
   $('lastSync').textContent = 'Checked ' + date(workspace.generated_at);
-  $('sessionDetails').innerHTML = detail('Signed in as',access.username) + detail('Access scope',access.scope === 'recovery' ? 'Recovery · read-only' : access.read_only ? 'Owner · writes unavailable' : 'Owner') + detail('Session expires',access.expires_at ? date(access.expires_at*1000) : 'Legacy session') + detail('Database writes',access.read_only ? 'Blocked' : 'Allowed with CSRF protection') + detail('Private data storage','Session cookie only; no admin records in local storage') + detail('Coverage limit',workspace.limits.stories + ' loaded stories; charts describe this sample');
+  $('sessionDetails').innerHTML = detail('Signed in as',access.username) + detail('Access scope',access.scope === 'recovery' ? 'Recovery · read-only' : access.read_only ? 'Owner · writes unavailable' : 'Owner') + detail('Session expires',access.expires_at ? date(access.expires_at*1000) : 'Legacy session') + detail(workspace.data_origin === 'termux_github' ? 'Public website edits' : 'Database writes',workspace.data_origin === 'termux_github' ? 'Disabled — manage locally in Termux' : access.read_only ? 'Blocked' : 'Allowed with CSRF protection') + detail('Private data storage','Session cookie only; no admin records in local storage') + detail('Coverage limit',workspace.limits.stories + ' loaded stories; charts describe this sample');
 }
 function fillSettings(value) { settings = value || {}; $('websiteEnabled').checked = settings.website_enabled !== 'false'; }
 async function loadSettings() {

@@ -1098,6 +1098,7 @@ def admin_workspace():
  latest=max((r['timestamp'] for r in rows if r['timestamp'] is not None),default=None)
  writable=connected and not recovery_session()
  return jsonify({'version':2,'generated_at':now.isoformat(),'mode':'snapshot' if snapshot else 'live',
+   'data_origin':'termux_github' if os.getenv("VERCEL")=="1" or os.getenv("POLITICSHUB_GITHUB_FEED_ONLY")=="1" else 'local_database',
   'access':{'username':session.get('admin_user') or 'API token','scope':'recovery' if recovery_session() else 'owner','read_only':not writable,'expires_at':session.get('admin_expires_at')},
   'capabilities':{'publish':writable,'settings':writable,'telemetry':writable,'export':True},
   'health':{'database':'connected' if connected else 'unavailable','snapshot_available':bool(rows) if snapshot else None,
