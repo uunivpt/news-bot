@@ -7,6 +7,7 @@ from app.database import NewsDatabase, DatabaseUnavailable
 from app.collector import _source_due
 from app.rss import collect_rss
 from app.models import NewsItem
+from app.source_http import SourceDocument
 from api import index as api
 
 
@@ -87,8 +88,8 @@ class AuditRegressions(unittest.TestCase):
   with api.app.test_request_context('/api/news'):
    self.assertTrue(api._public_rate_allowed())
  def test_malformed_feed_fails_source_check(self):
-  response=Mock(content=b'<html>not a feed</html>')
-  with patch('app.rss.requests.get',return_value=response):
+  response=SourceDocument('https://example.com',b'<html>not a feed</html>','text/html')
+  with patch('app.rss.fetch_source',return_value=response):
    with self.assertRaises(ValueError):collect_rss({'name':'broken','url':'https://example.com'})
 
 if __name__=='__main__':unittest.main()

@@ -47,6 +47,13 @@ stores up to 100 article links on the reader's browser after optional preference
 are allowed. Article pages include text-size controls, a print layout and the
 existing share sheet. These features do not require an account.
 
+The source directory supports keyword and source-type filters. BBC World adds
+attributed international headline metadata to the existing RSS sources. Run
+`PYTHONPATH=. python scripts/check_sources.py --output artifacts/sources.json`
+for a read-only feed freshness report. Source HTTP reads share redirect, public
+destination and streaming size checks; see
+[the source hardening notes](docs/SOURCE_SAFETY_2026-10-31.md) for exact scope.
+
 Public API cards omit full articles; `/api/news/<id>` returns the article body.
 The command center uses the uncached `/api/admin/news` endpoint for private
 listing/filtering. Anonymous public responses avoid `Vary: Cookie`, which would

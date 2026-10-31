@@ -17,6 +17,8 @@ from app.database import NewsDatabase, DatabaseUnavailable, DatabaseBusy
 from app.public_delivery import WindowLimiter, read_json_rows, remote_rows
 from app.public_sessions import PublicSessionInterface
 from app.briefing import DESKS as BRIEFING_DESKS, select_briefing, briefing_excerpt
+from app.source_text import source_text as plain_source_text
+from app.source_http import fetch_source, public_http_url
 from app.admin_access import configured_users, verify_recovery_owner
 from app.admin_workspace import LIST_FIELDS as ADMIN_LIST_FIELDS, EDITORIAL_FIELDS, editorial_revision, project_rows as admin_project_rows, coverage as admin_coverage
 from app.category_routing import normalize_category
@@ -439,8 +441,8 @@ def _publicize(row):
    except ValueError:pass
   source_text=_strip_promo_nav(dict(row).get("bot_article") or dict(row).get("bot_summary") or dict(row).get("summary") or "")
   r["title"]=_public_title(r.get("title"),source_text)
-  r["summary"]=_strip_promo_nav(dict(row).get("bot_summary") or dict(row).get("summary") or "")
-  article_text=_strip_promo_nav(source_text)
+  r["summary"]=plain_source_text(_strip_promo_nav(dict(row).get("bot_summary") or dict(row).get("summary") or ""))
+  article_text=plain_source_text(_strip_promo_nav(source_text),paragraphs=True)
   article_text=re.sub(r"(?:\n|\s)*Why it matters:\s*$","",article_text,flags=re.I).strip()
   r["article"]=article_text
   r["url"]=_safe_source_url(r.get("url"))
@@ -486,24 +488,7 @@ def _public_image_path(row):
 
 
 def _safe_public_image_origin(url):
- from urllib.parse import urlsplit
- import ipaddress
- try:
-  parts=urlsplit(str(url or "").strip())
- except ValueError:
-  return False
- if parts.scheme not in {"http","https"} or not parts.hostname or parts.username or parts.password:
-  return False
- host=parts.hostname.lower().rstrip(".")
- if host in {"localhost","localhost.localdomain"} or host.endswith((".local",".internal",".localhost")):
-  return False
- try:
-  ip=ipaddress.ip_address(host)
-  if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
-   return False
- except ValueError:
-  pass
- return True
+ return public_http_url(url)
 
 
 @app.get("/api/x-card/<int:item_id>")
@@ -532,34 +517,23 @@ def public_story_image(item_id):
  if not _safe_public_image_origin(source_url):
   return Response(status=404)
  try:
-  import requests
   from urllib.parse import urlsplit
   parts=urlsplit(source_url)
   headers={
    "User-Agent":"Mozilla/5.0 (compatible; PoliticsHubImageProxy/1.0; +https://politicshub.in)",
-   "Accept":"image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+   "Accept":"image/avif,image/webp,image/png,image/jpeg,image/gif",
    "Referer":parts.scheme+"://"+parts.netloc+"/",
   }
-  with requests.get(source_url,headers=headers,stream=True,allow_redirects=True,timeout=12) as upstream:
-   upstream.raise_for_status()
-   content_type=(upstream.headers.get("content-type") or "").split(";",1)[0].strip().lower()
-   if not content_type.startswith("image/"):
-    raise RuntimeError("upstream did not return an image")
-   raw_length=upstream.headers.get("content-length")
-   if raw_length and int(raw_length)>8*1024*1024:
-    raise RuntimeError("upstream image is too large")
-   payload=bytearray()
-   for chunk in upstream.iter_content(64*1024):
-    if not chunk:continue
-    payload.extend(chunk)
-    if len(payload)>8*1024*1024:
-     raise RuntimeError("upstream image exceeded size limit")
-  response=Response(bytes(payload),mimetype=content_type)
+  upstream=fetch_source(source_url,headers=headers,timeout=12,max_bytes=8*1024*1024)
+  content_type=upstream.content_type.split(";",1)[0].strip()
+  if content_type not in {"image/avif","image/webp","image/png","image/jpeg","image/gif"}:
+   raise ValueError("Source image must use a supported raster format")
+  response=Response(upstream.content,mimetype=content_type)
   response.headers["Cache-Control"]="public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800"
   response.headers["X-Content-Type-Options"]="nosniff"
   return response
  except Exception as exc:
-  print(f"Public source image unavailable for item {item_id}: {exc}")
+  print(f"Public source image unavailable for item {item_id}: {type(exc).__name__}")
   return Response(status=404)
 
 
@@ -641,8 +615,8 @@ def _article_html(row):
  canonical=SITE_ORIGIN+article_path(row)
  published=row.get("published_at_iso") or row.get("published_at_site") or row.get("published_at")
  modified=row.get("published_at_iso") or row.get("published_at_site") or row.get("published_at")
- summary=str(row.get("summary") or row.get("bot_summary") or "")
- body=str(row.get("article") or row.get("bot_article") or row.get("body") or summary)
+ summary=plain_source_text(row.get("summary") or row.get("bot_summary"))
+ body=plain_source_text(row.get("article") or row.get("bot_article") or row.get("body") or summary,paragraphs=True)
  source=str(row.get("source_name") or "PoliticsHub.in")
  source_url=_safe_source_url(row.get("url"))
  image=SITE_ORIGIN+"/api/og/"+str(row.get("id"))+"?v=20261031-deva"

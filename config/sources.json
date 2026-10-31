@@ -98,6 +98,17 @@
       "note": "Publisher-provided RSS metadata only: headline, short excerpt and original link; no article scraping or image republication."
     },
     {
+      "name": "BBC News - World",
+      "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
+      "source_class": "rss",
+      "category": "world",
+      "enabled": true,
+      "public_source": true,
+      "timeout_seconds": 12,
+      "max_items": 35,
+      "note": "Publisher-provided RSS metadata only: headline, short excerpt and original link; no article scraping or image republication."
+    },
+    {
       "name": "TV9 Marathi - Maharashtra",
       "url": "https://www.tv9marathi.com/maharashtra/feed",
       "source_class": "rss",

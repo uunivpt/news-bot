@@ -1,21 +1,24 @@
 from typing import Any
 
 import feedparser
-import requests
-
 from .models import NewsItem
+from .source_http import fetch_source, public_http_url
+from .source_text import source_text
+from urllib.parse import urlsplit
 
 
 HEADERS = {"User-Agent": "PoliticsHubNewsBot/1.0 (+public-source-collector)"}
 
 
 def _image(entry: Any) -> str | None:
-    media = entry.get("media_content") or entry.get("media_thumbnail") or []
-    if media and isinstance(media, list):
-        return media[0].get("url")
-    enclosure = entry.get("enclosures") or []
-    if enclosure:
-        return enclosure[0].get("href") or enclosure[0].get("url")
+    for key in ("media_content", "media_thumbnail", "enclosures"):
+        media = entry.get(key) or []
+        for item in media[:8] if isinstance(media, list) else []:
+            if not isinstance(item, dict):
+                continue
+            candidate = item.get("url") or item.get("href")
+            if public_http_url(candidate):
+                return candidate
     return None
 
 
@@ -25,8 +28,8 @@ def collect_rss(source: dict[str, Any]) -> list[NewsItem]:
         return []
 
     timeout = min(max(int(source.get("timeout_seconds", 12)), 3), 30)
-    response = requests.get(url, headers=HEADERS, timeout=timeout)
-    response.raise_for_status()
+    allowed_hosts = source.get("allowed_hosts") or [(urlsplit(url).hostname or "").removeprefix("www.")]
+    response = fetch_source(url, headers=HEADERS, timeout=timeout, allowed_hosts=allowed_hosts)
     feed = feedparser.parse(response.content)
     if not feed.entries and (getattr(feed, "bozo", False) or not getattr(feed, "version", "")):
         raise ValueError("Source did not return a valid RSS or Atom feed")
@@ -34,12 +37,12 @@ def collect_rss(source: dict[str, Any]) -> list[NewsItem]:
     items: list[NewsItem] = []
     max_items = min(max(int(source.get("max_items", 50)), 1), 200)
     for entry in feed.entries[:max_items]:
-        title = (entry.get("title") or "").strip()
-        item_url = (entry.get("link") or "").strip()
-        if not title or not item_url:
+        title = source_text(entry.get("title"))
+        item_url = str(entry.get("link") or "").strip()
+        if not title or not public_http_url(item_url):
             continue
         published = entry.get("published") or entry.get("updated")
-        summary = entry.get("summary")
+        summary = source_text(entry.get("summary"))
         external_id = entry.get("id") or entry.get("guid") or item_url
         items.append(
             NewsItem(

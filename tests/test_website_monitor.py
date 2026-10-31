@@ -2,16 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from app.website_monitor import collect_website
-
-
-class FakeResponse:
-    def __init__(self, url, html):
-        self.url = url
-        self.text = html
-        self.headers = {"content-type": "text/html; charset=utf-8"}
-
-    def raise_for_status(self):
-        return None
+from app.source_http import SourceDocument
 
 
 class WebsiteMonitorTests(unittest.TestCase):
@@ -29,8 +20,8 @@ class WebsiteMonitorTests(unittest.TestCase):
 
         def fake_get(url, **kwargs):
             if url.endswith("/updates"):
-                return FakeResponse(url, index)
-            return FakeResponse(url, article)
+                return SourceDocument(url, index.encode(), "text/html; charset=utf-8")
+            return SourceDocument(url, article.encode(), "text/html; charset=utf-8")
 
         source = {
             "name": "Test Government",
@@ -43,13 +34,14 @@ class WebsiteMonitorTests(unittest.TestCase):
             "article_path_prefixes": ["/news/"],
             "max_links": 10,
         }
-        with patch("app.website_monitor.requests.get", side_effect=fake_get):
+        with patch("app.website_monitor.fetch_source", side_effect=fake_get) as fetch:
             items = collect_website(source)
 
         self.assertEqual(len(items), 2)
         self.assertTrue(all(item.source_type == "government" for item in items))
         self.assertTrue(all(item.public_source for item in items))
         self.assertTrue(all(item.url.startswith("https://example.gov/news/") for item in items))
+        self.assertTrue(all(call.kwargs["allowed_hosts"] == {"example.gov"} for call in fetch.call_args_list))
 
     def test_disabled_or_unpermitted_source_returns_nothing(self):
         source = {"name": "Private", "enabled": False, "collection_allowed": False, "sections": ["https://example.com/news"]}

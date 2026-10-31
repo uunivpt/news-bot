@@ -1,17 +1,14 @@
 """A bounded reading list from published reports, without invented summaries."""
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
-from bs4 import BeautifulSoup
+from .source_text import source_text
 
 DESKS = (("all", "All desks"), ("india", "India"), ("politics", "Politics"),
          ("world", "World"), ("hindi", "Hindi"))
 
 
 def briefing_excerpt(value):
-    document = BeautifulSoup(str(value or "")[:10000], "html.parser")
-    for node in document.select("script,style,noscript"):
-        node.decompose()
-    text = " ".join(document.get_text(" ", strip=True).split())
+    text = source_text(value)
     return text if len(text) <= 320 else text[:317].rsplit(" ", 1)[0] + "…"
 
 
