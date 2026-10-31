@@ -246,7 +246,7 @@ async function inspectStory(id) {
   if (!$('inspector').open) $('inspector').showModal();
   $('loadArticle').onclick = async () => {
     $('loadArticle').disabled = true; $('inspectorArticle').textContent = 'Loading article…';
-    try { const data = await api('/api/news/' + id); if (sequence !== inspectorSequence || !$('inspector').open) return; $('inspectorArticle').textContent = data.article || data.bot_article || data.summary || 'No article text available.'; }
+    try { const data = await api((workspace && !workspace.access.read_only ? '/api/admin/story/' + id + '/article' : '/api/news/' + id)); if (sequence !== inspectorSequence || !$('inspector').open) return; $('inspectorArticle').textContent = data.article || data.bot_article || data.summary || 'No article text available.'; }
     catch (error) { if (sequence === inspectorSequence && $('inspector').open) { $('inspectorArticle').textContent = error.message; $('loadArticle').disabled = false; } }
   };
   $('copySource').onclick = async () => { try { await navigator.clipboard.writeText(url); notice('Source link copied'); } catch { notice('Clipboard unavailable. Open the original source link.','err'); } };

@@ -1643,6 +1643,25 @@ def edit_news(item_id):
  finally:database.close()
 
 
+@app.get('/api/admin/story/<int:item_id>/article')
+def admin_private_article(item_id):
+ # Public /api/news/<id> intentionally hides pending editorial manuscripts.
+ # The same-origin signed bridge exposes the full text only to a logged-in
+ # owner/editor. It is never cached by Vercel or included in the public feed.
+ err=require_admin()
+ if err:return err
+ database=db()
+ try:
+  row=database.get_by_id(item_id)
+  if not row:return jsonify({'error':'story not found'}),404
+  row=dict(row)  # Also supports sqlite3.Row during isolated browser tests.
+  text=str(row.get('bot_article') or row.get('article') or row.get('summary') or '')
+  response=jsonify({'id':item_id,'article':text,'status':row.get('status')})
+  response.headers['Cache-Control']='private, no-store'
+  return response
+ finally:database.close()
+
+
 @app.get('/api/admin/story/<int:item_id>')
 def admin_editorial_draft(item_id):
  err=require_admin()

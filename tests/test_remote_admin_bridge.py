@@ -21,7 +21,9 @@ class RemoteAdminBridgeTests(unittest.TestCase):
 
     def test_approved_admin_paths_are_exactly_scoped(self):
         for p in ("/api/admin/login", "/api/admin/me", "/api/admin/workspace",
-                  "/api/admin/story/455", "/api/news/455/approve",
+                  "/api/admin/story/455", "/api/admin/story/455/article",
+                  "/api/admin/dashboard", "/api/admin/health",
+                  "/api/admin/operations.pdf", "/api/news/455/approve",
                   "/api/news/455/edit", "/api/fact-check"):
             self.assertTrue(is_private_endpoint(p), p)
         for p in ("/api/admin/setup", "/api/admin/nonexistent",
@@ -29,6 +31,38 @@ class RemoteAdminBridgeTests(unittest.TestCase):
                   "/api/health", "/api/newsletter/daily",
                   "/api/admin/story/../../etc/passwd"):
             self.assertFalse(is_private_endpoint(p), p)
+
+    def test_private_admin_preview_disallows_unrelated_public_api(self):
+        for path in ("/api/admin/story/1/article/extra",
+                     "/api/admin/story/-2/article", "/api/news/3",
+                     "/api/admin/../api/health"):
+            self.assertFalse(is_private_endpoint(path))
+
+    def test_secure_cookie_is_relayed_without_weak_localhost_attributes(self):
+        from unittest.mock import MagicMock
+        from app.remote_admin_bridge import proxy_public_admin
+        from flask import request
+        from email.message import Message
+
+        fake = MagicMock()
+        fake.read.return_value = b'{"ok":true}'
+        fake.status = 200
+        headers = Message()
+        headers.add_header("Set-Cookie",
+                           "politicshub_phone_admin=testvalue; Path=/; HttpOnly; SameSite=Strict")
+        fake.headers = headers
+        with self.app.test_request_context("/api/admin/me", method="GET"):
+            with patch.dict(os.environ, {
+                "POLITICSHUB_ADMIN_BRIDGE_URL": "https://my-admin.ts.net",
+                "POLITICSHUB_ADMIN_BRIDGE_SECRET": self.secret,
+            }), patch("app.remote_admin_bridge.build_opener") as opener:
+                opener.return_value.open.return_value = fake
+                response = proxy_public_admin()
+        cookie = response.headers.get("Set-Cookie")
+        self.assertIn("Secure", cookie)
+        self.assertIn("HttpOnly", cookie)
+        self.assertIn("SameSite=Strict", cookie)
+        self.assertNotIn("Domain=", cookie)
 
     def test_no_bridge_without_pair_of_envs(self):
         with patch.dict(os.environ, {"POLITICSHUB_ADMIN_BRIDGE_URL": "",
