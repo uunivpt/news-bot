@@ -180,6 +180,34 @@ def read_local(item_id):
         db.close()
 
 
+def list_local(limit=15):
+    """Show human-reviewable drafts without any admin password or DB writes."""
+    from app.database import NewsDatabase
+
+    worker = Path.home() / ".politicshub-worker.pgpass"
+    if not worker.is_file():
+        raise RuntimeError("Local worker credential file not found")
+    os.environ["PGPASSFILE"] = str(worker)
+    db = NewsDatabase(
+        database_url=LOCAL_DATABASE, initialize_schema=False,
+        connect_attempts=1,
+    )
+    try:
+        rows = db.conn.execute(
+            """SELECT id,title,source_name,url,summary,bot_summary,bot_article,
+                      status,public_source,approved_at,published_at,
+                      published_at_site,fact_check_status
+               FROM news_items
+               WHERE status='pending'
+                 AND LENGTH(COALESCE(bot_article,'')) >= 600
+               ORDER BY id DESC LIMIT %s""",
+            (limit,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        db.close()
+
+
 def approve_local(preview, sources, notes, password, admin_user="postgres", now=None):
     """Atomic local approval, followed separately by approved-only upload."""
     from psycopg import connect
@@ -263,16 +291,35 @@ def sync_approved():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--id", required=True, type=int)
+    target = parser.add_mutually_exclusive_group(required=True)
+    target.add_argument("--id", type=int)
+    target.add_argument("--list", action="store_true",
+                        help="List available private editorial drafts, read-only")
     parser.add_argument("--approve", action="store_true",
                         help="Begin explicit human approval of one reviewed article")
     parser.add_argument("--admin-user", default="postgres")
     args = parser.parse_args()
 
-    if args.id <= 0:
+    if args.id is not None and args.id <= 0:
         parser.error("--id must be a positive news ID")
+    if args.list and args.approve:
+        parser.error("--list is read-only and cannot approve stories")
     if os.environ.get("DATABASE_URL") or os.environ.get("DATABASE_3URL"):
         raise SystemExit("STOP: unset remote DATABASE_URL/DATABASE_3URL first")
+    if args.list:
+        print("=== TERMUX HUMAN REVIEW CANDIDATES (READ ONLY) ===")
+        records = list_local()
+        if not records:
+            print("No substantial pending drafts available for editorial review")
+        for item in records:
+            status = "ELIGIBLE FOR HUMAN REVIEW" if not review_eligibility(item) else "HOLD"
+            print(f"{item['id']}: {str(item.get('title') or '')[:95]}")
+            print(f"  {status}; source: {item.get('source_name')}; "
+                  f"draft: {len(item.get('bot_article') or '')} chars")
+            for flag in risk_flags(item):
+                print("  REVIEW FLAG:", flag)
+        print("LIST DOES NOT APPROVE OR PUBLISH NEWS")
+        return 0
     row = read_local(args.id)
     if row is None:
         raise SystemExit("Story ID not found in local phone PostgreSQL")
