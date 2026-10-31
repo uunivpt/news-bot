@@ -18,7 +18,7 @@ from .public_sessions import PublicSessionInterface
 from urllib.request import urlopen
 """
         self.assertEqual(set(dependencies("app.web", source)),
-                         {"app.database", "app.public_archive", "app.public_sessions"})
+                         {"app", "app.database", "app.public_archive", "app.public_sessions"})
 
     def test_detects_api_modules(self):
         source = "from api.maharashtra_feed import get_feed\n"
