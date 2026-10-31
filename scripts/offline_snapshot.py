@@ -157,7 +157,7 @@ def mobile_reviewed_story(row, now):
         return None
     if row.get("status") != "published" or row.get("public_source") is not True:
         return None
-    if not row.get("approved_at") or str(row.get("fact_check_status") or "").lower() not in {"passed", "verified", "approved"}:
+    if not row.get("approved_at") or str(row.get("fact_check_status") or "").lower() not in {"passed", "verified", "approved", "reviewed"}:
         return None
     url = str(row.get("url") or "")
     if not valid_url(url):
