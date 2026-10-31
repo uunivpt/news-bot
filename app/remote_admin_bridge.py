@@ -32,6 +32,8 @@ _MAX_BODY = 1024 * 1024
 
 
 def is_private_endpoint(path: str) -> bool:
+    if path == "/api/admin/news/create":
+        return True
     if path.startswith("/api/admin/"):
         return bool(_REVIEW.fullmatch(path))
     return bool(_STORY.fullmatch(path) or path == "/api/fact-check")
