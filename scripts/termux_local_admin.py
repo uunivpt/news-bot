@@ -48,8 +48,18 @@ def configure_private_app():
 
     @app.before_request
     def require_loopback():
+        # A named HTTPS outbound tunnel delivers requests to 127.0.0.1.
+        # In bridge mode EVERY request must carry a fresh signed gateway
+        # assertion; a public tunnel URL alone never grants admin access.
+        secret = os.getenv("POLITICSHUB_ADMIN_BRIDGE_SECRET", "")
         hostname = (request.host or "").split(":", 1)[0].lower()
-        if request.remote_addr != HOST or hostname not in {HOST, "localhost"}:
+        if request.remote_addr != HOST:
+            return jsonify({"error": "Phone-local admin only"}), 403
+        if secret:
+            from app.remote_admin_bridge import verify_phone_bridge
+            if not verify_phone_bridge(request, secret):
+                return jsonify({"error": "Secure phone gateway required"}), 403
+        elif hostname not in {HOST, "localhost"}:
             return jsonify({"error": "Phone-local admin only"}), 403
 
     @app.after_request
@@ -97,8 +107,14 @@ def create_local_owner(conn, password, *, reset=False):
 
 def _listening():
     try:
-        with urlopen(BASE + "/api/health", timeout=2):
-            return True
+        from urllib.request import Request
+        secret = os.getenv("POLITICSHUB_ADMIN_BRIDGE_SECRET", "")
+        headers = {}
+        if secret:
+            from app.remote_admin_bridge import bridge_headers
+            headers = bridge_headers(secret, "GET", "/api/health", b"")
+        with urlopen(Request(BASE + "/api/health", headers=headers), timeout=2) as response:
+            return response.status == 200
     except Exception:
         return False
 
