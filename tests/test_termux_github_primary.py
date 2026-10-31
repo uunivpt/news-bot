@@ -62,5 +62,20 @@ class TermuxGithubPrimaryTests(unittest.TestCase):
         initialize.assert_not_called()
 
 
+    def test_public_admin_overview_identifies_termux_storage(self):
+        with self.client.session_transaction() as session:
+            session["admin_user"] = "owner"
+            session["admin_scope"] = "recovery"
+        with patch.dict(os.environ, {"VERCEL": "1"}), \
+             patch.object(api, "_snapshot_rows", return_value=[STORY]), \
+             patch.object(api, "NewsDatabase") as initialize:
+            response = self.client.get("/api/admin/workspace")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json["mode"], "snapshot")
+        self.assertEqual(response.json["data_origin"], "termux_github")
+        self.assertTrue(response.json["access"]["read_only"])
+        initialize.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
