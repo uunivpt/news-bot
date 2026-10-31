@@ -51,7 +51,7 @@
     let menu = document.querySelector('#bg');
     if (!menu && top) { menu = document.createElement('button'); menu.className = 'ib burger'; menu.id = 'bg'; menu.textContent = '☰'; top.prepend(menu); }
     const dialog = document.createElement('dialog'); dialog.className = 'ui-menu'; dialog.id = 'section-menu'; dialog.setAttribute('aria-label','News sections');
-    dialog.innerHTML = '<button type="button" aria-label="Close menu">×</button><strong>Explore PoliticsHub</strong><nav aria-label="Sections">' + desks.map(([key,label]) => '<a href="/'+(key ? key+'/' : '')+'">'+label+'</a>').join('') + '<a href="/archive/">Archive</a><a href="/sources.html">Sources & references</a><a href="/saved.html">Saved stories</a><a href="/newsletter.html">Newsletter</a><a href="/search.html">Search</a></nav>';
+    dialog.innerHTML = '<button type="button" aria-label="Close menu">×</button><strong>Explore PoliticsHub</strong><nav aria-label="Sections">' + desks.map(([key,label]) => '<a href="/'+(key ? key+'/' : '')+'">'+label+'</a>').join('') + '<a href="/briefing/">Quick Briefing</a><a href="/archive/">Archive</a><a href="/sources.html">Sources & references</a><a href="/saved.html">Saved stories</a><a href="/newsletter.html">Newsletter</a><a href="/search.html">Search</a></nav>';
     document.body.append(dialog);
     if (menu) {
       menu.setAttribute('aria-label','Open menu'); menu.setAttribute('aria-controls',dialog.id); menu.setAttribute('aria-expanded','false');

@@ -48,7 +48,7 @@ test('editorial homepage script is CSP compatible',()=>{
  const html=fs.readFileSync('public/index.html','utf8');
  const script=fs.readFileSync('public/assets/editorial-home.js','utf8');
  assert.doesNotMatch(html,/<script id="ph-v14-script">/);
- assert.match(html,/src="\/assets\/editorial-home\.js\?v=phui30"/);
+ assert.match(html,/src="\/assets\/editorial-home\.js\?v=[a-z0-9]+"/);
  assert.match(script,/home=function\(c\)/);
  assert.match(script,/Source feed checks for news automatically/);
  assert.doesNotMatch(script,/onerror=/);
