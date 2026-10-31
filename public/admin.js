@@ -121,7 +121,7 @@ function renderWorkspace() {
   $('avatar').textContent = data.access.username.slice(0,1).toUpperCase();
   $('sessionRole').textContent = data.access.scope === 'recovery' ? 'Recovery · read-only' : data.access.read_only ? (githubOnly ? 'Owner · GitHub feed view' : 'Owner · database unavailable') : 'Owner session';
   $('connectionBadge').className = 'pill ' + (data.mode === 'live' || (githubOnly && sample) ? 'green' : 'amber');
-  $('connectionBadge').textContent = data.mode === 'live' ? (data.data_origin === 'local_database' ? 'Termux writable DB' : 'Live database') : githubOnly ? 'GitHub news feed' : 'Snapshot mode';
+  $('connectionBadge').textContent = data.mode === 'live' ? 'Live database' : githubOnly ? 'GitHub news feed' : 'Snapshot mode';
   $('workspaceBanner').classList.toggle('hidden',!data.notice);
   $('workspaceBanner').innerHTML = data.notice ? `<p><b>${data.access.read_only ? 'Read-only workspace. ' : ''}</b>${esc(data.notice)}</p><button class="text-btn" data-view="system">View status ↗</button>` : '';
   $('heroEyebrow').textContent = data.mode === 'live' ? 'EDITORIAL PULSE' : githubOnly ? 'PUBLIC FEED MONITOR' : 'CONTINUITY MODE';
