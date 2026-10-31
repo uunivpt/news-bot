@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from dataclasses import replace
 
 from app.models import NewsItem
-from scripts.offline_snapshot import public_story, build
+from scripts.offline_snapshot import public_story, build, mobile_reviewed_story, merge_mobile_reviewed
 
 
 NOW = datetime(2026, 10, 8, 7, 0, tzinfo=timezone.utc)
@@ -80,6 +80,74 @@ class OfflineNewsFallbackTests(unittest.TestCase):
         self.assertEqual(changed, 0)
         self.assertEqual(len(output), 1)
 
+    def test_existing_rss_snapshot_copy_is_repaired_without_new_stories(self):
+        story = public_story(replace(item(), source_type="rss"), NOW)
+        expected = story["summary"]
+        story["summary"] = '&lt;p class="publisher"&gt;' + expected + '&lt;/p&gt;'
+        output, changed = build([story], [], NOW)
+        self.assertGreater(changed, 0)
+        self.assertEqual(output[0]["summary"], expected)
+        self.assertIn("&lt;p", story["summary"])
+
+
+    def test_mobile_feed_rejects_unapproved_or_pending(self):
+        row = self._mobile_row()
+        row["approved_at"] = None
+        self.assertIsNone(mobile_reviewed_story(row, NOW))
+        row["approved_at"] = NOW.isoformat()
+        row["fact_check_status"] = "pending"
+        self.assertIsNone(mobile_reviewed_story(row, NOW))
+
+    @staticmethod
+    def _mobile_row(url="https://example.org/mobile-story", story_id=4503599627371000):
+        return {
+            "id": story_id, "status": "published", "public_source": True,
+            "approved_at": NOW.isoformat(), "fact_check_status": "verified",
+            "title": "India releases important official policy report today",
+            "url": url, "source_name": "Verified Official Source",
+            "source_type": "rss", "published_at": NOW.isoformat(),
+            "published_at_site": NOW.isoformat(),
+            "summary": "Officials released full policy details in a published public notice. The report links directly to the official original source.",
+            "category": "india"
+        }
+
+    def test_mobile_feed_accepts_admin_reviewed_only_when_approved(self):
+        row = self._mobile_row()
+        row["fact_check_status"] = "reviewed"
+        self.assertIsNotNone(mobile_reviewed_story(row, NOW))
+        row["approved_at"] = None
+        self.assertIsNone(mobile_reviewed_story(row, NOW))
+
+    def test_mobile_feed_valid_approved_story(self):
+        story = mobile_reviewed_story(self._mobile_row(), NOW)
+        self.assertIsNotNone(story)
+        self.assertEqual(story["status"], "published")
+        self.assertNotIn("approved_at", story)
+        self.assertEqual(story["bot_article"], "")
+
+    def test_mobile_merge_preserves_existing_article_id_and_dedupes(self):
+        prior = public_story(item(url="https://example.org/mobile-story"), NOW)
+        approved = self._mobile_row()
+        rows, changed = merge_mobile_reviewed([prior], [approved, approved], NOW)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["id"], prior["id"])
+        self.assertEqual(rows[0]["bot_article"], prior["bot_article"])
+        self.assertEqual(changed, 0)
+
+    def test_mobile_merge_blocks_id_collision(self):
+        prior = public_story(item(), NOW)
+        incoming = self._mobile_row(story_id=prior["id"])
+        rows, changed = merge_mobile_reviewed([prior], [incoming], NOW)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(changed, 0)
+
+    def test_mobile_merge_does_not_modify_existing_snapshot(self):
+        prior = public_story(item(), NOW)
+        before = dict(prior)
+        rows, changed = merge_mobile_reviewed([prior], [self._mobile_row()], NOW)
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(changed, 1)
+        self.assertEqual(prior, before)
 
 if __name__ == "__main__":
     unittest.main()

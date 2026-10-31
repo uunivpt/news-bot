@@ -62,7 +62,7 @@ main{min-height:70vh;animation:enter .5s var(--e)}
 .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px;padding-bottom:56px}
 .card{position:relative;grid-column:span 4;min-height:390px;display:flex;flex-direction:column;justify-content:flex-end;gap:10px;overflow:hidden;isolation:isolate;border-radius:32px;background:var(--kt);padding:clamp(20px,2vw,28px);transform:perspective(1000px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)) translateY(var(--ty,0px));transition:transform .3s ease-out,background .3s,color .3s,box-shadow .3s,opacity .7s,translate .7s var(--e)}
 .card:nth-child(7n+1),.card:nth-child(7n+4){grid-column:span 8;min-height:460px}
-.rv{opacity:0;translate:0 28px}.rv.in{opacity:1;translate:0 0}
+.rv{opacity:1;translate:0 0}.rv.in{opacity:1;translate:0 0}
 .card.im:after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(transparent 25%,rgba(0,0,0,.82))}.card.im img{z-index:-2}.card.im{color:#fff}.card.im p,.card.im .m{color:rgba(255,255,255,.82)}
 .card h3{font:800 clamp(24px,2.2vw,32px)/1.04 var(--display);letter-spacing:-.035em}.card:nth-child(7n+1) h3,.card:nth-child(7n+4) h3{font-size:clamp(30px,3.6vw,52px)}
 .card p{color:var(--mut);font-size:15px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.card .m{font-size:12px;color:var(--mut)}

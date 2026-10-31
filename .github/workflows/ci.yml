@@ -8,6 +8,21 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: politicshub_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -21,13 +36,20 @@ jobs:
           DATABASE_URL: ''
           PGSSLMODE: ''
           PHI4_ENABLED: 'false'
+          TEST_POSTGRES_URL: 'postgresql://postgres:postgres@127.0.0.1:5432/politicshub_test?sslmode=disable'
         run: |
           python -m compileall -q app api scripts run.py
           python -m unittest discover -s tests -p 'test_*.py' -v
-          node --check public/assets/site.js
-          node --check public/assets/editorial-home.js
-          node --check public/service-worker.js
-          node --check public/assets/story-page.js
-          node --check public/assets/status.js
+          for file in public/assets/*.js public/admin.js public/service-worker.js; do
+            node --check "$file"
+          done
           node --test tests/*.test.cjs
           node --test reel/scripts/layout.test.mjs
+      - name: Install browser test tools
+        run: |
+          pip install -r requirements-dev.txt
+          python -m playwright install --with-deps chromium
+      - name: Check responsive UI and reader flows with isolated fixtures
+        run: python scripts/browser_audit.py --serve-fixture --base-url http://127.0.0.1:8010 --output artifacts/browser
+      - name: Check owner and database-outage Admin Room flows
+        run: python scripts/admin_browser_audit.py --output artifacts/admin-browser

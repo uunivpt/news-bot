@@ -96,6 +96,41 @@
       "timeout_seconds": 12,
       "max_items": 50,
       "note": "Publisher-provided RSS metadata only: headline, short excerpt and original link; no article scraping or image republication."
+    },
+    {
+      "name": "BBC News - World",
+      "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
+      "source_class": "rss",
+      "category": "world",
+      "enabled": true,
+      "public_source": true,
+      "timeout_seconds": 12,
+      "max_items": 35,
+      "note": "Publisher-provided RSS metadata only: headline, short excerpt and original link; no article scraping or image republication."
+    },
+    {
+      "name": "TV9 Marathi - Maharashtra",
+      "url": "https://www.tv9marathi.com/maharashtra/feed",
+      "source_class": "rss",
+      "category": "india",
+      "enabled": true,
+      "public_source": true,
+      "timeout_seconds": 12,
+      "max_items": 35,
+      "check_every_minutes": 20,
+      "note": "Official Marathi RSS headlines and source links only. No article text/image republication."
+    },
+    {
+      "name": "ABP Majha - Maharashtra",
+      "url": "https://marathi.abplive.com/news/maharashtra/feed",
+      "source_class": "rss",
+      "category": "india",
+      "enabled": true,
+      "public_source": true,
+      "timeout_seconds": 12,
+      "max_items": 35,
+      "check_every_minutes": 20,
+      "note": "Official ABP Majha RSS directory feed. Source attribution and links only, no full-text copying."
     }
   ],
   "telegram": [
@@ -307,6 +342,74 @@
       "check_every_minutes": 30,
       "public_source": true,
       "review_required": true
+    }
+  ],
+  "hindi_rss": [
+    {
+      "name": "BBC Hindi - Latest",
+      "url": "https://feeds.bbci.co.uk/hindi/rss.xml",
+      "category": "hindi",
+      "enabled": true,
+      "public_source": true,
+      "source_class": "rss",
+      "timeout_seconds": 12,
+      "max_items": 25,
+      "check_every_minutes": 60
+    },
+    {
+      "name": "ABP News Hindi - India",
+      "url": "https://www.abplive.com/news/india/feed",
+      "category": "hindi",
+      "enabled": true,
+      "public_source": true,
+      "source_class": "rss",
+      "timeout_seconds": 12,
+      "max_items": 25,
+      "check_every_minutes": 60
+    },
+    {
+      "name": "ABP News Hindi - World",
+      "url": "https://www.abplive.com/news/world/feed",
+      "category": "hindi",
+      "enabled": true,
+      "public_source": true,
+      "source_class": "rss",
+      "timeout_seconds": 12,
+      "max_items": 25,
+      "check_every_minutes": 60
+    },
+    {
+      "name": "Amar Ujala - Breaking",
+      "url": "https://www.amarujala.com/rss/breaking-news.xml",
+      "category": "hindi",
+      "enabled": true,
+      "public_source": true,
+      "source_class": "rss",
+      "timeout_seconds": 12,
+      "max_items": 25,
+      "check_every_minutes": 60
+    },
+    {
+      "name": "Live Hindustan - National",
+      "url": "https://api.livehindustan.com/feeds/rss/national/rssfeed.xml",
+      "category": "hindi",
+      "enabled": true,
+      "public_source": true,
+      "source_class": "rss",
+      "timeout_seconds": 12,
+      "max_items": 25,
+      "check_every_minutes": 60
+    },
+    {
+      "name": "Aaj Tak Hindi - Latest",
+      "url": "https://www.aajtak.in/rssfeeds/?id=home",
+      "category": "hindi",
+      "enabled": true,
+      "public_source": true,
+      "source_class": "rss",
+      "timeout_seconds": 12,
+      "max_items": 25,
+      "check_every_minutes": 60
     }
   ]
 }

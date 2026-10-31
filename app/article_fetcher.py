@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import re
-from typing import Any
 from urllib.parse import urljoin
 
-import requests
 from bs4 import BeautifulSoup
+from .source_http import fetch_source, public_http_url
 
 HEADERS={"User-Agent":"PoliticsHubNewsBot/2.0 (+public-news-collector)"}
 URL_RE=re.compile(r"https?://[^\s<>()]+",re.I)
@@ -25,13 +24,12 @@ def extract_telegram_post(url,timeout=10):
  """Fetch the current public Telegram post text again instead of trusting an old/truncated DB copy."""
  if not TELEGRAM_RE.fullmatch(url or ""):return None
  try:
-  response=requests.get(url,headers=HEADERS,timeout=timeout,allow_redirects=True); response.raise_for_status()
-  soup=BeautifulSoup(response.text[:4_000_000],"html.parser")
+  response=fetch_source(url,headers=HEADERS,timeout=timeout,max_bytes=4_000_000,allowed_hosts={"t.me"})
+  soup=BeautifulSoup(response.content,"html.parser")
   node=soup.select_one(".tgme_widget_message_text")
   if not node:return None
   text=node.get_text(" ",strip=True)
   if len(text)<80:return None
-  title_node=soup.select_one(".tgme_widget_message_text")
   title=text
   return {"url":response.url,"title":title[:500],"description":"","image_url":None,"text":text}
  except Exception:return None
@@ -39,11 +37,11 @@ def extract_telegram_post(url,timeout=10):
 
 def extract_public_article(url,timeout=10):
  """Fetch readable public article material for the deterministic newsroom bot."""
- if not url.startswith(("http://","https://")):return None
+ if not public_http_url(url):return None
  try:
-  response=requests.get(url,headers=HEADERS,timeout=timeout,allow_redirects=True); response.raise_for_status()
-  if "html" not in (response.headers.get("content-type") or "").lower():return None
-  soup=BeautifulSoup(response.text[:4_000_000],"html.parser")
+  response=fetch_source(url,headers=HEADERS,timeout=timeout,max_bytes=4_000_000)
+  if "html" not in response.content_type:return None
+  soup=BeautifulSoup(response.content,"html.parser")
   for node in soup(["script","style","noscript","svg","nav","footer","form","aside"]):node.decompose()
   def meta(*names):
    for name in names:
@@ -72,14 +70,22 @@ def extract_public_article(url,timeout=10):
 
 
 def enrich_source_text(title,summary,source_url=None):
- """Prefer a fresh public post/article fetch so old truncated collected text is not republished."""
- if source_url and TELEGRAM_RE.fullmatch(source_url):
-  post=extract_telegram_post(source_url)
-  if post:return post
- for url in find_urls(summary)[:2]:
+ """Prefer the canonical source URL, then source links embedded in the summary.
+
+ All article fetches use the existing bounded, redirect-validated HTTP reader.
+ A blocked or unavailable article falls back to the attributed RSS excerpt;
+ this function never invents missing article facts.
+ """
+ candidates=[source_url,*find_urls(summary)[:2]]
+ seen=set()
+ for url in candidates:
+  if not url or url in seen or not public_http_url(url):
+   continue
+  seen.add(url)
   if TELEGRAM_RE.fullmatch(url):
    post=extract_telegram_post(url)
    if post:return post
-  article=extract_public_article(url)
-  if article:return article
+  else:
+   article=extract_public_article(url)
+   if article:return article
  return {"url":None,"title":title,"description":summary or "","image_url":None,"text":summary or title}

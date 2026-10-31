@@ -1,5 +1,7 @@
 name: News Collector
 
+# GitHub's public source feeds are independent of Neon. The private writable
+# PostgreSQL database and editorial approvals live on the Termux phone.
 on:
   schedule:
     - cron: "12,42 * * * *"
@@ -9,51 +11,47 @@ on:
     paths:
       - ".github/workflows/collector.yml"
       - "config/sources.json"
+      - "scripts/offline_snapshot.py"
 
 concurrency:
-  group: news-collector
+  group: emergency-public-feed
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 12
     steps:
-      - name: Checkout
+      - name: Checkout main
         uses: actions/checkout@v4
+        with:
+          ref: main
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
           cache: pip
-      - name: Install dependencies
+      - name: Install source dependencies
         run: pip install -r requirements.txt
-      - name: Verify Neon production database target
+      - name: Refresh attributed publisher RSS and other configured public sources
         env:
-          DATABASE_3URL: ${{ secrets.DATABASE_3URL }}
-        shell: bash
-        run: |
-          python - <<'PY'
-          import os
-          from urllib.parse import urlsplit
-          url = urlsplit(os.environ.get("DATABASE_3URL") or "")
-          allowed_hosts = {
-              "ep-bold-recipe-b5iqrmwg-pooler.c-7.us-east-2.aws.neon.tech",
-              "ep-bold-recipe-b5iqrmwg.c-7.us-east-2.aws.neon.tech",
-          }
-          if url.scheme not in {"postgres", "postgresql"} or url.hostname not in allowed_hosts:
-              raise SystemExit("DATABASE_3URL must target politics 3 (shy-mountain-59394437). Update the GitHub Actions secret.")
-          print("Database target verified (connection credentials concealed).")
-          PY
-      - name: Run collector once
-        env:
-          DATABASE_3URL: ${{ secrets.DATABASE_3URL }}
-          NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
           NEWSDATA_API_KEY: ${{ secrets.NEWSDATA_API_KEY }}
-          X_API_BEARER_TOKEN: ${{ secrets.X_API_BEARER_TOKEN }}
+        run: PYTHONPATH=. python scripts/offline_snapshot.py
+      - name: Coalesce feed updates
+        id: feed_release
+        env:
+          PYTHONPATH: .
+        run: python scripts/feed_release_gate.py --channel news
+      - name: Publish an eligible update without accessing Neon
+        if: steps.feed_release.outputs.publish == 'true'
         run: |
-          test -n "$DATABASE_3URL" || { echo "::error::DATABASE_3URL is missing; refusing to collect into ephemeral SQLite."; exit 1; }
-          python run.py --once
+          git config user.name "politicshub-feed-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/news-data.json app/data/public-archive.json.gz .github/feed-release-state/news.json
+          git diff --staged --quiet && exit 0
+          git commit -m "Refresh PoliticsHub public news snapshot"
+          git pull --rebase origin main
+          git push origin HEAD:main

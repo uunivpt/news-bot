@@ -3,11 +3,11 @@ import logging
 import time
 
 from app.collector import collect_once, load_sources
-from app.database import NewsDatabase
+from app.database import NewsDatabase, DatabaseUnavailable
 from app.phase_system import ensure_schema, run as agent_run
 
 
-def main() -> None:
+def main() -> int | None:
     parser = argparse.ArgumentParser(description="Phase 1 news collector")
     parser.add_argument("--once", action="store_true", help="collect once and exit")
     parser.add_argument("--interval", type=int, default=300, help="polling interval in seconds")
@@ -20,7 +20,15 @@ def main() -> None:
         format="%(asctime)s | %(levelname)s | %(message)s",
     )
     config = load_sources(args.config)
-    db = NewsDatabase(args.db)
+    try:
+        db = NewsDatabase(args.db)
+    except DatabaseUnavailable as exc:
+        # A provider quota block is an operational outage, not a broken news source.
+        # Exit 78 enables GitHub Actions to publish the attributed RSS snapshot.
+        if "quota exhausted" in str(exc).lower():
+            logging.error("%s", exc)
+            return 78
+        raise
     ensure_schema(db)
 
     try:
@@ -38,4 +46,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

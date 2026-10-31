@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 
 ARCHIVE_PATH = Path(__file__).parent / "data" / "public-archive.json.gz"
+_identity_cache = (None, {})
 FIELDS = ("id", "title", "summary", "bot_summary", "bot_article", "source_name",
           "source_type", "url", "published_at", "published_at_site", "category",
           "image_url", "image_source", "image_license", "public_source")
@@ -44,7 +45,12 @@ def rows(search=None):
 
 
 def by_id(item_id):
-    return next((dict(row) for row in _load() if str(row["id"]) == str(item_id)), None)
+    global _identity_cache
+    records = _load()
+    if _identity_cache[0] is not records:
+        _identity_cache = (records, {str(row['id']): row for row in records})
+    row = _identity_cache[1].get(str(item_id))
+    return dict(row) if row is not None else None
 
 
 def retain_public_records(incoming, path=ARCHIVE_PATH):

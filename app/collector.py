@@ -2,7 +2,6 @@ import json
 import logging
 import os
 from datetime import datetime, timedelta, timezone
-from urllib.parse import urlparse
 from pathlib import Path
 from typing import Any, Callable
 
@@ -13,15 +12,12 @@ from .telegram_public import collect_public_telegram
 from .website_monitor import collect_website
 from .x_source import collect_x
 from .phase_system import ensure_schema, run as agent_run, cluster_stories
+from .source_http import public_http_url
 
 logger = logging.getLogger(__name__)
 
 def _safe_http_url(value: str) -> bool:
-    try:
-        parsed=urlparse(str(value or "").strip())
-        return parsed.scheme.lower() in {"http","https"} and bool(parsed.netloc)
-    except Exception:
-        return False
+    return public_http_url(value)
 
 def _source_due(db: NewsDatabase, source_type: str, source: dict[str, Any]) -> bool:
     try:
@@ -67,6 +63,10 @@ def collect_once(config: dict[str, Any], db: NewsDatabase) -> tuple[int, int]:
     healthy = 0
     failures = []
     for source_type, sources in config.items():
+        # Hindi RSS is fetched by an independent hourly feed workflow.
+        # Do not consume the English newsroom publishing queue with it.
+        if source_type == "hindi_rss":
+            continue
         collector = COLLECTORS.get(source_type)
         if collector is None:
             logger.warning("Unknown source type: %s", source_type)

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.schema_cache import schema_once
 
 import hashlib
 import json
@@ -56,35 +57,38 @@ def _ph(db):
 
 
 def ensure_advanced_schema(db):
-    statements = [
-        """CREATE TABLE IF NOT EXISTS ph_reel_layout_history (
-            id BIGSERIAL PRIMARY KEY, item_id BIGINT, layout_id TEXT NOT NULL,
-            family TEXT NOT NULL, palette TEXT NOT NULL, created_at TEXT NOT NULL
-        )""",
-        """CREATE TABLE IF NOT EXISTS ph_story_state (
-            item_id BIGINT PRIMARY KEY, state TEXT NOT NULL, updated_at TEXT NOT NULL,
-            error TEXT, attempt INTEGER NOT NULL DEFAULT 0
-        )""",
-        """CREATE TABLE IF NOT EXISTS ph_audit (
-            id BIGSERIAL PRIMARY KEY, item_id BIGINT, stage TEXT NOT NULL,
-            status TEXT NOT NULL, details TEXT, created_at TEXT NOT NULL
-        )""",
-        """CREATE TABLE IF NOT EXISTS ph_verification (
-            item_id BIGINT PRIMARY KEY, classification TEXT NOT NULL,
-            source_count INTEGER NOT NULL DEFAULT 0, source_names TEXT,
-            conflicts TEXT, checked_at TEXT NOT NULL
-        )""",
-        """CREATE TABLE IF NOT EXISTS ph_performance (
-            id BIGSERIAL PRIMARY KEY, captured_at TEXT NOT NULL,
-            payload TEXT NOT NULL
-        )""",
-    ]
-    for sql in statements:
+    with schema_once(db, 'advanced-ops-v1') as required:
+        if not required:
+            return
+        statements = [
+            """CREATE TABLE IF NOT EXISTS ph_reel_layout_history (
+                id BIGSERIAL PRIMARY KEY, item_id BIGINT, layout_id TEXT NOT NULL,
+                family TEXT NOT NULL, palette TEXT NOT NULL, created_at TEXT NOT NULL
+            )""",
+            """CREATE TABLE IF NOT EXISTS ph_story_state (
+                item_id BIGINT PRIMARY KEY, state TEXT NOT NULL, updated_at TEXT NOT NULL,
+                error TEXT, attempt INTEGER NOT NULL DEFAULT 0
+            )""",
+            """CREATE TABLE IF NOT EXISTS ph_audit (
+                id BIGSERIAL PRIMARY KEY, item_id BIGINT, stage TEXT NOT NULL,
+                status TEXT NOT NULL, details TEXT, created_at TEXT NOT NULL
+            )""",
+            """CREATE TABLE IF NOT EXISTS ph_verification (
+                item_id BIGINT PRIMARY KEY, classification TEXT NOT NULL,
+                source_count INTEGER NOT NULL DEFAULT 0, source_names TEXT,
+                conflicts TEXT, checked_at TEXT NOT NULL
+            )""",
+            """CREATE TABLE IF NOT EXISTS ph_performance (
+                id BIGSERIAL PRIMARY KEY, captured_at TEXT NOT NULL,
+                payload TEXT NOT NULL
+            )""",
+        ]
+        for sql in statements:
+            if not db._postgres:
+                sql = sql.replace("BIGSERIAL PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT")
+            db.conn.execute(sql)
         if not db._postgres:
-            sql = sql.replace("BIGSERIAL PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT")
-        db.conn.execute(sql)
-    if not db._postgres:
-        db.conn.commit()
+            db.conn.commit()
 
 
 def _family_candidates(category):

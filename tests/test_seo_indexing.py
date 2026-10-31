@@ -75,13 +75,18 @@ class SEOIndexingTests(unittest.TestCase):
         with patch.object(api,"_public_row_by_id",return_value=dict(row,bot_article="short")):
             noindex=client.get("/api/seo-article"+canonical)
             self.assertIn('name="robots" content="noindex,follow"',noindex.get_data(as_text=True))
+            self.assertNotIn("pagead2.googlesyndication.com",noindex.get_data(as_text=True))
+            self.assertIn("not an independently reported",noindex.get_data(as_text=True))
 
     def test_static_pages_canonical_match_sitemap(self):
         from app.seo_indexing import STATIC_PAGES
         for path in STATIC_PAGES:
             if path=="/archive/":
                 continue  # Server-rendered dynamic archive, not a static HTML file.
-            source=Path("public/index.html" if path=="/" else "public"+path).read_text(encoding="utf-8")
+            source_path = "public/index.html" if path=="/" else "public"+path
+            if source_path.endswith("/"):
+                source_path += "index.html"
+            source=Path(source_path).read_text(encoding="utf-8")
             expected='<link rel="canonical" href="'+SITE_ORIGIN+path+'">'
             with self.subTest(path=path):
                 self.assertIn(expected,source)
@@ -102,6 +107,15 @@ class SEOIndexingTests(unittest.TestCase):
             page=api.app.test_client().get("/api/seo-article"+canonical_path(displayed))
             self.assertEqual(page.status_code,200)
             self.assertIn('<link rel="canonical" href="'+expected+'">',page.get_data(as_text=True))
+
+    def test_archive_works_without_long_form_articles(self):
+        with patch.object(api,"_published_sitemap_rows",return_value=[]):
+            response=api.app.test_client().get("/api/seo-archive")
+        self.assertEqual(response.status_code,200)
+        page=response.get_data(as_text=True)
+        self.assertIn('href="/nana-patekar-tribute.html"',page)
+        self.assertIn("noindex,follow",page)
+        self.assertNotIn("pagead2.googlesyndication.com",page)
 
     def test_archive_discovery_links_match_article_canonicals(self):
         one=example()

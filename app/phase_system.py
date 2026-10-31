@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.schema_cache import schema_once
 
 import hashlib
 import re
@@ -63,22 +64,25 @@ def _exec(db, sql, params=()):
     return db.conn.execute(sql, params)
 
 def ensure_schema(db):
-    statements = [x.strip() for x in SCHEMA.split(";") if x.strip()]
-    for statement in statements:
+    with schema_once(db, 'phase-v1') as required:
+        if not required:
+            return
+        statements = [x.strip() for x in SCHEMA.split(";") if x.strip()]
+        for statement in statements:
+            if not db._postgres:
+                statement = statement.replace("BIGSERIAL PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT")
+            _exec(db, statement)
         if not db._postgres:
-            statement = statement.replace("BIGSERIAL PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT")
-        _exec(db, statement)
-    if not db._postgres:
-        db.conn.commit()
-    now = datetime.now(timezone.utc).isoformat()
-    for aid, (name, role, phase) in AGENTS.items():
-        if db._postgres:
-            _exec(db, "INSERT INTO ph_agents(agent_id,name,role,phase,created_at,updated_at) VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT(agent_id) DO UPDATE SET name=EXCLUDED.name,role=EXCLUDED.role,phase=EXCLUDED.phase,updated_at=EXCLUDED.updated_at", (aid,name,role,phase,now,now))
-        else:
-            _exec(db, "INSERT OR IGNORE INTO ph_agents(agent_id,name,role,phase,created_at,updated_at) VALUES (?,?,?,?,?,?)", (aid,name,role,phase,now,now))
-            _exec(db, "UPDATE ph_agents SET name=?,role=?,phase=?,updated_at=? WHERE agent_id=?", (name,role,phase,now,aid))
-    if not db._postgres:
-        db.conn.commit()
+            db.conn.commit()
+        now = datetime.now(timezone.utc).isoformat()
+        for aid, (name, role, phase) in AGENTS.items():
+            if db._postgres:
+                _exec(db, "INSERT INTO ph_agents(agent_id,name,role,phase,created_at,updated_at) VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT(agent_id) DO UPDATE SET name=EXCLUDED.name,role=EXCLUDED.role,phase=EXCLUDED.phase,updated_at=EXCLUDED.updated_at", (aid,name,role,phase,now,now))
+            else:
+                _exec(db, "INSERT OR IGNORE INTO ph_agents(agent_id,name,role,phase,created_at,updated_at) VALUES (?,?,?,?,?,?)", (aid,name,role,phase,now,now))
+                _exec(db, "UPDATE ph_agents SET name=?,role=?,phase=?,updated_at=? WHERE agent_id=?", (name,role,phase,now,aid))
+        if not db._postgres:
+            db.conn.commit()
 
 def start(db, agent_id, operation, item_id=None, metadata=""):
     ensure_schema(db)

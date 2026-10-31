@@ -54,11 +54,11 @@ def main() -> None:
             new_category = normalize_category(current_category, title, summary)
             # Preserve legacy repair for incorrectly categorized NewsData politics.
             if new_category == current_category and current_category == "politics" and str(row.get("source_type") or "").lower() == "newsdata":
-                new_category = classify(title, summary)
+                new_category = normalize_category(classify(title, summary), title, summary)
             if new_category != current_category:
                 db.update(int(row["id"]), category=new_category)
                 changed += 1
-        print(f"Reclassified legacy NewsData rows: {changed}")
+        print(f"Reclassified retired desks and legacy NewsData rows: {changed}")
     finally:
         db.close()
 

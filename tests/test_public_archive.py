@@ -2,6 +2,7 @@ import gzip
 import json
 import tempfile
 import unittest
+from datetime import datetime,timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -64,6 +65,14 @@ class ArchiveTests(unittest.TestCase):
         with self.context(records), patch.object(api,"db",return_value=self.db), patch.object(self.db,"close"):
             result=self.client.get('/api/search?q=Parliament&limit=50&category=india')
             self.assertEqual([r['id'] for r in result.json],[990])
+
+    def test_source_and_date_filters_apply_before_pagination(self):
+        recent=datetime.now(timezone.utc).isoformat()
+        records=[story(991,date=recent),dict(story(992,date=recent),source_name='Other publisher'),story(993)]
+        with self.context(records),patch.object(api,'db',return_value=self.db),patch.object(self.db,'close'):
+            result=self.client.get('/api/search?q=Parliament&source=Archive%20Source&period=week&limit=1')
+        self.assertEqual([row['id'] for row in result.json],[991])
+        self.assertEqual(result.headers['X-Search-Total'],'1')
 
     def test_live_unpublished_record_suppresses_saved_copy_by_url(self):
         row=story(991)

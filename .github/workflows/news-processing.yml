@@ -1,99 +1,39 @@
-name: News Processing (Production)
-
-permissions:
-  contents: write
+name: Production Feed Quality Check (No Neon)
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - "app/**"
-      - "api/**"
-      - "config/sources.json"
-      - "scripts/auto_publish.py"
-      - "scripts/repair_news_categories.py"
-      - "scripts/export_public_snapshot.py"
-      - "requirements.txt"
-      - ".github/workflows/news-processing.yml"
-  # The 30-minute collector triggers this workflow via workflow_run.
-  # Keep only a low-frequency fallback schedule so duplicate newsroom runs
-  # cannot build a stale processing queue.
-  schedule:
-    - cron: "17 */3 * * *"
-  workflow_run:
-    workflows: ["News Collector"]
-    types: [completed]
     branches: [main]
+    paths:
+      - "api/**"
+      - "app/**"
+      - "scripts/offline_snapshot.py"
+      - "scripts/mobile_sync_upload.py"
+      - "public/assets/site.js"
+      - "public/assets/status.js"
+      - ".github/workflows/news-processing.yml"
   workflow_dispatch:
 
-# Code pushes must never compete with the production newsroom scheduler.
-# The newsroom owns its own cadence and runs one collection/publish cycle at a time.
-concurrency:
-  group: news-processing-production
-  cancel-in-progress: false
+permissions:
+  contents: read
 
 jobs:
-  process:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+  validate:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      DATABASE_3URL: ${{ secrets.DATABASE_3URL }}
-      PGSSLMODE: require
-      NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
-      NEWSDATA_API_KEY: ${{ secrets.NEWSDATA_API_KEY }}
-      X_API_BEARER_TOKEN: ${{ secrets.X_API_BEARER_TOKEN }}
-      PHI4_ENABLED: ${{ secrets.PHI4_ENABLED }}
-      PHI4_API_KEY: ${{ secrets.PHI4_API_KEY }}
-      PHI4_ENDPOINT: ${{ secrets.PHI4_ENDPOINT }}
-      PHI4_MODEL: ${{ secrets.PHI4_MODEL }}
-      PHI4_TIMEOUT_SECONDS: ${{ secrets.PHI4_TIMEOUT_SECONDS }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install ffmpeg
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - name: Install dependencies
         run: pip install -r requirements.txt
-      - name: Validate code and tests
+      - name: Check Python and published feed without Neon
         env:
-          PYTHONPATH: .
+          DATABASE_3URL: ""
+          DATABASE_URL: ""
+          POLITICSHUB_GITHUB_FEED_ONLY: "1"
         run: |
-          python -m compileall -q app api scripts run.py
-          DATABASE_3URL="" DATABASE_URL="" PGSSLMODE="" python -m unittest discover -s tests -p 'test_*.py' -v
-      - name: Verify database secret
-        run: |
-          test -n "$DATABASE_3URL" || { echo "DATABASE_3URL GitHub secret is missing."; exit 1; }
-      - name: Validate source configuration
-        run: python -m json.tool config/sources.json >/dev/null
-      - name: Collect fresh sources
-        if: github.event_name != 'workflow_run'
-        env:
-          PYTHONPATH: .
-        run: python run.py --once --config config/sources.json
-      - name: Repair category routing
-        env:
-          PYTHONPATH: .
-        run: python scripts/repair_news_categories.py
-      - name: Publish website queue
-        env:
-          PYTHONPATH: .
-          PUBLISH_WEBSITE: "true"
-          MAX_ITEMS: "10"
-          BOT_REPAIR_ITEMS: "3"
-        run: python scripts/auto_publish.py
-      - name: Export public snapshot and sitemaps
-        env:
-          PYTHONPATH: .
-        run: python scripts/export_public_snapshot.py
-      - name: Keep public snapshot out of production branch
-        run: |
-          # The live Vercel app reads the PostgreSQL-backed API directly.
-          # Snapshot files remain a local/exported fallback and must NOT be
-          # committed to main every 5 minutes, otherwise every scheduler run
-          # creates another Vercel deployment and exhausts the Hobby limit.
-          git restore -- public/news-data.json public/static-sitemap.xml public/sitemap.xml public/news-sitemap*.xml || true
-          echo "Public snapshot exported for this run; production branch unchanged."
+          python -m compileall -q api app scripts
+          python -m json.tool public/news-data.json >/dev/null
+          python -m unittest discover -s tests -p 'test_public_snapshot_runtime.py' -v
+          python -m unittest discover -s tests -p 'test_termux_github_primary.py' -v

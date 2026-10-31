@@ -1,36 +1,49 @@
-"""Editorial category rules shared by the main newsroom and emergency feed.
+"""Stable public categories; retired desks are rehomed, not deleted.
 
-PoliticsHub routes reports about Nana Patekar and obituaries of Indian cultural
-figures to India, even when syndication metadata labels them Entertainment.
-Ordinary film releases, reviews and celebrity coverage stay in Entertainment.
+Only India, World, Politics, Hindi and Maharashtra remain visible. Retired
+Entertainment/Business/Technology/Sports/Science/Health news retains its
+original article ID, URL and publication status while its desk is updated.
 """
 from __future__ import annotations
 
 import re
 
+RETIRED_DESKS = frozenset({
+    "entertainment", "business", "technology", "sports", "science", "health",
+})
 INDIAN_SIGNAL = re.compile(
-    r"\b(?:India|Indian|Bollywood|Marathi|Maharashtra|Hindi cinema|"
-    r"Telugu cinema|Tamil cinema|Malayalam cinema|Bengali cinema|"
-    r"Indian cinema|Indian film|Padma Shri|Padma Bhushan)\b",
-    re.IGNORECASE,
+    r"\b(?:india|indian|bollywood|marathi|maharashtra|hindi cinema|"
+    r"telugu cinema|tamil cinema|malayalam cinema|bengali cinema|"
+    r"indian cinema|indian film|padma shri|padma bhushan|deepika|ranveer)\b"
+    r"|भारत|भारतीय|महाराष्ट्र|बॉलीवुड|मुंबई|दिल्ली", re.IGNORECASE,
 )
-OBITUARY_SIGNAL = re.compile(
-    r"\b(?:dies|died|death|dead|passes? away|passed away|passing|"
-    r"demise|obituary|no more|last rites|funeral|laid to rest|"
-    r"mourns?|condolences?|tributes? to (?:late|veteran))\b",
-    re.IGNORECASE,
+POLITICS_SIGNAL = re.compile(
+    r"\b(?:elections?|vot(?:e|es|ing)|polling|ballot|politic(?:s|al|ian)|"
+    r"parliament|lok sabha|rajya sabha|legislature|assembly|"
+    r"bjp|congress|cabinet|government formation|coalition|"
+    r"prime minister|chief minister|minister|opposition|"
+    r"president(?:ial)? election|manifesto)\b"
+    r"|चुनाव|राजनीति|संसद|विधानसभा|प्रधानमंत्री|मुख्यमंत्री", re.IGNORECASE,
+)
+WORLD_SIGNAL = re.compile(
+    r"\b(?:hollywood|oscars?|grammys?|k[- ]?pop|korea|china|japan|"
+    r"united states|usa|u\\.s\\.|american|british|united kingdom|"
+    r"london|europe|european|russia|ukraine|israel|gaza|iran|"
+    r"france|germany|canada|australia|international|global|world)\b"
+    r"|अमेरिका|ब्रिटेन|चीन|रूस|यूक्रेन|दुनिया|विदेश", re.IGNORECASE,
 )
 NANA = re.compile(r"\bNana\s+Patekar\b", re.IGNORECASE)
 
 
 def normalize_category(category: str | None, title: str = "", summary: str = "") -> str:
     name = str(category or "india").strip().lower()
-    title_text = str(title or "")
-    summary_text = str(summary or "")
-    if NANA.search(title_text) or NANA.search(summary_text):
+    text = f"{title or ''} {summary or ''}"
+    if NANA.search(text):
         return "india"
-    if name == "entertainment":
-        text = f"{title_text} {summary_text}"
-        if INDIAN_SIGNAL.search(text) and OBITUARY_SIGNAL.search(text):
-            return "india"
-    return name
+    if name in RETIRED_DESKS:
+        if POLITICS_SIGNAL.search(text):
+            return "politics"
+        if WORLD_SIGNAL.search(text) and not INDIAN_SIGNAL.search(text):
+            return "world"
+        return "india"
+    return name or "india"

@@ -39,9 +39,38 @@
           "value": "public, max-age=3600, must-revalidate"
         }
       ]
+    },
+    {
+      "source": "/ads.txt",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "text/plain; charset=utf-8"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600"
+        }
+      ]
     }
   ],
   "rewrites": [
+    {
+      "source": "/briefing",
+      "destination": "/api/briefing"
+    },
+    {
+      "source": "/briefing/",
+      "destination": "/api/briefing"
+    },
+    {
+      "source": "/maharashtra",
+      "destination": "/maharashtra/index.html"
+    },
+    {
+      "source": "/maharashtra/",
+      "destination": "/maharashtra/index.html"
+    },
     {
       "source": "/musk-starlink-news.jpg",
       "destination": "/api/article_poster"
@@ -191,7 +220,79 @@
   ],
   "functions": {
     "api/index.py": {
-      "includeFiles": "app/data/**"
+      "includeFiles": "app/{data,fonts,templates}/**"
     }
-  }
+  },
+  "redirects": [
+    {
+      "source": "/business",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/business/",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/technology",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/technology/",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/sports",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/sports/",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/entertainment",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/entertainment/",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/science",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/science/",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/health",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/health/",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/Maharashtra",
+      "destination": "/maharashtra/",
+      "permanent": true
+    },
+    {
+      "source": "/Maharashtra/",
+      "destination": "/maharashtra/",
+      "permanent": true
+    }
+  ]
 }

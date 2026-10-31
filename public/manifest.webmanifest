@@ -6,6 +6,6 @@
   "display":"standalone",
   "background_color":"#f2f2f6",
   "theme_color":"#c8102e",
-  "description":"Independent reporting on politics, power and the stories shaping India.",
+  "description":"Source-linked news, official references and the stories shaping India.",
   "icons":[{"src":"/favicon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
 }

@@ -35,7 +35,7 @@ test('API outage serves snapshot with a non-live state',async()=>{
 test('out-of-order search responses cannot replace the newest query',async()=>{
  const elements={'#si':{value:'first'},'#sc':{textContent:''},'#sres':{innerHTML:''}};
  const pending=[];
- const context=vm.createContext({window:{},$:(s)=>elements[s],get:()=>new Promise(resolve=>pending.push(resolve)),ENDPOINTS:{search:'/api/search'},S:{items:[]},norm:x=>x,inCat:()=>true,esc:String,articleHref:x=>'/'+x.id,ago:()=>'',doS(){}});
+ const context=vm.createContext({AbortController,window:{},$:(s)=>elements[s],get:()=>new Promise(resolve=>pending.push(resolve)),ENDPOINTS:{search:'/api/search'},S:{items:[]},norm:x=>x,inCat:()=>true,esc:String,articleHref:x=>'/'+x.id,ago:()=>'',doS(){}});
  vm.runInContext(source.slice(source.indexOf('let searchRequest='),source.indexOf('const __article=')),context);
  const old=vm.runInContext('doS()',context);elements['#si'].value='second';const current=vm.runInContext('doS()',context);
  pending[1]([{id:2,title:'Second result'}]);await current;
@@ -48,7 +48,7 @@ test('editorial homepage script is CSP compatible',()=>{
  const html=fs.readFileSync('public/index.html','utf8');
  const script=fs.readFileSync('public/assets/editorial-home.js','utf8');
  assert.doesNotMatch(html,/<script id="ph-v14-script">/);
- assert.match(html,/src="\/assets\/editorial-home\.js\?v=phui19"/);
+ assert.match(html,/src="\/assets\/editorial-home\.js\?v=[a-z0-9]+"/);
  assert.match(script,/home=function\(c\)/);
  assert.match(script,/Source feed checks for news automatically/);
  assert.doesNotMatch(script,/onerror=/);
@@ -65,7 +65,9 @@ test('Nana Patekar and Indian obituaries are India news, not Entertainment',()=>
  assert.equal(vm.runInContext('NANA_TRIBUTE.category',ctx),'india');
  assert.equal(vm.runInContext("newsCategory('entertainment','Nana Patekar dies at 75','')",ctx),'india');
  assert.equal(vm.runInContext("newsCategory('entertainment','Indian actor dies at 82','Bollywood mourns')",ctx),'india');
- assert.equal(vm.runInContext("newsCategory('entertainment','New Bollywood movie announced','')",ctx),'entertainment');
+ assert.equal(vm.runInContext("newsCategory('entertainment','New Bollywood movie announced','')",ctx),'india');
+ assert.equal(vm.runInContext("newsCategory('entertainment','Hollywood awards show','')",ctx),'world');
+ assert.equal(vm.runInContext("newsCategory('entertainment','Film actor joins election campaign','')",ctx),'politics');
  assert.equal(vm.runInContext("inCat(NANA_TRIBUTE,'india')",ctx),true);
  assert.equal(vm.runInContext("inCat(NANA_TRIBUTE,'entertainment')",ctx),false);
 });
@@ -82,7 +84,7 @@ test('source snapshot supersedes stale browser cache and stays source-fed',async
 
 test('feed status accurately distinguishes source feed from offline browser cache',()=>{
  assert.match(source,/SOURCE FEED/);
- assert.match(source,/News source feed is active/);
+ assert.match(source,/GitHub public news feed is active/);
  assert.match(source,/Connection unavailable\. Showing previously loaded stories/);
  assert.doesNotMatch(source,/Showing saved stories\. Live updates are temporarily unavailable/);
 });
@@ -97,7 +99,7 @@ test('mobile page requests explicit web fonts with stable fallback',()=>{
 test('archive search loads beyond fifty results and filters category on the server',async()=>{
  const elements={'#si':{value:'India'},'#sc':{textContent:''},'#sres':{innerHTML:''},'#searchMore':{}};
  const urls=[];
- const context=vm.createContext({window:{searchCat:'india'},$:(s)=>elements[s],get:async url=>{
+ const context=vm.createContext({AbortController,window:{searchCat:'india'},$:(s)=>elements[s],get:async url=>{
   urls.push(url);const offset=Number(new URL(url,'https://example.com').searchParams.get('offset'));
   return Array.from({length:offset===0?50:12},(_,i)=>({id:offset+i+1,title:'Result '+(offset+i+1),category:'india'}));
  },ENDPOINTS:{search:'/api/search'},S:{items:[]},norm:x=>x,inCat:()=>true,esc:String,articleHref:x=>'/'+x.id,ago:()=>'',doS(){}});
