@@ -1611,6 +1611,78 @@ def reject(item_id):return change(item_id,status="rejected")
 @app.post("/api/news/<int:item_id>/publish")
 def publish(item_id):return change(item_id,status="published",published_at_site=datetime.now(timezone.utc).isoformat())
 
+@app.post("/api/admin/news/create")
+def create_manual_story():
+ err=require_admin()
+ if err:return err
+ err=require_csrf()
+ if err:return err
+ body=request.get_json(silent=True)
+ if not isinstance(body,dict):return jsonify({"error":"JSON body required"}),400
+ title=str(body.get("title") or "").strip()
+ summary=str(body.get("summary") or "").strip()
+ article=str(body.get("article") or "").strip()
+ category=str(body.get("category") or "india").lower().strip()
+ original=str(body.get("source_url") or "").strip()
+ source=str(body.get("source_name") or "PoliticsHub Editorial").strip()
+ image=str(body.get("image_url") or "").strip()
+ image_license=str(body.get("image_license") or "").strip().lower()
+ image_credit=str(body.get("image_credit") or "").strip()
+ if not 20<=len(title)<=250 or not 60<=len(summary)<=1800 or not 600<=len(article)<=50000:
+  return jsonify({"error":"Headline 20-250 chars, summary 60-1800 chars and article 600-50000 chars required"}),400
+ if category not in {"india","world","politics","maharashtra","hindi","general"}:
+  return jsonify({"error":"Select a supported news desk"}),400
+ from urllib.parse import urlsplit
+ src=urlsplit(original)
+ if src.scheme!="https" or not src.hostname or src.username or len(original)>2000:
+  return jsonify({"error":"A valid HTTPS reporting/source URL is required"}),400
+ if image:
+  parsed=urlsplit(image)
+  if parsed.scheme!="https" or not parsed.hostname or parsed.username or len(image)>2000:
+   return jsonify({"error":"Image must be an HTTPS URL"}),400
+  if image_license not in {"cc0","pdm","rights-owned","licensed"}:
+   return jsonify({"error":"Specify image rights before using an image"}),400
+  if not image_credit:return jsonify({"error":"Image credit is required"}),400
+ if len(source)>160:return jsonify({"error":"Source name too long"}),400
+ import uuid
+ from app.normalize import normalize_url,fingerprint
+ now=datetime.now(timezone.utc).isoformat()
+ reference=normalize_url(original)
+ unique=str(uuid.uuid4())
+ normalized=reference+"#manual-"+unique
+ url_hash,title_hash=fingerprint(normalized,title)
+ database=db()
+ try:
+  ph="%s" if database._postgres else "?"
+  keys=("source_name","source_type","title","url","normalized_url",
+        "published_at","summary","external_id","url_hash","title_hash",
+        "collected_at","category","image_url","public_source","bot_summary",
+        "bot_article","image_source","image_license","image_credit","image_source_url",
+        "fact_check_status","status")
+  params=(source,"manual",title,original,normalized,now,summary,
+          "manual-"+unique,url_hash,title_hash,now,category,image,1,summary,
+          article,"article-source" if image else "",image_license,image_credit,
+          image if image else "","pending","pending")
+  with database.conn.transaction() if database._postgres else __import__("contextlib").nullcontext():
+   if database._postgres:
+    result=database.conn.execute(
+     "INSERT INTO news_items ("+",".join(keys)+") VALUES ("
+     +",".join([ph]*len(keys))+") RETURNING id",params)
+    item_id=result.fetchone()[0]
+   else:
+    result=database.conn.execute(
+     "INSERT INTO news_items ("+",".join(keys)+") VALUES ("
+     +",".join([ph]*len(keys))+")",params)
+    item_id=result.lastrowid
+   database.conn.execute(
+    "INSERT INTO admin_activity (username,action,item_id,details,created_at) VALUES ("
+    +",".join([ph]*5)+")",
+    (session.get("admin_user"),"news.manual.create",item_id,"Manual editorial draft created, verification pending",now))
+   if not database._postgres:database.conn.commit()
+  return jsonify({"ok":True,"id":item_id,"status":"pending","message":"Draft saved. Verify and approve before publishing."}),201
+ finally:database.close()
+
+
 @app.post("/api/news/<int:item_id>/edit")
 def edit_news(item_id):
  err=require_admin()
