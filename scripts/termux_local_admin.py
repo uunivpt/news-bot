@@ -20,6 +20,10 @@ from pathlib import Path
 from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
+# Running `python scripts/termux_local_admin.py` normally puts only scripts/
+# on sys.path, not the project root containing api/ and app/.
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 HOME = Path.home()
 PORT = 8765
 HOST = "127.0.0.1"
