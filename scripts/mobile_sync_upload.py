@@ -19,7 +19,7 @@ from urllib.parse import urlsplit
 BRANCH = "main"
 REMOTE = "git@github.com:uunivpt/news-bot.git"
 TARGET = "public/mobile-reviewed.json"
-ALLOWED_CHECKS = {"passed", "verified", "approved"}
+ALLOWED_CHECKS = {"passed", "verified", "approved", "reviewed"}
 
 
 def validated(rows):
