@@ -70,14 +70,22 @@ def extract_public_article(url,timeout=10):
 
 
 def enrich_source_text(title,summary,source_url=None):
- """Prefer a fresh public post/article fetch so old truncated collected text is not republished."""
- if source_url and TELEGRAM_RE.fullmatch(source_url):
-  post=extract_telegram_post(source_url)
-  if post:return post
- for url in find_urls(summary)[:2]:
+ """Prefer the canonical source URL, then source links embedded in the summary.
+
+ All article fetches use the existing bounded, redirect-validated HTTP reader.
+ A blocked or unavailable article falls back to the attributed RSS excerpt;
+ this function never invents missing article facts.
+ """
+ candidates=[source_url,*find_urls(summary)[:2]]
+ seen=set()
+ for url in candidates:
+  if not url or url in seen or not public_http_url(url):
+   continue
+  seen.add(url)
   if TELEGRAM_RE.fullmatch(url):
    post=extract_telegram_post(url)
    if post:return post
-  article=extract_public_article(url)
-  if article:return article
+  else:
+   article=extract_public_article(url)
+   if article:return article
  return {"url":None,"title":title,"description":summary or "","image_url":None,"text":summary or title}
