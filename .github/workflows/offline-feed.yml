@@ -10,6 +10,7 @@ on:
     branches: [main]
     paths:
       - "scripts/offline_snapshot.py"
+      - "public/mobile-reviewed.json"
       - "config/sources.json"
       - "app/rss.py"
       - "app/news_api.py"
