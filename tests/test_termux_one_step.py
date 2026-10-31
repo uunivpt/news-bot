@@ -35,7 +35,8 @@ class PipelineCycleTests(unittest.TestCase):
             with patch.object(mobile_pipeline_cycle.STATE.__class__, "replace"):
                 result = mobile_pipeline_cycle.cycle()
         self.assertEqual(result, 0)
-        self.assertEqual(run.call_count, 2)
+        self.assertEqual(run.call_count, 3)
+        self.assertIn("mobile_review_report.py", run.call_args_list[2].args[0][1])
         self.assertIn("mobile_prepare_drafts.py", run.call_args_list[0].args[0][1])
         self.assertIn("mobile_sync_upload.py", run.call_args_list[1].args[0][1])
         self.assertIn("--push", run.call_args_list[1].args[0])
@@ -45,7 +46,8 @@ class PipelineCycleTests(unittest.TestCase):
     @patch("time.time", return_value=1800000001)
     def test_sync_error_fails_closed(self, clock, read, run):
         self.assertEqual(mobile_pipeline_cycle.cycle(), 1)
-        self.assertEqual(run.call_count, 1)
+        self.assertEqual(run.call_count, 2)
+        self.assertIn("mobile_review_report.py", run.call_args_list[1].args[0][1])
 
 
 if __name__ == "__main__":

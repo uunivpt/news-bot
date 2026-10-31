@@ -20,10 +20,37 @@ from app.newsroom import process_news, validate_news_copy
 from app.phase_system import quality_gate
 
 LOCAL_DATABASE = "postgresql://politicshub_collector@127.0.0.1:5432/politicshub?sslmode=disable"
+CURSOR_FILE = Path.home() / ".local/share/politicshub/draft-review-cursor"
 
 
-def prepare(db, limit=5, write=False):
-    rows = [dict(row) for row in db.latest(limit, status="pending")]
+def pending_without_drafts(db, limit: int, cursor: int | None = None):
+    """Walk the whole pending queue instead of retrying the same five IDs.
+
+    All operations are read-only; the local cursor is advanced only by main()
+    after an entire draft batch finishes without an exception.
+    """
+    def query(bound):
+        return [dict(row) for row in db.conn.execute(
+            """SELECT * FROM news_items
+               WHERE status = %s
+                 AND COALESCE(BTRIM(bot_article), '') = ''
+                 AND id < %s
+               ORDER BY id DESC LIMIT %s""",
+            ("pending", bound, limit),
+        ).fetchall()]
+
+    rows = query(cursor if cursor is not None and cursor > 0 else 2**63 - 1)
+    if not rows and cursor is not None:
+        rows = query(2**63 - 1)
+    return rows
+
+
+def prepare(db, limit=5, write=False, rows=None):
+    if rows is None:
+        # Preserve a tiny test/interactive API; scheduled work passes a
+        # rotating batch from pending_without_drafts() explicitly.
+        rows = db.latest(limit, status="pending")
+    rows = [dict(row) for row in rows]
     stats = {"examined": 0, "ready": 0, "saved": 0, "held": 0}
     for row in rows:
         stats["examined"] += 1
@@ -88,7 +115,18 @@ def main():
     try:
         if not db._postgres:
             raise RuntimeError("STOP: PostgreSQL connection required")
-        data = prepare(db, args.limit, args.write)
+        try:
+            cursor = int(CURSOR_FILE.read_text().strip())
+        except (OSError, ValueError):
+            cursor = None
+        rows = pending_without_drafts(db, args.limit, cursor)
+        data = prepare(db, args.limit, args.write, rows=rows)
+        if args.write and rows:
+            CURSOR_FILE.parent.mkdir(parents=True, exist_ok=True)
+            tmp = CURSOR_FILE.with_suffix(".tmp")
+            tmp.write_text(str(min(int(row["id"]) for row in rows)))
+            tmp.replace(CURSOR_FILE)
+            print("NEXT BATCH CURSOR:", min(int(row["id"]) for row in rows))
         print("=== MOBILE REVIEW PREPARATION ===")
         for key, value in data.items():
             print(f"{key}: {value}")
