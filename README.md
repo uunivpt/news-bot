@@ -37,6 +37,11 @@ See [the deployment-budget notes](docs/DEPLOYMENT_BUDGET.md).
 
 Image acquisition tries up to five relevant licensed candidates before falling back to a text-only Reel. Article text retains the lead fact even when the headline repeats it; summaries still avoid headline repetition.
 
+Weekly Dependabot update PRs cover Python requirements, the `/reel` npm project,
+and GitHub Actions. Limits are two Python PRs, two npm PRs and one Actions PR;
+Remotion packages are grouped so their coordinated versions can be reviewed
+together. Dependency updates still require the repository's compatibility checks.
+
 ## Local test
 `pip install -r requirements.txt`
 `python run.py --once`
