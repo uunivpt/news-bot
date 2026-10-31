@@ -1,8 +1,8 @@
 """Safe Termux -> GitHub reviewed-news uploader.
 
 Defaults to preview-only. --push writes only public/mobile-reviewed.json to
-the requested integration branch, and skips empty exports.
-No PostgreSQL port exposure, force push, or production main updates.
+the production main branch after the integration PR is merged; skips empty exports.
+No PostgreSQL port exposure, force push, or writes to unrelated files.
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
 
-BRANCH = "mobile-reviewed-fallback-20261031"
+BRANCH = "main"
 REMOTE = "git@github.com:uunivpt/news-bot.git"
 TARGET = "public/mobile-reviewed.json"
 ALLOWED_CHECKS = {"passed", "verified", "approved"}
@@ -64,11 +64,11 @@ def command(args, cwd=None, env=None, capture=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--push", action="store_true",
-                        help="Opt in to push to the integration branch (never main)")
+                        help="Opt in to push approved news to production main (after PR merge)")
     args = parser.parse_args()
     home = Path.home()
     stage = home / "politicshub-stage"
-    repo = home / "politicshub-mobile-upload"
+    repo = home / "politicshub-live-upload"
     key = home / ".ssh/politicshub_mobile_sync"
     output = home / "politicshub-sync/mobile-reviewed.json"
 
@@ -102,7 +102,7 @@ def main():
 
     if not args.push:
         print("DRY RUN PASSED: Nothing uploaded")
-        print("Run with --push only after PR integration is approved")
+        print("Use --push only after production integration and reboot checks pass")
         return
 
     env = dict(os.environ)
@@ -145,7 +145,7 @@ def main():
     ], cwd=repo)
     command(["git", "push", "origin", "HEAD:refs/heads/" + BRANCH],
             cwd=repo, env=env)
-    print("REVIEW BRANCH UPDATED; production main unchanged")
+    print("PRODUCTION MAIN UPDATED with reviewed-news feed")
 
 
 if __name__ == "__main__":
