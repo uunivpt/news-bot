@@ -87,6 +87,10 @@ def review_eligibility(row, now=None):
         problems.append("Story is not pending; cannot approve it again")
     if row.get("approved_at"):
         problems.append("Existing approval metadata: manual inspection required")
+    if str(row.get("fact_check_status") or "").lower() in {
+        "rejected", "failed", "false", "blocked", "disputed"
+    }:
+        problems.append("Previously rejected/disputed story requires separate correction workflow")
     if not bool(row.get("public_source")):
         problems.append("Source is not marked public")
     if not source_host(row.get("url")):
