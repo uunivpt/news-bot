@@ -203,7 +203,7 @@ def main() -> int:
         return 1
     print("LIVE SYNC SCHEDULER RUNNING:", process.pid)
     print("POSTGRESQL DATA: preserved; no publication or approval bypass")
-    print("WEBSITE: independent, still subject to Neon quota")
+    print("WEBSITE: independent GitHub-published feed; no Neon dependency")
     print("ONE-STEP PHONE SETUP COMPLETE")
     return 0
 
