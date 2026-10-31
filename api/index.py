@@ -46,6 +46,16 @@ app.secret_key=_secret
 app.config["MAX_CONTENT_LENGTH"]=1*1024*1024
 app.config.update(SESSION_COOKIE_NAME="__Host-politicshub_admin_session",SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SECURE=True,SESSION_COOKIE_SAMESITE="Strict",SESSION_COOKIE_PATH="/",SESSION_COOKIE_REFRESH_EACH_REQUEST=False)
 _LOGIN_WINDOW_SECONDS=300; _LOGIN_MAX_FAILURES=8; _SETUP_MAX_FAILURES=5; _login_failures={}
+
+@app.before_request
+def maybe_proxy_private_phone_admin():
+ # Public reads still use the GitHub feed. Only the protected Admin API is
+ # forwarded when the HTTPS tunnel and shared signing secret are configured.
+ if os.getenv("VERCEL")!="1":
+  return None
+ from app.remote_admin_bridge import proxy_public_admin
+ return proxy_public_admin()
+
 _ADMIN_LOGIN_RATE=WindowLimiter(capacity=2048)
 
 
@@ -62,6 +72,10 @@ def enforce_admin_session_scope():
   expected_origins={request.host_url.rstrip('/')}
   # TLS terminates at Vercel before the Python runtime's internal HTTP hop.
   if os.getenv('VERCEL')=='1':expected_origins.add('https://'+request.host)
+  # The Termux origin accepts this value ONLY after HMAC verification in
+  # its private before_request guard. The phone still requires CSRF tokens.
+  if os.getenv('POLITICSHUB_LOCAL_ADMIN')=='1' and os.getenv('POLITICSHUB_ADMIN_BRIDGE_SECRET'):
+   expected_origins.add('http://127.0.0.1:8765')
   if origin and origin.rstrip('/') not in expected_origins:
    return jsonify({'error':'Cross-origin admin requests are not allowed'}),403
  if recovery_session() and request.path.startswith('/api/'):
@@ -722,6 +736,10 @@ def security_headers(response):
  response.headers["Cross-Origin-Opener-Policy"]="same-origin"
  response.headers["Cross-Origin-Resource-Policy"]="same-origin"
  response.headers["X-Permitted-Cross-Domain-Policies"]="none"
+ if os.getenv("POLITICSHUB_LOCAL_ADMIN")=="1":
+  # Loopback-only HTTP: avoid redirecting local JavaScript to HTTPS.
+  response.headers.pop("Strict-Transport-Security",None)
+  response.headers["Content-Security-Policy"]=response.headers["Content-Security-Policy"].replace("; upgrade-insecure-requests","")
  if request.path.startswith("/api/admin") or (request.path.startswith("/api/") and admin_ok()):
   response.headers["Cache-Control"]="no-store, no-cache, must-revalidate, max-age=0"
  elif request.path=="/api/health" or response.status_code>=400:
@@ -1535,16 +1553,135 @@ def change(item_id,status=None,**extra):
   if status=="published":
    if existing and existing["source_type"]=="x" and existing["fact_check_status"]!="reviewed":
     return jsonify({"error":"X post needs source and context review before publishing"}),409
+   if os.getenv("POLITICSHUB_LOCAL_ADMIN")=="1":
+    # Explicit verification is required before making a phone story public.
+    row=dict(existing)
+    if row.get("status")=="published":return jsonify({"error":"Story is already published"}),409
+    if not row.get("approved_at") or str(row.get("fact_check_status") or "").lower() not in {"reviewed","verified","passed","approved"}:
+     return jsonify({"error":"Verify and approve this story before publishing"}),409
+    if not bool(row.get("public_source")) or len((row.get("bot_article") or "").strip())<600:
+     return jsonify({"error":"Public source and a complete article are required"}),409
+    from scripts.mobile_editorial_approve import parse_published,MAX_AGE
+    original=parse_published(row.get("published_at") or row.get("published_at_site"))
+    now=datetime.now(timezone.utc)
+    if original is None or now-original>MAX_AGE or original>now+timedelta(minutes=30):
+     return jsonify({"error":"Old/future-dated news cannot be published as breaking news"}),409
+    fields["published_at_site"]=str(row.get("published_at") or row.get("published_at_site"))
   if status is not None:fields["status"]=status
   database.update(item_id,**fields); log_admin(database,"news.update",item_id,",".join(fields.keys())); return jsonify({"ok":True,**fields})
  finally:database.close()
 
 @app.post("/api/news/<int:item_id>/approve")
-def approve(item_id):return change(item_id,fact_check_status="reviewed",approved_at=datetime.now(timezone.utc).isoformat())
+def approve(item_id):
+ if os.getenv("POLITICSHUB_LOCAL_ADMIN")!="1":
+  return change(item_id,fact_check_status="reviewed",approved_at=datetime.now(timezone.utc).isoformat())
+ err=require_admin()
+ if err:return err
+ err=require_csrf()
+ if err:return err
+ data=request.get_json(silent=True) or {}
+ if data.get("confirm")!="APPROVE "+str(item_id) or data.get("confirmed_facts") is not True or data.get("confirmed_originality") is not True:
+  return jsonify({"error":"Exact story confirmation and independent verification required"}),400
+ from scripts.mobile_editorial_approve import check_evidence,review_eligibility
+ links=data.get("evidence_urls")
+ notes=str(data.get("notes") or "").strip()
+ if not isinstance(links,list) or len(links)>6 or any(not isinstance(link,str) for link in links) or not 40<=len(notes)<=4000:
+  return jsonify({"error":"Provide independent evidence URLs and substantive editorial notes"}),400
+ database=db()
+ try:
+  with database.conn.transaction():
+   row=database.conn.execute("SELECT * FROM news_items WHERE id=%s FOR UPDATE",(item_id,)).fetchone()
+   if not row:return jsonify({"error":"Story not found"}),404
+   current=dict(row)
+   issues=review_eligibility(current)
+   _,errors=check_evidence(current,links)
+   if issues or errors:return jsonify({"error":"Approval blocked: "+"; ".join(issues+errors)}),409
+   stamp=datetime.now(timezone.utc).isoformat()
+   result=database.conn.execute(
+    "UPDATE news_items SET fact_check_status=%s,fact_check_notes=%s,approved_at=%s WHERE id=%s AND status=%s AND approved_at IS NULL",
+    ("reviewed","Human verified at "+stamp+". Evidence: "+"; ".join(links)+". Notes: "+notes,stamp,item_id,"pending"))
+   if result.rowcount!=1:return jsonify({"error":"Approval conflict; reopen story"}),409
+   database.conn.execute(
+    "INSERT INTO admin_activity (username,action,item_id,details,created_at) VALUES (%s,%s,%s,%s,%s)",
+    (session.get("admin_user"),"news.approve",item_id,"Verified source/context/originality on phone",stamp))
+  return jsonify({"ok":True,"id":item_id,"status":"pending","fact_check_status":"reviewed"})
+ finally:database.close()
 @app.post("/api/news/<int:item_id>/reject")
 def reject(item_id):return change(item_id,status="rejected")
 @app.post("/api/news/<int:item_id>/publish")
 def publish(item_id):return change(item_id,status="published",published_at_site=datetime.now(timezone.utc).isoformat())
+
+@app.post("/api/admin/news/create")
+def create_manual_story():
+ err=require_admin()
+ if err:return err
+ err=require_csrf()
+ if err:return err
+ body=request.get_json(silent=True)
+ if not isinstance(body,dict):return jsonify({"error":"JSON body required"}),400
+ title=str(body.get("title") or "").strip()
+ summary=str(body.get("summary") or "").strip()
+ article=str(body.get("article") or "").strip()
+ category=str(body.get("category") or "india").lower().strip()
+ original=str(body.get("source_url") or "").strip()
+ source=str(body.get("source_name") or "PoliticsHub Editorial").strip()
+ image=str(body.get("image_url") or "").strip()
+ image_license=str(body.get("image_license") or "").strip().lower()
+ image_credit=str(body.get("image_credit") or "").strip()
+ if not 20<=len(title)<=250 or not 60<=len(summary)<=1800 or not 600<=len(article)<=50000:
+  return jsonify({"error":"Headline 20-250 chars, summary 60-1800 chars and article 600-50000 chars required"}),400
+ if category not in {"india","world","politics","maharashtra","hindi","general"}:
+  return jsonify({"error":"Select a supported news desk"}),400
+ from urllib.parse import urlsplit
+ src=urlsplit(original)
+ if src.scheme!="https" or not src.hostname or src.username or len(original)>2000:
+  return jsonify({"error":"A valid HTTPS reporting/source URL is required"}),400
+ if image:
+  parsed=urlsplit(image)
+  if parsed.scheme!="https" or not parsed.hostname or parsed.username or len(image)>2000:
+   return jsonify({"error":"Image must be an HTTPS URL"}),400
+  if image_license not in {"cc0","pdm","rights-owned","licensed"}:
+   return jsonify({"error":"Specify image rights before using an image"}),400
+  if not image_credit:return jsonify({"error":"Image credit is required"}),400
+ if len(source)>160:return jsonify({"error":"Source name too long"}),400
+ import uuid
+ from app.normalize import normalize_url,fingerprint
+ now=datetime.now(timezone.utc).isoformat()
+ reference=normalize_url(original)
+ unique=str(uuid.uuid4())
+ normalized=reference+"#manual-"+unique
+ url_hash,title_hash=fingerprint(normalized,title)
+ database=db()
+ try:
+  ph="%s" if database._postgres else "?"
+  keys=("source_name","source_type","title","url","normalized_url",
+        "published_at","summary","external_id","url_hash","title_hash",
+        "collected_at","category","image_url","public_source","bot_summary",
+        "bot_article","image_source","image_license","image_credit","image_source_url",
+        "fact_check_status","status")
+  params=(source,"manual",title,original,normalized,now,summary,
+          "manual-"+unique,url_hash,title_hash,now,category,image,1,summary,
+          article,"article-source" if image else "",image_license,image_credit,
+          image if image else "","pending","pending")
+  with database.conn.transaction() if database._postgres else __import__("contextlib").nullcontext():
+   if database._postgres:
+    result=database.conn.execute(
+     "INSERT INTO news_items ("+",".join(keys)+") VALUES ("
+     +",".join([ph]*len(keys))+") RETURNING id",params)
+    item_id=result.fetchone()[0]
+   else:
+    result=database.conn.execute(
+     "INSERT INTO news_items ("+",".join(keys)+") VALUES ("
+     +",".join([ph]*len(keys))+")",params)
+    item_id=result.lastrowid
+   database.conn.execute(
+    "INSERT INTO admin_activity (username,action,item_id,details,created_at) VALUES ("
+    +",".join([ph]*5)+")",
+    (session.get("admin_user"),"news.manual.create",item_id,"Manual editorial draft created, verification pending",now))
+   if not database._postgres:database.conn.commit()
+  return jsonify({"ok":True,"id":item_id,"status":"pending","message":"Draft saved. Verify and approve before publishing."}),201
+ finally:database.close()
+
 
 @app.post("/api/news/<int:item_id>/edit")
 def edit_news(item_id):
@@ -1575,6 +1712,25 @@ def edit_news(item_id):
    if not updated:return jsonify({'error':'This story changed during your edit. Reopen the inspector before saving.'}),409
   else:database.update(item_id,**fields)
   log_admin(database,"news.edit",item_id,",".join(fields.keys())); return jsonify({"ok":True,"fields":fields})
+ finally:database.close()
+
+
+@app.get('/api/admin/story/<int:item_id>/article')
+def admin_private_article(item_id):
+ # Public /api/news/<id> intentionally hides pending editorial manuscripts.
+ # The same-origin signed bridge exposes the full text only to a logged-in
+ # owner/editor. It is never cached by Vercel or included in the public feed.
+ err=require_admin()
+ if err:return err
+ database=db()
+ try:
+  row=database.get_by_id(item_id)
+  if not row:return jsonify({'error':'story not found'}),404
+  row=dict(row)  # Also supports sqlite3.Row during isolated browser tests.
+  text=str(row.get('bot_article') or row.get('article') or row.get('summary') or '')
+  response=jsonify({'id':item_id,'article':text,'status':row.get('status')})
+  response.headers['Cache-Control']='private, no-store'
+  return response
  finally:database.close()
 
 
