@@ -7,14 +7,14 @@ from scripts import mobile_pipeline_cycle
 
 class OneStepSchedulerTests(unittest.TestCase):
     def test_only_target_sync_is_replaced(self):
-        source = 'repo = home / "politicshub-live-upload"\n' + ORIGINAL + '\nother_line=1\n'
+        source = 'repo = home / "politicshub-live-upload"\ncommands = [\n' + ORIGINAL + '\n]\nother_line=1\n'
         updated = configure_scheduler(source)
         self.assertIn(COMBINED, updated)
         self.assertNotIn(ORIGINAL, updated)
         self.assertIn("other_line=1", updated)
 
     def test_repeated_install_is_idempotent(self):
-        source = 'repo = home / "politicshub-live-upload"\n' + ORIGINAL
+        source = 'repo = home / "politicshub-live-upload"\ncommands = [\n' + ORIGINAL + '\n]\n'
         updated = configure_scheduler(source)
         self.assertEqual(configure_scheduler(updated), updated)
 
