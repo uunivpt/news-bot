@@ -1654,6 +1654,7 @@ def admin_private_article(item_id):
  try:
   row=database.get_by_id(item_id)
   if not row:return jsonify({'error':'story not found'}),404
+  row=dict(row)  # Also supports sqlite3.Row during isolated browser tests.
   text=str(row.get('bot_article') or row.get('article') or row.get('summary') or '')
   response=jsonify({'id':item_id,'article':text,'status':row.get('status')})
   response.headers['Cache-Control']='private, no-store'
