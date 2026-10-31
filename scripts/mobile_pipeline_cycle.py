@@ -73,6 +73,14 @@ def cycle() -> int:
         timeout=45,
     )
     print("SYNC CYCLE PASSED" if successful else "SYNC CYCLE FAILED", flush=True)
+    # This is a private, read-only report of draft/source flags, refreshed
+    # after each local cycle; it never changes status or approval metadata.
+    refreshed = run_local(
+        [sys.executable, str(ROOT / "scripts/mobile_review_report.py")],
+        timeout=15,
+    )
+    if not refreshed:
+        print("REVIEW REPORT UNAVAILABLE; publication gates unchanged", flush=True)
     return 0 if successful else 1
 
 
