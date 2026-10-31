@@ -25,6 +25,18 @@ class MobileUploadSafetyTests(unittest.TestCase):
     def test_verified_export_is_accepted(self):
         self.assertEqual(validated([story()]), 1)
 
+    def test_human_reviewed_and_approved_story_is_accepted(self):
+        row = story()
+        row["fact_check_status"] = "reviewed"
+        self.assertEqual(validated([row]), 1)
+
+    def test_reviewed_without_approval_timestamp_rejected(self):
+        row = story()
+        row["fact_check_status"] = "reviewed"
+        row["approved_at"] = None
+        with self.assertRaises(ValueError):
+            validated([row])
+
     def test_unapproved_or_pending_rejected(self):
         row = story()
         row["approved_at"] = None
