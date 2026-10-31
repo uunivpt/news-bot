@@ -46,6 +46,16 @@ app.secret_key=_secret
 app.config["MAX_CONTENT_LENGTH"]=1*1024*1024
 app.config.update(SESSION_COOKIE_NAME="__Host-politicshub_admin_session",SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SECURE=True,SESSION_COOKIE_SAMESITE="Strict",SESSION_COOKIE_PATH="/",SESSION_COOKIE_REFRESH_EACH_REQUEST=False)
 _LOGIN_WINDOW_SECONDS=300; _LOGIN_MAX_FAILURES=8; _SETUP_MAX_FAILURES=5; _login_failures={}
+
+@app.before_request
+def maybe_proxy_private_phone_admin():
+ # Public reads still use the GitHub feed. Only the protected Admin API is
+ # forwarded when the HTTPS tunnel and shared signing secret are configured.
+ if os.getenv("VERCEL")!="1":
+  return None
+ from app.remote_admin_bridge import proxy_public_admin
+ return proxy_public_admin()
+
 _ADMIN_LOGIN_RATE=WindowLimiter(capacity=2048)
 
 
@@ -62,6 +72,10 @@ def enforce_admin_session_scope():
   expected_origins={request.host_url.rstrip('/')}
   # TLS terminates at Vercel before the Python runtime's internal HTTP hop.
   if os.getenv('VERCEL')=='1':expected_origins.add('https://'+request.host)
+  # The Termux origin accepts this value ONLY after HMAC verification in
+  # its private before_request guard. The phone still requires CSRF tokens.
+  if os.getenv('POLITICSHUB_LOCAL_ADMIN')=='1' and os.getenv('POLITICSHUB_ADMIN_BRIDGE_SECRET'):
+   expected_origins.add('http://127.0.0.1:8765')
   if origin and origin.rstrip('/') not in expected_origins:
    return jsonify({'error':'Cross-origin admin requests are not allowed'}),403
  if recovery_session() and request.path.startswith('/api/'):
