@@ -18,6 +18,13 @@ def state(channel, committed):
 
 
 class FeedReleaseDecisionTests(unittest.TestCase):
+    def test_queued_production_feed_workers_checkout_current_main_state(self):
+        root = Path(__file__).resolve().parents[1]
+        for workflow in ("collector.yml", "offline-feed.yml", "hindi-feed.yml"):
+            source = (root / ".github/workflows" / workflow).read_text()
+            with self.subTest(workflow=workflow):
+                self.assertRegex(source, r"uses: actions/checkout@[^\n]+\n\s+with:\n\s+ref: main(?:\n|$)")
+
     def test_unchanged_feed_never_opens_a_deployment(self):
         self.assertFalse(decide_release("news", False, None, NOW).publish)
 

@@ -28,6 +28,13 @@ commit and push as the feed. A failed push therefore cannot advance the marker
 on main. Separate marker files avoid English/Hindi rebase conflicts; the two
 English workflows retain their shared concurrency group.
 
+All three production feed workflows explicitly check out `main`. The default
+push-event checkout is pinned to the triggering commit, which can predate a
+marker written while the job was queued. Real rollout verification caught that
+case: the queued collector treated the marker as missing and its rebase failed
+with an add/add marker conflict. Reading current main at worker startup ensures
+the serialized English job sees the preceding job's marker.
+
 This caps new feed-data commits at 24 per channel in a rolling 24-hour window,
 or 48 total, while state is retained. Manual and code-triggered source refreshes
 use the same gate. Application releases do not use this gate. No Vercel setting,
@@ -57,12 +64,13 @@ publishing is unchanged.
 
 ## Validation
 
-Ten new tests exercise real temporary Git repositories as well as publication
+Eleven gate tests exercise real temporary Git repositories as well as publication
 decisions: staged/unstaged/untracked feed changes, unchanged/code-only changes,
 dry runs, marker persistence, the exact hour boundary, invalid state, shared
 English gating and independent Hindi gating. A simulated day containing all
 collector/recovery/Hindi invocations produces exactly 24 English and 24 Hindi
-data commits. All 240 Python tests run successfully (six optional isolated
+data commits. A workflow regression check requires current-main checkout for
+each feed worker. All 241 Python tests run successfully (six optional isolated
 PostgreSQL tests skipped locally). Edited workflow YAML parses and every shell
 block passes `bash -n`. CI runs the repository's full checks before merge.
 
