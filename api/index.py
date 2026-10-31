@@ -722,6 +722,10 @@ def security_headers(response):
  response.headers["Cross-Origin-Opener-Policy"]="same-origin"
  response.headers["Cross-Origin-Resource-Policy"]="same-origin"
  response.headers["X-Permitted-Cross-Domain-Policies"]="none"
+ if os.getenv("POLITICSHUB_LOCAL_ADMIN")=="1":
+  # Loopback-only HTTP: avoid redirecting local JavaScript to HTTPS.
+  response.headers.pop("Strict-Transport-Security",None)
+  response.headers["Content-Security-Policy"]=response.headers["Content-Security-Policy"].replace("; upgrade-insecure-requests","")
  if request.path.startswith("/api/admin") or (request.path.startswith("/api/") and admin_ok()):
   response.headers["Cache-Control"]="no-store, no-cache, must-revalidate, max-age=0"
  elif request.path=="/api/health" or response.status_code>=400:
@@ -1535,12 +1539,59 @@ def change(item_id,status=None,**extra):
   if status=="published":
    if existing and existing["source_type"]=="x" and existing["fact_check_status"]!="reviewed":
     return jsonify({"error":"X post needs source and context review before publishing"}),409
+   if os.getenv("POLITICSHUB_LOCAL_ADMIN")=="1":
+    # Explicit verification is required before making a phone story public.
+    row=dict(existing)
+    if row.get("status")=="published":return jsonify({"error":"Story is already published"}),409
+    if not row.get("approved_at") or str(row.get("fact_check_status") or "").lower() not in {"reviewed","verified","passed","approved"}:
+     return jsonify({"error":"Verify and approve this story before publishing"}),409
+    if not bool(row.get("public_source")) or len((row.get("bot_article") or "").strip())<600:
+     return jsonify({"error":"Public source and a complete article are required"}),409
+    from scripts.mobile_editorial_approve import parse_published,MAX_AGE
+    original=parse_published(row.get("published_at") or row.get("published_at_site"))
+    now=datetime.now(timezone.utc)
+    if original is None or now-original>MAX_AGE or original>now+timedelta(minutes=30):
+     return jsonify({"error":"Old/future-dated news cannot be published as breaking news"}),409
+    fields["published_at_site"]=str(row.get("published_at") or row.get("published_at_site"))
   if status is not None:fields["status"]=status
   database.update(item_id,**fields); log_admin(database,"news.update",item_id,",".join(fields.keys())); return jsonify({"ok":True,**fields})
  finally:database.close()
 
 @app.post("/api/news/<int:item_id>/approve")
-def approve(item_id):return change(item_id,fact_check_status="reviewed",approved_at=datetime.now(timezone.utc).isoformat())
+def approve(item_id):
+ if os.getenv("POLITICSHUB_LOCAL_ADMIN")!="1":
+  return change(item_id,fact_check_status="reviewed",approved_at=datetime.now(timezone.utc).isoformat())
+ err=require_admin()
+ if err:return err
+ err=require_csrf()
+ if err:return err
+ data=request.get_json(silent=True) or {}
+ if data.get("confirm")!="APPROVE "+str(item_id) or data.get("confirmed_facts") is not True or data.get("confirmed_originality") is not True:
+  return jsonify({"error":"Exact story confirmation and independent verification required"}),400
+ from scripts.mobile_editorial_approve import check_evidence,review_eligibility
+ links=data.get("evidence_urls")
+ notes=str(data.get("notes") or "").strip()
+ if not isinstance(links,list) or len(links)>6 or any(not isinstance(link,str) for link in links) or not 40<=len(notes)<=4000:
+  return jsonify({"error":"Provide independent evidence URLs and substantive editorial notes"}),400
+ database=db()
+ try:
+  with database.conn.transaction():
+   row=database.conn.execute("SELECT * FROM news_items WHERE id=%s FOR UPDATE",(item_id,)).fetchone()
+   if not row:return jsonify({"error":"Story not found"}),404
+   current=dict(row)
+   issues=review_eligibility(current)
+   _,errors=check_evidence(current,links)
+   if issues or errors:return jsonify({"error":"Approval blocked: "+"; ".join(issues+errors)}),409
+   stamp=datetime.now(timezone.utc).isoformat()
+   result=database.conn.execute(
+    "UPDATE news_items SET fact_check_status=%s,fact_check_notes=%s,approved_at=%s WHERE id=%s AND status=%s AND approved_at IS NULL",
+    ("reviewed","Human verified at "+stamp+". Evidence: "+"; ".join(links)+". Notes: "+notes,stamp,item_id,"pending"))
+   if result.rowcount!=1:return jsonify({"error":"Approval conflict; reopen story"}),409
+   database.conn.execute(
+    "INSERT INTO admin_activity (username,action,item_id,details,created_at) VALUES (%s,%s,%s,%s,%s)",
+    (session.get("admin_user"),"news.approve",item_id,"Verified source/context/originality on phone",stamp))
+  return jsonify({"ok":True,"id":item_id,"status":"pending","fact_check_status":"reviewed"})
+ finally:database.close()
 @app.post("/api/news/<int:item_id>/reject")
 def reject(item_id):return change(item_id,status="rejected")
 @app.post("/api/news/<int:item_id>/publish")
