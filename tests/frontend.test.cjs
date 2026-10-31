@@ -84,7 +84,7 @@ test('source snapshot supersedes stale browser cache and stays source-fed',async
 
 test('feed status accurately distinguishes source feed from offline browser cache',()=>{
  assert.match(source,/SOURCE FEED/);
- assert.match(source,/News source feed is active/);
+ assert.match(source,/GitHub public news feed is active/);
  assert.match(source,/Connection unavailable\. Showing previously loaded stories/);
  assert.doesNotMatch(source,/Showing saved stories\. Live updates are temporarily unavailable/);
 });
