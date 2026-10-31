@@ -170,7 +170,7 @@ function filteredSnapshot() {
 function storyActions(row) {
   if (workspace?.access.read_only) return `<button class="btn" data-inspect="${Number(row.id)}">Inspect ↗</button>`;
   const id = Number(row.id);
-  return `<button class="btn" data-inspect="${id}">Inspect</button>` + (!row.article_available ? `<button class="btn" data-news="process" data-id="${id}">Process</button>` : '') + (row.fact_check_status === 'needs_review' ? `<button class="btn" data-news="approve" data-id="${id}">Review OK</button>` : '') + (row.status !== 'published' ? `<button class="btn" data-news="publish" data-id="${id}">Publish</button>` : '') + (row.status !== 'rejected' ? `<button class="btn danger" data-news="reject" data-id="${id}">Reject</button>` : '');
+  return `<button class="btn" data-inspect="${id}">Inspect</button>` + (!row.article_available ? `<button class="btn" data-news="process" data-id="${id}">Process</button>` : '') + (row.status === 'pending' && !['reviewed','verified','passed','approved'].includes(row.fact_check_status) ? `<button class="btn" data-news="approve" data-id="${id}">Verify &amp; approve</button>` : '') + (row.status === 'pending' && ['reviewed','verified','passed','approved'].includes(row.fact_check_status) ? `<button class="btn" data-news="publish" data-id="${id}">Publish</button>` : '') + (row.status !== 'rejected' ? `<button class="btn danger" data-news="reject" data-id="${id}">Reject</button>` : '');
 }
 function renderNews(list, total) {
   visibleRows = list; pageTotal = total;
@@ -210,14 +210,26 @@ function confirmAction(title, message) {
 async function newsAction(kind, id) {
   if (mutationBusy || workspace?.access.read_only || !['process','approve','publish','reject'].includes(kind)) return;
   if (['publish','reject'].includes(kind) && !await confirmAction(`${kind === 'publish' ? 'Publish' : 'Reject'} this story?`,`Story #${id}. This changes its publication state in the live database.`)) return;
+  let payload = {};
+  if (kind === 'approve') {
+    const evidence = prompt('Independently verified source URLs (one per line; conflict/Telegram news needs at least two different publishers):');
+    if (evidence === null) return;
+    const sources = evidence.split(/[\\n,]+/).map(s => s.trim()).filter(Boolean);
+    const notes = prompt('Verification notes: which facts, dates, locations, context and originality did you personally check? (40+ characters)');
+    if (notes === null) return;
+    const confirmation = prompt(`After checking the FULL article, type APPROVE ${id} to confirm this exact story:`);
+    if (confirmation !== `APPROVE ${id}`) return notice('Approval cancelled; no changes made.','err');
+    payload = {evidence_urls:sources,notes,confirm:confirmation,confirmed_facts:true,confirmed_originality:true};
+  }
   mutationBusy = true; applyCapabilities();
-  try { await action(`/api/news/${id}/${kind}`); notice('Action completed'); await loadOverview(); await loadNews(); }
+  try { await action(`/api/news/${id}/${kind}`, payload); notice(kind === 'approve' ? 'Human verification saved; publish only after final review.' : 'Action completed'); await loadOverview(); await loadNews(); }
   catch (error) { notice(error.message,'err'); }
   finally { mutationBusy = false; applyCapabilities(); }
 }
 async function bulkAction(kind) {
   if (mutationBusy || workspace?.access.read_only || !selected.size) return;
   if (selected.size > 10) return notice('Select at most 10 stories per action.','err');
+  if (['approve','publish'].includes(kind)) return notice('Approve and publish one verified story at a time; bulk publication is disabled.','err');
   const ids = [...selected];
   if (!await confirmAction(`${kind === 'approve' ? 'Mark reviewed' : kind === 'publish' ? 'Publish' : 'Reject'} ${ids.length} stories?`,'Actions run sequentially. Processing stops at the first failure; completed changes stay saved.')) return;
   mutationBusy = true; applyCapabilities();
