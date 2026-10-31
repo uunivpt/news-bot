@@ -1,5 +1,6 @@
 from __future__ import annotations
 import re
+import unicodedata
 from collections import Counter
 
 from app.extractive_summarizer import hybrid_scores
@@ -652,12 +653,36 @@ def is_breaking(title, summary="", score=None):
     score=story_score(title,summary) if score is None else int(score)
     return score>=45 or bool(re.search(r"(?i)\b(?:breaking|urgent|developing|live|alert)\b",f"{title} {summary}"))
 
+def _headline_words(value):
+    """Include non-English words without changing English summary scoring."""
+    normalized = unicodedata.normalize("NFKC", str(value or "")).casefold()
+    words = set(_words(normalized))
+    token = []
+    non_ascii_letter = False
+    for character in normalized + " ":
+        if character in "\u200c\u200d":
+            continue
+        category = unicodedata.category(character)
+        if category[0] in {"L", "M", "N"} or (character in "'-" and token):
+            token.append(character)
+            non_ascii_letter |= category[0] == "L" and not character.isascii()
+        else:
+            if non_ascii_letter:
+                words.add("".join(token).strip("'-"))
+            token = []
+            non_ascii_letter = False
+    # Short acronyms and other nonblank headlines still deserve a place in the
+    # feed. Use exact normalized matching when no word tokens are available.
+    fallback = " ".join(normalized.split())
+    return words or ({fallback} if fallback else set())
+
+
 def dedupe_story_rows(rows, threshold=0.82):
     """Collapse near-identical headlines while preserving the highest-scoring copy."""
     kept=[]; token_sets=[]
     for row in rows:
         title=str(row.get("title") or "")
-        words=set(_words(title))
+        words=_headline_words(title)
         if not words:
             continue
         duplicate=False

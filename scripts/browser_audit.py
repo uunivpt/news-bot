@@ -15,6 +15,7 @@ import os
 import sys
 import tempfile
 import threading
+from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -257,6 +258,35 @@ def run(base, output,admin_fixture=False):
             page.evaluate("location.hash='/c/hindi'")
             page.wait_for_function("() => document.documentElement.lang === 'hi'")
         check('Hindi desk sets document language', hindi)
+
+        if admin_fixture:
+            def devanagari_feed():
+                from api import index as api
+                now = datetime.now(timezone.utc)
+                titles = ['रेल सेवाओं में बदलाव के बारे में नई सूचना', 'विद्यालयों में प्रवेश की प्रक्रिया का विवरण']
+                rows = [{'id': 88001 + index, 'title': title, 'category': 'hindi',
+                         'summary': 'मूळ प्रकाशकाच्या वृत्ताचा संक्षिप्त संदर्भ.',
+                         'source_name': 'Browser RSS fixture', 'url': f'https://example.org/hindi/{index}',
+                         'published_at': (now - timedelta(minutes=index)).isoformat(),
+                         'status': 'published', 'public_source': True} for index, title in enumerate(titles)]
+                with patch.object(api, '_hindi_rows', return_value=rows):
+                    visit('/hindi/')
+                    page.wait_for_function("expected => document.querySelector('.ph14-lead h1')?.textContent === expected", arg=titles[0])
+                    require(page.locator('.ph14-lead h1').inner_text() == titles[0], 'Devanagari-only lead was dropped')
+                    require(titles[1] in page.locator('#app').inner_text(), 'Second Hindi report was dropped')
+                    result = page.evaluate("async () => (await fetch('/api/hindi-feed')).json()")
+                    require([row['id'] for row in result] == [88001, 88002], 'Hindi API discarded valid reports')
+                    require([row['url'] for row in result] == [row['url'] for row in rows], 'Original source links changed')
+                    page.screenshot(path=str(output / 'hindi-deva-mobile.png'), animations='disabled')
+                    plain = browser.new_context(java_script_enabled=False, viewport={'width': 390, 'height': 844})
+                    plain.route('**/*', lambda route: route.continue_() if route.request.url.startswith(base + '/') else route.abort())
+                    try:
+                        plain_page = plain.new_page()
+                        plain_page.goto(base + '/hindi/', wait_until='domcontentloaded')
+                        require(plain_page.locator('.card').count() == 2, 'Server-rendered Hindi reports were dropped')
+                    finally:
+                        plain.close()
+            check('Devanagari-only Hindi API, visible headlines and no-JavaScript reading', devanagari_feed)
 
         def directory():
             visit('/sources.html')
