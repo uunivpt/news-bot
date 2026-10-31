@@ -21,8 +21,10 @@ from app.news_api import collect_newsdata
 from app.category_routing import normalize_category
 from app.rss import collect_rss
 from app.source_text import source_text
+from app.normalize import normalize_url
 
 OUTPUT = Path("public/news-data.json")
+MOBILE_REVIEWED = Path("public/mobile-reviewed.json")
 MAX_STORIES = 140
 MAX_AGE = timedelta(hours=48)
 ARCHIVE_AGE = timedelta(days=5)
@@ -149,6 +151,92 @@ def build(current, collected, now):
     return result, fresh
 
 
+def mobile_reviewed_story(row, now):
+    """Validate phone-exported records again before any public exposure."""
+    if not isinstance(row, dict):
+        return None
+    if row.get("status") != "published" or row.get("public_source") is not True:
+        return None
+    if not row.get("approved_at") or str(row.get("fact_check_status") or "").lower() not in {"passed", "verified", "approved"}:
+        return None
+    url = str(row.get("url") or "")
+    if not valid_url(url):
+        return None
+    try:
+        story_id = int(row.get("id"))
+    except (TypeError, ValueError):
+        return None
+    if not 0 < story_id < 2**53:
+        return None
+    title = clean_text(row.get("title"))
+    source = clean_text(row.get("source_name"))
+    summary = clean_text(row.get("bot_summary") or row.get("summary"))
+    published = parse_date(row.get("published_at_site") or row.get("published_at"))
+    if not (title and source and 20 <= len(title) <= 210 and 55 <= len(summary) <= 4200 and published):
+        return None
+    if published > now + timedelta(minutes=30) or now - published > ARCHIVE_AGE:
+        return None
+    stamp = published.isoformat()
+    return {
+        "id": story_id,
+        "title": title,
+        "url": url,
+        "source_name": source[:90],
+        "source_type": str(row.get("source_type") or "rss")[:30],
+        "published_at": str(row.get("published_at") or stamp),
+        "published_at_site": stamp,
+        "summary": summary,
+        "bot_summary": summary,
+        "bot_article": "",
+        "category": normalize_category(row.get("category") or "india", title, summary),
+        "image_url": None,
+        "public_source": True,
+        "status": "published",
+    }
+
+
+def merge_mobile_reviewed(current, incoming, now):
+    """Merge verified phone exports without deleting or renumbering public stories."""
+    indexed = {normalize_url(row["url"]): dict(row) for row in current
+               if isinstance(row, dict) and valid_url(row.get("url"))}
+    identities = {str(row.get("id")): key for key, row in indexed.items()}
+    changed = 0
+    for raw in incoming:
+        story = mobile_reviewed_story(raw, now)
+        if story is None:
+            continue
+        key = normalize_url(story["url"])
+        old = indexed.get(key)
+        if old:
+            # Preserve published URL identity and existing article links.
+            story["id"] = old["id"]
+        elif identities.get(str(story["id"]), key) != key:
+            log.warning("Mobile feed ID conflict; skipping story %s", story["id"])
+            continue
+        if old != story:
+            indexed[key] = story
+            changed += 1
+        identities[str(story["id"])] = key
+    result = sorted(indexed.values(),
+                    key=lambda row: parse_date(row.get("published_at_site") or row.get("published_at"))
+                    or datetime.min.replace(tzinfo=timezone.utc),
+                    reverse=True)[:MAX_STORIES]
+    return result, changed
+
+
+def load_mobile_reviewed(path=MOBILE_REVIEWED):
+    if not path.exists():
+        return []
+    try:
+        if path.stat().st_size > 2_000_000:
+            raise ValueError("Mobile reviewed feed too large")
+        rows = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(rows, list) or len(rows) > 1000:
+            raise ValueError("Invalid reviewed feed format")
+        return rows
+    except (ValueError, OSError) as exc:
+        raise RuntimeError("Invalid reviewed feed; existing snapshot preserved") from exc
+
 def main():
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     sources = load_sources()
@@ -180,11 +268,14 @@ def main():
         except (OSError, ValueError) as exc:
             log.warning("Ignoring corrupt local snapshot (%s)", type(exc).__name__)
 
-    if not good:
+    mobile = load_mobile_reviewed()
+    if not good and not any(mobile_reviewed_story(row, now) for row in mobile):
         log.error("All offline feed sources failed; preserving last published snapshot")
         raise SystemExit(1)
 
     result, fresh = build(current, collected, now)
+    result, mobile_changes = merge_mobile_reviewed(result, mobile, now)
+    fresh += mobile_changes
     retain_public_records(current + result)
     newest = max((parse_date(row.get("published_at")) for row in result), default=None)
     age_minutes = max(0, int((now - newest).total_seconds() / 60)) if newest else None
