@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from app.article_fetcher import enrich_source_text
-from scripts.mobile_prepare_drafts import prepare
+from scripts.mobile_prepare_drafts import prepare, pending_without_drafts
 
 
 class CanonicalSourceFetchTests(unittest.TestCase):
@@ -84,6 +84,42 @@ class PhoneDraftPreparationTests(unittest.TestCase):
         result = prepare(self.db, limit=5, write=True)
         self.assertEqual(result["ready"], 0)
         self.db.update.assert_not_called()
+
+
+class PendingQueueRotationTests(unittest.TestCase):
+    def setUp(self):
+        self.db = Mock()
+        self.rows = [
+            {"id": 456, "status": "pending", "bot_article": ""},
+            {"id": 455, "status": "pending", "bot_article": None},
+            {"id": 454, "status": "pending", "bot_article": None},
+            {"id": 453, "status": "pending", "bot_article": None},
+        ]
+
+        def execute(sql, params):
+            self.assertIn("id < %s", sql)
+            self.assertIn("BTRIM(bot_article)", sql)
+            status, max_id, limit = params
+            self.assertEqual(status, "pending")
+            eligible = [row for row in self.rows if row["id"] < max_id]
+            return Mock(fetchall=lambda: eligible[:limit])
+
+        self.db.conn.execute.side_effect = execute
+
+    def test_cursor_moves_to_later_pending_stories(self):
+        first = pending_without_drafts(self.db, 2)
+        self.assertEqual([row["id"] for row in first], [456, 455])
+        second = pending_without_drafts(self.db, 2, cursor=455)
+        self.assertEqual([row["id"] for row in second], [454, 453])
+
+    def test_after_end_cursor_wraps_to_top(self):
+        rows = pending_without_drafts(self.db, 2, cursor=1)
+        self.assertEqual([row["id"] for row in rows], [456, 455])
+        self.assertEqual(self.db.conn.execute.call_count, 2)
+
+    def test_empty_pending_queue_is_safe(self):
+        self.rows = []
+        self.assertEqual(pending_without_drafts(self.db, 2, cursor=400), [])
 
 
 if __name__ == "__main__":
