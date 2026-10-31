@@ -222,9 +222,9 @@ function settings(sub){setActive('');document.title='Settings — PoliticsHub.in
  <div class="legal-actions"><button class="btn" data-consent-choice="preferences">Allow preferences</button><button class="btn secondary" data-consent-choice="essential">Essential only</button><a class="btn secondary" href="/cookies.html">Cookie Policy</a></div>
  <div class="row"><span>Reset local preferences</span><button class="btn" id="rst">Reset</button></div></section>
  <section id="status"><h2>System status</h2>
- <div class="row"><span>News API</span>${S.api==='ok'&&S.apiMode!=='snapshot'?st('ok','Operational'):S.apiMode==='snapshot'?st('unk','Saved feed only'):S.api==='empty'?st('unk','No stories returned'):st('bad','Unreachable')}</div>
- <div class="row"><span>Database</span>${S.api==='ok'&&S.apiMode!=='snapshot'?st('ok','Serving stories'):S.apiMode==='snapshot'?st('bad','Live database unavailable'):st('unk','Cannot be verified from browser')}</div>
- <div class="row"><span>News snapshot</span>${S.snap==='ok'?st('ok','Available'):S.snap==='standby'?st('unk','Standby — live API available'):S.snap==='empty'?st('unk','Empty'):st('bad','Not found')}</div>
+ <div class="row"><span>News API</span>${S.api==='ok'&&S.apiMode!=='snapshot'?st('ok','Operational'):S.apiMode==='snapshot'?st('ok','GitHub public feed'):S.api==='empty'?st('unk','No stories returned'):st('bad','Unreachable')}</div>
+ <div class="row"><span>News storage</span>${S.apiMode==='snapshot'?st('ok','Termux + GitHub delivery'):S.api==='ok'?st('ok','Public news online'):st('unk','Check public feed')}</div>
+ <div class="row"><span>News snapshot</span>${S.snap==='ok'?st('ok','Available'):S.snap==='standby'?st('unk','Published feed available'):S.snap==='empty'?st('unk','Empty'):st('bad','Not found')}</div>
  <div class="row"><span>Frontend</span>${st('ok','Running')}</div>
  <div class="row"><span>Last update</span><span>${last?fmt(last):'Unknown'}</span></div></section></div>`;
  if(sub)$('#'+sub)?.scrollIntoView()}
@@ -399,7 +399,7 @@ function updateFeedStatus(){
  box.replaceChildren();
  const label=document.createElement('span');
  if(mode==='api')label.textContent='Latest news connected. Updates refresh automatically.'+newestLabel;
- else if(mode==='snapshot')label.textContent='News source feed is active. New source reports are checked automatically (around every 30 minutes).'+newestLabel;
+ else if(mode==='snapshot')label.textContent='GitHub public news feed is active. Reviewed phone stories sync when approved; public sources also refresh automatically.'+newestLabel;
  else if(mode==='cached'||mode==='cache')label.textContent='Connection unavailable. Showing previously loaded stories.'+newestLabel;
  else label.textContent='News is temporarily unavailable. Please retry.';
  box.append(label);
