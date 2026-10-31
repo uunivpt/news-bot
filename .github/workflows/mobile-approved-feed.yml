@@ -1,0 +1,54 @@
+name: Publish Approved Termux News
+
+# The Termux phone pushes ONLY human-reviewed stories. The public website
+# then receives the approved news promptly, without waiting for the hourly
+# RSS release and without any Neon/PostgreSQL connection in GitHub Actions.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "public/mobile-reviewed.json"
+  workflow_dispatch:
+
+concurrency:
+  group: emergency-public-feed
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout published feed
+        uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install project dependencies
+        run: pip install -r requirements.txt
+      - name: Validate human-reviewed records and merge public feed
+        env:
+          DATABASE_URL: ""
+          DATABASE_3URL: ""
+          POLITICSHUB_GITHUB_FEED_ONLY: "1"
+        run: PYTHONPATH=. python scripts/publish_mobile_reviewed.py
+      - name: Commit approved news only
+        run: |
+          set -euo pipefail
+          git config user.name "politicshub-approved-feed-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- public/news-data.json app/data/public-archive.json.gz
+          if git diff --cached --quiet; then
+            echo "No additional approved public stories; feed unchanged"
+            exit 0
+          fi
+          git commit -m "Publish approved Termux news to public feed"
+          git pull --rebase origin main
+          git push origin HEAD:main
