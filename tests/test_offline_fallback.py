@@ -124,7 +124,8 @@ class OfflineNewsFallbackTests(unittest.TestCase):
         rows, changed = merge_mobile_reviewed([prior], [approved, approved], NOW)
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["id"], prior["id"])
-        self.assertEqual(changed, 1)
+        self.assertEqual(rows[0]["bot_article"], prior["bot_article"])
+        self.assertEqual(changed, 0)
 
     def test_mobile_merge_blocks_id_collision(self):
         prior = public_story(item(), NOW)
