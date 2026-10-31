@@ -42,15 +42,17 @@ jobs:
         env:
           NEWSDATA_API_KEY: ${{ secrets.NEWSDATA_API_KEY }}
         run: PYTHONPATH=. python scripts/offline_snapshot.py
-      - name: Publish snapshot to production branch (only when changed)
+      - name: Coalesce emergency feed releases
+        id: feed_release
+        env:
+          PYTHONPATH: .
+        run: python scripts/feed_release_gate.py --channel news
+      - name: Publish snapshot when its hourly gate opens
+        if: steps.feed_release.outputs.publish == 'true'
         run: |
-          if git diff --quiet -- public/news-data.json app/data/public-archive.json.gz; then
-            echo "No newly eligible stories. No deployment needed."
-            exit 0
-          fi
           git config user.name "politicshub-feed-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/news-data.json app/data/public-archive.json.gz
+          git add public/news-data.json app/data/public-archive.json.gz .github/feed-release-state/news.json
           git commit -m "Refresh PoliticsHub public news snapshot"
           git pull --rebase origin main
           git push origin HEAD:main
