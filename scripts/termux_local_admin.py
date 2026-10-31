@@ -190,7 +190,8 @@ def start(reset=False):
             stdin=subprocess.DEVNULL, start_new_session=True,
         )
     pg_password = ""
-    for _ in range(14):
+    # Termux can cold-import many Python packages substantially slower than CI.
+    for _ in range(48):
         if child.poll() is not None:
             print("STOP: admin daemon failed; see", LOG)
             return 1
