@@ -6,7 +6,6 @@ No scraper bypasses, fabricated articles, unlicensed image copies, or DB credent
 from __future__ import annotations
 
 import hashlib
-import html
 import json
 import logging
 import os
@@ -21,6 +20,7 @@ from app.collector import load_sources
 from app.news_api import collect_newsdata
 from app.category_routing import normalize_category
 from app.rss import collect_rss
+from app.source_text import source_text
 
 OUTPUT = Path("public/news-data.json")
 MAX_STORIES = 140
@@ -46,10 +46,7 @@ def parse_date(value):
 
 
 def clean_text(value):
-    text = re.sub(r"<[^>]+>", " ", str(value or ""))
-    text = html.unescape(text)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
+    return source_text(value)
 
 
 def valid_url(value):
@@ -108,6 +105,7 @@ def public_story(item, now):
 
 def build(current, collected, now):
     indexed = {}
+    fresh = 0
     for row in current:
         if not isinstance(row, dict) or not valid_url(row.get("url")):
             continue
@@ -116,10 +114,18 @@ def build(current, collected, now):
             continue
         key = str(row["url"]).strip()
         row = dict(row)
+        repaired = False
+        for field in ("summary", "bot_summary"):
+            if row.get(field):
+                cleaned = clean_text(row[field])
+                if cleaned != row[field]:
+                    row[field] = cleaned
+                    repaired = True
+        if repaired:
+            fresh += 1
         row["category"] = normalize_category(row.get("category"), row.get("title"), row.get("summary") or row.get("bot_summary"))
         indexed[key] = row
 
-    fresh = 0
     for item in collected:
         story = public_story(item, now)
         if not story:

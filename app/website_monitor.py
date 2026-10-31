@@ -11,6 +11,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from .models import NewsItem
+from .source_http import fetch_source, public_http_url
 
 logger = logging.getLogger(__name__)
 HEADERS={"User-Agent":"NewsBot/3.0 (+public-news-monitor; contact=admin)","Accept":"text/html,application/xhtml+xml"}
@@ -27,8 +28,8 @@ def _allowed_path(url,prefixes):
 def _absolute(base,href):
  href=(href or "").strip()
  if not href or href.startswith(("#","javascript:","mailto:","tel:")):return None
- url=urljoin(base,href); parsed=urlparse(url)
- if parsed.scheme not in {"http","https"} or not parsed.netloc:return None
+ url=urljoin(base,href)
+ if not public_http_url(url):return None
  return url.split("#",1)[0]
 def _metadata(soup,*names):
  for name in names:
@@ -62,12 +63,13 @@ def _article_text(soup):
    if len(text)>=45 and not BOILERPLATE_RE.search(text):lines.append(text)
   candidates.append("\n".join(lines))
  return max(candidates,key=len,default="")[:24000].strip()
-def _fetch(url,timeout=12):
+def _fetch(url,timeout=12,allowed_hosts=None):
  try:
-  response=requests.get(url,headers=HEADERS,timeout=timeout,allow_redirects=True); response.raise_for_status()
-  if "html" not in (response.headers.get("content-type") or "").lower():return None
-  return response.url,BeautifulSoup(response.text[:4_000_000],"html.parser")
- except requests.RequestException as exc:logger.warning("Website fetch failed %s: %s",url,exc); return None
+  response=fetch_source(url,headers=HEADERS,timeout=timeout,max_bytes=4_000_000,allowed_hosts=allowed_hosts)
+  if "html" not in response.content_type:return None
+  return response.url,BeautifulSoup(response.content,"html.parser")
+ except (requests.RequestException,ValueError) as exc:
+  logger.warning("Website fetch failed for configured source (%s)",type(exc).__name__); return None
 def collect_website(source):
  if not source.get("collection_allowed",True):return []
  seeds=source.get("sections") or [source.get("url")]; seeds=[s for s in seeds if isinstance(s,str) and s.startswith(("http://","https://"))]
@@ -77,7 +79,7 @@ def collect_website(source):
  prefixes=[str(p) for p in source.get("article_path_prefixes",[]) if p]; max_links=min(max(int(source.get("max_links",40)),1),200); timeout=min(max(int(source.get("timeout_seconds",12)),3),30)
  candidates=[]; seen=set(); fetched_seeds=0
  for seed in seeds:
-  fetched=_fetch(seed,timeout)
+  fetched=_fetch(seed,timeout,allowed_hosts)
   if not fetched:continue
   fetched_seeds+=1
   final_url,soup=fetched
@@ -92,7 +94,7 @@ def collect_website(source):
  if not fetched_seeds:raise RuntimeError("All configured website sections were unavailable")
  items=[]
  for url in candidates:
-  fetched=_fetch(url,timeout)
+  fetched=_fetch(url,timeout,allowed_hosts)
   if not fetched:continue
   final_url,soup=fetched; title=_metadata(soup,"og:title","twitter:title") or _clean(soup.title.get_text(" ",strip=True) if soup.title else "")
   if not title or len(title)<8:continue

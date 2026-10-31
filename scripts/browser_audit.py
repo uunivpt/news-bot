@@ -266,6 +266,14 @@ def run(base, output,admin_fixture=False):
             page.screenshot(path=str(output / 'sources-mobile.png'), animations='disabled')
             page.locator('[data-source-kind="all"]').click()
             require(page.locator('.source-reference:visible').count() == 12, 'Reset source filter failed')
+            page.locator('#sourceSearch').fill('BBC')
+            require(page.locator('.source-reference:visible').count() == 1, 'Source keyword search failed')
+            page.locator('[data-source-kind="official"]').click()
+            require(page.locator('.source-reference:visible').count() == 0, 'Source search and type filters did not combine')
+            require(page.locator('#sourceEmpty').is_visible(), 'Empty directory state missing')
+            page.locator('#sourceReset').click()
+            require(page.locator('.source-reference:visible').count() == 12, 'Source reset did not restore references')
+            require(page.locator('#sourceSearch').input_value() == '', 'Source search did not reset')
         check('source directory filtering and reset', directory)
 
         def maharashtra():

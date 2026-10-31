@@ -80,6 +80,15 @@ class OfflineNewsFallbackTests(unittest.TestCase):
         self.assertEqual(changed, 0)
         self.assertEqual(len(output), 1)
 
+    def test_existing_rss_snapshot_copy_is_repaired_without_new_stories(self):
+        story = public_story(replace(item(), source_type="rss"), NOW)
+        expected = story["summary"]
+        story["summary"] = '&lt;p class="publisher"&gt;' + expected + '&lt;/p&gt;'
+        output, changed = build([story], [], NOW)
+        self.assertGreater(changed, 0)
+        self.assertEqual(output[0]["summary"], expected)
+        self.assertIn("&lt;p", story["summary"])
+
 
 if __name__ == "__main__":
     unittest.main()
