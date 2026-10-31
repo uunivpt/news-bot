@@ -110,7 +110,7 @@ def main():
         f"ssh -i {key} -o IdentitiesOnly=yes "
         "-o StrictHostKeyChecking=yes -o BatchMode=yes"
     )
-    command(["git", "fetch", "--depth", "1", "origin", BRANCH], cwd=repo, env=env)
+    command(["git", "fetch", "origin", BRANCH], cwd=repo, env=env)
     command(["git", "merge", "--ff-only", "FETCH_HEAD"], cwd=repo)
 
     target = repo / TARGET
