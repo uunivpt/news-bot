@@ -33,15 +33,17 @@ jobs:
         env:
           PYTHONPATH: .
         run: python scripts/build_hindi_feed.py
-      - name: Publish only changed Hindi stories
+      - name: Coalesce Hindi feed releases
+        id: feed_release
+        env:
+          PYTHONPATH: .
+        run: python scripts/feed_release_gate.py --channel hindi
+      - name: Publish changed Hindi stories when its hourly gate opens
+        if: steps.feed_release.outputs.publish == 'true'
         run: |
-          if git diff --quiet -- public/hindi-news.json; then
-            echo "No new Hindi source stories."
-            exit 0
-          fi
           git config user.name "politicshub-feed-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/hindi-news.json
+          git add public/hindi-news.json .github/feed-release-state/hindi.json
           git commit -m "Refresh Hindi headline feed"
           git pull --rebase origin main
           git push origin HEAD:main

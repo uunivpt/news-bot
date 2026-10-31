@@ -2,7 +2,7 @@ name: News Collector
 
 on:
   schedule:
-    # 48 collection slots/day, leaving room for Hindi and code releases.
+    # Collect every 30 minutes; the shared feed gate publishes at most hourly.
     - cron: "12,42 * * * *"
   workflow_dispatch:
   push:
@@ -76,16 +76,18 @@ jobs:
           NEWSDATA_API_KEY: ${{ secrets.NEWSDATA_API_KEY }}
         run: |
           PYTHONPATH=. python scripts/offline_snapshot.py
-      - name: Publish emergency feed only when new stories exist
+      - name: Coalesce emergency feed releases
         if: steps.collection.outputs.mode == 'offline'
+        id: feed_release
+        env:
+          PYTHONPATH: .
+        run: python scripts/feed_release_gate.py --channel news
+      - name: Publish emergency feed when its hourly gate opens
+        if: steps.feed_release.outputs.publish == 'true'
         run: |
-          if git diff --quiet -- public/news-data.json app/data/public-archive.json.gz; then
-            echo "No newly eligible emergency stories; no deployment needed."
-            exit 0
-          fi
           git config user.name "politicshub-feed-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/news-data.json app/data/public-archive.json.gz
+          git add public/news-data.json app/data/public-archive.json.gz .github/feed-release-state/news.json
           git commit -m "Refresh PoliticsHub public news snapshot"
           git pull --rebase origin main
           git push origin HEAD:main
