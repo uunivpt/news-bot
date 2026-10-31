@@ -92,7 +92,23 @@ def inspect_local_database() -> str:
         if link.scheme == "https" and link.hostname:
             lines.append(f"Original reporting: {url}")
         lines.append(f"Draft characters: {length}; fact check: {fact_check}")
-        lines.append("Review status: NEEDS HUMAN REVIEW and originality check")
+        flags = []
+        if (link.hostname or "").lower() in {
+            "t.me", "telegram.me", "www.telegram.me", "www.t.me"
+        }:
+            flags.append("Telegram-origin claim: seek independent reporting or primary official records")
+        if int(length or 0) < 600:
+            flags.append("Short draft: not a complete independent article")
+        if str(fact_check or "").lower() not in {"passed", "verified", "approved", "reviewed"}:
+            flags.append("Fact-check not completed")
+        if any(term in str(title or "").lower() for term in (
+            "ukraine", "russia", "strike", "missile", "war", "crash",
+            "fatal", "killed", "dead", "explosion", "attack",
+        )):
+            flags.append("High-impact claim: verify date, location, outcomes and updates")
+        for flag in flags:
+            lines.append(f"Review flag: {flag}")
+        lines.append("Review status: HOLD for human verification and originality check")
         lines.append("")
     return "\n".join(lines)
 
