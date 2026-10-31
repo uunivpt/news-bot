@@ -25,7 +25,7 @@ _SECRET_NAME = "POLITICSHUB_ADMIN_BRIDGE_SECRET"
 _URL_NAME = "POLITICSHUB_ADMIN_BRIDGE_URL"
 _NOUNCE = re.compile(r"^[A-Za-z0-9_-]{20,80}$")
 _STORY = re.compile(r"^/api/news/[0-9]+/(?:edit|process|approve|reject|publish)$")
-_REVIEW = re.compile(r"^/api/admin/(?:story/[0-9]+|(?:me|login|logout|workspace|stories|activity|settings|training))$")
+_REVIEW = re.compile(r"^/api/admin/(?:story/[0-9]+(?:/article)?|(?:me|login|logout|workspace|stories|activity|settings|training|dashboard|health|live|upgrade|history|report|operations(?:\\.pdf)?))$")
 _REPLAY_LOCK = threading.Lock()
 _REPLAY = {}
 _MAX_BODY = 1024 * 1024
@@ -156,7 +156,10 @@ def proxy_public_admin():
         for cookie in response.headers.get_all("Set-Cookie", []):
             # Forward only the phone admin session, never any unrelated token.
             if cookie.startswith("politicshub_phone_admin="):
-                result.headers.add("Set-Cookie", cookie)
+                # The local phone uses loopback HTTP, but its cookie must be
+                # HTTPS-only when relayed to the public admin origin.
+                raw = cookie.split(";", 1)[0]
+                result.headers.add("Set-Cookie", raw + "; Path=/; Secure; HttpOnly; SameSite=Strict")
         result.headers["Cache-Control"] = "private, no-store"
         result.headers["Vary"] = "Cookie"
         result.headers["X-Content-Type-Options"] = "nosniff"
