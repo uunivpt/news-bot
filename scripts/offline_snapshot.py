@@ -206,16 +206,15 @@ def merge_mobile_reviewed(current, incoming, now):
         if story is None:
             continue
         key = normalize_url(story["url"])
-        old = indexed.get(key)
-        if old:
-            # Preserve published URL identity and existing article links.
-            story["id"] = old["id"]
-        elif identities.get(str(story["id"]), key) != key:
+        if key in indexed:
+            # Existing public stories may contain full articles and verified metadata.
+            # Never downgrade or change their stable ID using phone excerpts.
+            continue
+        if identities.get(str(story["id"]), key) != key:
             log.warning("Mobile feed ID conflict; skipping story %s", story["id"])
             continue
-        if old != story:
-            indexed[key] = story
-            changed += 1
+        indexed[key] = story
+        changed += 1
         identities[str(story["id"])] = key
     result = sorted(indexed.values(),
                     key=lambda row: parse_date(row.get("published_at_site") or row.get("published_at"))
