@@ -207,12 +207,13 @@ async function article(id){setActive('');
  let it=S.items.find(i=>i.id===id);
  if(!it||!it.body){if(!it)$('#app').innerHTML='<div class="art" role="status">Loading this story…</div>';try{const r=await fetch(ENDPOINTS.item+encodeURIComponent(id),{signal:AbortSignal.any([articleController.signal,AbortSignal.timeout(10000)]),headers:{Accept:'application/json'}});if(r.ok){const j=await r.json();const raw=j.article&&typeof j.article==='object'?j.article:(j.data||j);it=norm(raw);it.id=id}}catch(e){}}
  if(requestId!==articleRequest)return;
- if(!it){$('#app').innerHTML=`<div class="msg"><h3>We couldn't load this story</h3><p>It may have been removed, or the news service is unreachable.</p><p style="margin-top:20px"><a class="btn" href="#/">Back to latest</a></p></div>`;return}
+ if(!it){document.documentElement.lang='en';$('#app').innerHTML=`<div class="msg"><h3>We couldn't load this story</h3><p>It may have been removed, or the news service is unreachable.</p><p style="margin-top:20px"><a class="btn" href="#/">Back to latest</a></p></div>`;return}
+ document.documentElement.lang=ck(it)==='hindi'?'hi':'en';
  document.title=it.title+' — PoliticsHub.in';document.body.dataset.k=ck(it);
  const paras=(it.body||'').split(/\n+/).filter(Boolean).map(p=>`<p>${esc(p)}</p>`).join('')||(it.summary?`<p>${esc(it.summary)}</p>`:'');
  const rel=S.items.filter(i=>i.id!==it.id&&i.category===it.category).concat(S.items.filter(i=>i.id!==it.id&&i.category!==it.category)).slice(0,3);
  $('#app').innerHTML=`<article class="art" data-k="${ck(it)}"><div class="ah"><a class="chip" href="${hl(CATS.find(c=>it.category.toLowerCase().includes(c[0]))?.[0]||'all')}">${esc(it.category)}</a><h1>${esc(it.title)}</h1>${it.summary&&it.body?`<p class="dek">${esc(it.summary)}</p>`:''}<div class="by"><span>By <a href="/author/politicshub-news-desk">PoliticsHub Editorial Desk</a></span><span>${fmt(it.date)}</span><span>${esc(it.source)}</span></div></div>${it.image?`<div class="ahero"><div class="im">${img(it)}</div></div>`:''}<div class="body">${paras}</div>${it.url?`<div class="src">Source: ${esc(it.source||'original report')}. <a href="${esc(safeSourceUrl(it.url))}" target="_blank" rel="noopener noreferrer">Read the original report</a></div>`:''}<button class="article-share" type="button" data-share-title="${esc(it.title)}" aria-haspopup="dialog" aria-label="Share this story"><span aria-hidden="true">↗</span><b>Share</b></button></article><section class="rel"><div class="sh"><h2>Related stories</h2></div><div class="grid">${rel.map(card).join('')}</div></section>`;fx();return it.id}
-function settings(sub){setActive('');document.title='Settings — PoliticsHub.in';const th=document.documentElement.dataset.theme;
+function settings(sub){document.documentElement.lang='en';setActive('');document.title='Settings — PoliticsHub.in';const th=document.documentElement.dataset.theme;
  const st=(v,t)=>`<span class="${v}">${t}</span>`;const last=S.items.find(i=>i.date)?.date;
  const privacy=preferencesAllowed()?'Preferences allowed':'Essential only';
  $('#app').innerHTML=`<div class="set"><span class="lbl red">Preferences</span><h1>Settings</h1>
