@@ -71,7 +71,10 @@ def enforce_admin_session_scope():
   origin=request.headers.get('Origin')
   expected_origins={request.host_url.rstrip('/')}
   # TLS terminates at Vercel before the Python runtime's internal HTTP hop.
-  if os.getenv('VERCEL')=='1':expected_origins.add('https://'+request.host)
+  if os.getenv('VERCEL')=='1':
+   # Vercel's internal request host can differ from the public browser origin.
+   # Only the two canonical PoliticsHub HTTPS origins are trusted here.
+   expected_origins.update({'https://politicshub.in','https://www.politicshub.in','https://'+request.host})
   # The Termux origin accepts this value ONLY after HMAC verification in
   # its private before_request guard. The phone still requires CSRF tokens.
   if os.getenv('POLITICSHUB_LOCAL_ADMIN')=='1' and os.getenv('POLITICSHUB_ADMIN_BRIDGE_SECRET'):
