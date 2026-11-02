@@ -85,3 +85,43 @@ test('publisher metadata and collection errors cannot inject markup or unsafe li
   assert.doesNotMatch(table,/<img|<script|href="javascript:/);
   assert.match(table,/&lt;img/);assert.match(table,/&lt;script/);
 });
+
+test('Phase 3 shows actual private source triage and publication latency, not guessed health',()=>{
+  const h=harness(inventory());
+  h.workspace.source_triage={scope:'database',status:'attention',tracked:3,observed:2,attention:1,
+    counts:{failed:1,stale:0,healthy:1,awaiting_collection:1},
+    incidents:[{name:'ABP माझा',state:'failed',last_attempt_at:'2026-11-02T12:00:00Z',
+      last_success_at:null,error_class:'HTTPError'}]};
+  h.workspace.newsroom_operations={scope:'database',
+    latency:{sample_limit:300,evaluated:10,measured:8,median_minutes:12.5,
+      p95_minutes:45,definition:'Recorded collection to publication, not live visibility.'},
+    delivery:{recorded:true,counts:{queued:2,syncing:1,failed:1,synced:5}},
+    corrections:{recorded:true,counts:{pending:3,published:4}}};
+  h.render();
+  assert.match(h.elements.get('sourceTriageMetrics').innerHTML,/Recorded checks:2 \/ 3/);
+  assert.match(h.elements.get('sourceTriageMetrics').innerHTML,/Failed checks:1/);
+  assert.match(h.elements.get('sourceIncidents').innerHTML,/ABP माझा/);
+  assert.match(h.elements.get('sourceOperationsMetrics').innerHTML,/Median collection → publish:12.5 min/);
+  assert.match(h.elements.get('sourceOperationsMetrics').innerHTML,/Queued \/ failed delivery:4/);
+  assert.match(h.elements.get('sourceOperationsMetrics').innerHTML,/Pending editorial updates:3/);
+  assert.match(h.elements.get('sourceOperationsNote').textContent,/not live visibility/);
+});
+test('Phase 3 snapshot remains unavailable; incident text is HTML-escaped',()=>{
+  const h=harness({...inventory(),scope:'snapshot'},'snapshot');
+  h.workspace.source_triage={scope:'snapshot',status:'unavailable',counts:null,incidents:[]};
+  h.workspace.newsroom_operations={scope:'unavailable'};
+  h.render();
+  assert.match(h.elements.get('sourceTriageMetrics').innerHTML,/Collector checks:Unavailable/);
+  assert.match(h.elements.get('sourceIncidents').innerHTML,/Phone collector status not checked/);
+  assert.match(h.elements.get('sourceOperationsMetrics').innerHTML,/Delivery queue:Unavailable/);
+  assert.doesNotMatch(h.elements.get('sourceTriageMetrics').innerHTML,/Failed checks:0/);
+  const e=harness(inventory());
+  e.workspace.source_triage={scope:'database',status:'attention',tracked:1,observed:1,attention:1,
+    counts:{failed:1},incidents:[{name:'<img src=x onerror=alert(1)>',state:'failed',
+      error_class:'<script>alert(1)</script>'}]};
+  e.render();
+  const html=e.elements.get('sourceIncidents').innerHTML;
+  assert.match(html,/&lt;img/);
+  assert.match(html,/&lt;script/);
+  assert.doesNotMatch(html,/<img|<script/);
+});
