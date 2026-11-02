@@ -67,7 +67,12 @@ class PublicSnapshotRuntimeTests(unittest.TestCase):
    self.assertTrue(api.article_path(entries[0]).startswith('/india/'))
    section=self.client.get('/politics/')
    self.assertEqual(section.status_code,200)
-   self.assertIn('Three AAP MLAs join BJP',section.get_data(as_text=True))
+   rendered=section.get_data(as_text=True)
+   self.assertIn('Three AAP MLAs join BJP',rendered)
+   self.assertIn('<a href="/politics/">Politics<small>1</small>',rendered)
+   self.assertIn('<a href="/india/">India<small>2</small>',rendered)
+   self.assertIn('<a href="/maharashtra/">Maharashtra<small>—</small>',rendered)
+   self.assertIn('<a href="/hindi/">Hindi<small>—</small>',rendered)
  def test_missing_category_returns_empty_list_when_global_feed_is_healthy(self):
   def rows(category="all", search=None):
    return [{"id":12,"title":"Valid India public report","category":"india"}] if category=="all" else []
