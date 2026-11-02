@@ -23,6 +23,7 @@ from app.source_http import fetch_source, public_http_url
 from app.admin_access import configured_users, verify_recovery_owner
 from app.admin_workspace import LIST_FIELDS as ADMIN_LIST_FIELDS, EDITORIAL_FIELDS, editorial_revision, project_rows as admin_project_rows, coverage as admin_coverage
 from app.source_inventory import source_inventory
+from app.newsroom_operations import source_triage, publication_operations
 from app.category_routing import normalize_category, is_political_headline
 from app.seo_indexing import is_indexable, eligible_articles, news_sitemap_xml, google_news_sitemap_xml, standalone_sitemap_url_xml, STANDALONE_NEWS, SITE_ORIGIN as CANONICAL_ORIGIN
 from app.models import NewsItem
@@ -1286,7 +1287,7 @@ def admin_workspace():
  err=require_admin()
  if err:return err
  if not _public_rate_allowed(30,60):return jsonify({'error':'Workspace refresh limit reached. Please wait.'}),429
- started=time.monotonic(); database=None; connected=False; stats={}; settings={}; activity=[]; latest_collected=None; latest_published=None; inventory=None
+ started=time.monotonic(); database=None; connected=False; stats={}; settings={}; activity=[]; latest_collected=None; latest_published=None; inventory=None; operations=None
  try:
   database=db(); connected=True
   if not recovery_session():
@@ -1303,6 +1304,13 @@ def admin_workspace():
    activity=[dict(row) for row in database.recent_activity(8)] if 'activity.read' in getattr(g,'admin_permissions',[]) else []
    rows=admin_project_rows(raw)
    inventory=source_inventory(database,where=scope_where,params=scope_args)
+   if 'operations.read' in getattr(g,'admin_permissions',[]):
+    try:
+     operations=publication_operations(database,where=scope_where,params=scope_args)
+    except Exception:
+     # Optional read-only history can fail on older phone schemas; never
+     # turn an otherwise working authenticated workspace into a 503.
+     operations={'scope':'unavailable','error':'Private publication history unavailable'}
  except (DatabaseUnavailable,PostgresError):
   connected=False
  finally:
@@ -1325,7 +1333,10 @@ def admin_workspace():
    'latest_age_seconds':max(0,int(now.timestamp()-latest)) if latest else None,
    'latest_collected_at':latest_collected,
    'response_ms':round((time.monotonic()-started)*1000),'reauthenticate':connected and recovery_session()},
-  'stats':stats,'settings':settings,'activity':activity,'stories':rows,'coverage':admin_coverage(rows),'source_inventory':inventory,
+  'stats':stats,'settings':settings,'activity':activity,'stories':rows,
+  'coverage':admin_coverage(rows),'source_inventory':inventory,
+  'source_triage':source_triage(inventory),
+  'newsroom_operations':operations if operations is not None else {'scope':'unavailable','note':'Private publication metrics are not available in this session.'},
   'limits':{'stories':200,'coverage_scope':'loaded stories','source_inventory_scope':inventory['scope'],'refresh_seconds':60},
   'notice':('Termux is the primary news database. This website reads the published GitHub feed; editorial changes happen on the phone.' if os.getenv("VERCEL")=="1" else
    'Database restored. Sign out and sign in again for owner access.' if connected and recovery_session() else
