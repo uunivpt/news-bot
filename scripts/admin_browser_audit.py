@@ -107,11 +107,20 @@ def run(output):
         def sources():
             nav('sources')
             assert page.locator('#sourceTable tbody tr').count()>0
+            directory=page.locator('#sourceTable').inner_text()
+            assert 'TV9' in directory and 'ABP' in directory and 'The Hindu' in directory
+            assert 'Entire database' in page.locator('#sourceScope').inner_text()
+            page.locator('#sourceSearch').fill('TV9')
+            assert page.locator('#sourceTable tbody tr').count()>=1
+            assert all('TV9' in text for text in page.locator('#sourceTable tbody tr').all_inner_texts())
+            page.locator('#sourceSearch').fill('ABP')
+            assert 'ABP' in page.locator('#sourceTable').inner_text()
+            page.locator('#sourceSearch').fill('')
             page.locator('[data-source-filter]').first.click()
             page.wait_for_selector('#news.active')
             page.wait_for_function("() => document.querySelector('#source').value !== 'all' && !document.querySelector('#newsList').hasAttribute('aria-busy')")
             page.locator('#resetFilters').click()
-        check('source coverage drill-down filters the newsroom',sources)
+        check('complete publisher inventory search and full-database drill-down',sources)
         def editing():
             page.wait_for_function("() => !document.querySelector('#newsList').hasAttribute('aria-busy')")
             page.locator('#newsList [data-inspect]').first.click()
@@ -243,7 +252,11 @@ def run(output):
                 page.wait_for_selector('#newsList .story')
                 assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'),width
                 if width==390:page.screenshot(path=str(output/'newsroom-mobile.png'))
+                nav('sources')
+                assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'),width
+                if width==390:page.screenshot(path=str(output/'sources-mobile.png'))
             page.set_viewport_size({'width':390,'height':844})
+            nav('news')
             page.locator('#menuToggle').click()
             page.keyboard.press('Escape')
             assert page.locator('#menuToggle').get_attribute('aria-expanded')=='false'

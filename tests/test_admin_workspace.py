@@ -158,6 +158,28 @@ class AdminWorkspaceTests(unittest.TestCase):
         with patch.dict(os.environ,{'ADMIN_USERS_JSON':'{}'}):self.assertEqual(configured_users(),{})
         with patch.dict(os.environ,{'ADMIN_USERS_JSON':'invalid'}):self.assertEqual(configured_users(),{})
 
+    def test_source_inventory_covers_the_database_and_config_beyond_the_loaded_sample(self):
+        for index in range(205):
+            self.database.insert(NewsItem(source_name='The Hindu - India' if index < 3 else 'Recent source',
+                source_type='rss',title=f'Coverage report {index}',url=f'https://example.org/coverage/{index}',
+                summary='Source report',category='india'))
+        with patch.object(api,'db',return_value=self.database),patch.object(self.database,'close'):
+            self.sign_in()
+            response = self.client.get('/api/admin/workspace')
+        self.assertEqual(response.status_code, 200)
+        data = response.json
+        self.assertEqual(data['coverage']['sample_size'], 200)
+        self.assertNotIn('The Hindu - India', {row['source_name'] for row in data['stories']})
+        self.assertEqual(data['source_inventory']['scope'], 'database')
+        self.assertEqual(data['source_inventory']['total_stories'], 205)
+        inventory = {item['name']: item for item in data['source_inventory']['items']}
+        self.assertEqual(inventory['The Hindu - India']['story_count'], 3)
+        for name in ('TV9 Marathi - Maharashtra', 'ABP Majha - Maharashtra'):
+            self.assertIn(name, inventory)
+            self.assertTrue(inventory[name]['configured'])
+            self.assertEqual(inventory[name]['story_count'], 0)
+        self.assertIn('no-store', response.headers['Cache-Control'])
+
     def test_snapshot_projection_counts_real_flags_and_does_not_infer_verification(self):
         rows = project_rows(self.snapshot,snapshot=True,now=1793361600)
         self.assertIsNone(rows[0]['fact_check_status'])

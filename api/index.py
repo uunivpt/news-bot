@@ -21,6 +21,7 @@ from app.source_text import source_text as plain_source_text
 from app.source_http import fetch_source, public_http_url
 from app.admin_access import configured_users, verify_recovery_owner
 from app.admin_workspace import LIST_FIELDS as ADMIN_LIST_FIELDS, EDITORIAL_FIELDS, editorial_revision, project_rows as admin_project_rows, coverage as admin_coverage
+from app.source_inventory import source_inventory
 from app.category_routing import normalize_category
 from app.seo_indexing import is_indexable, eligible_articles, news_sitemap_xml, google_news_sitemap_xml, standalone_sitemap_url_xml, STANDALONE_NEWS, SITE_ORIGIN as CANONICAL_ORIGIN
 from app.models import NewsItem
@@ -1134,7 +1135,7 @@ def admin_workspace():
  err=require_admin()
  if err:return err
  if not _public_rate_allowed(30,60):return jsonify({'error':'Workspace refresh limit reached. Please wait.'}),429
- started=time.monotonic(); database=None; connected=False; stats={}; settings={}; activity=[]; latest_collected=None; latest_published=None
+ started=time.monotonic(); database=None; connected=False; stats={}; settings={}; activity=[]; latest_collected=None; latest_published=None; inventory=None
  try:
   database=db(); connected=True
   if not recovery_session():
@@ -1147,13 +1148,16 @@ def admin_workspace():
    settings=database.get_settings()
    activity=[dict(row) for row in database.recent_activity(8)]
    rows=admin_project_rows(raw)
+   inventory=source_inventory(database)
  except (DatabaseUnavailable,PostgresError):
   connected=False
  finally:
   if database:database.close()
  snapshot=not connected or recovery_session()
  if snapshot:
-  rows=admin_project_rows(sorted(_snapshot_rows(),key=_public_timestamp,reverse=True)[:200],snapshot=True)
+  snapshot_rows=sorted(_snapshot_rows(),key=_public_timestamp,reverse=True)
+  rows=admin_project_rows(snapshot_rows[:200],snapshot=True)
+  inventory=source_inventory(rows=snapshot_rows)
   stats={'total':None,'published':len(rows),'pending':None,'review_needed':None}
  now=datetime.now(timezone.utc)
  latest=(_public_timestamp({'published_at':latest_published}) or None) if connected and not recovery_session() else max((r['timestamp'] for r in rows if r['timestamp'] is not None),default=None)
@@ -1167,8 +1171,8 @@ def admin_workspace():
    'latest_age_seconds':max(0,int(now.timestamp()-latest)) if latest else None,
    'latest_collected_at':latest_collected,
    'response_ms':round((time.monotonic()-started)*1000),'reauthenticate':connected and recovery_session()},
-  'stats':stats,'settings':settings,'activity':activity,'stories':rows,'coverage':admin_coverage(rows),
-  'limits':{'stories':200,'coverage_scope':'loaded stories','refresh_seconds':60},
+  'stats':stats,'settings':settings,'activity':activity,'stories':rows,'coverage':admin_coverage(rows),'source_inventory':inventory,
+  'limits':{'stories':200,'coverage_scope':'loaded stories','source_inventory_scope':inventory['scope'],'refresh_seconds':60},
   'notice':('Termux is the primary news database. This website reads the published GitHub feed; editorial changes happen on the phone.' if os.getenv("VERCEL")=="1" else
    'Database restored. Sign out and sign in again for owner access.' if connected and recovery_session() else
    'Database unavailable. Showing the latest public snapshot; editorial changes are paused.' if snapshot else '')})
