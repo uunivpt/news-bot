@@ -58,6 +58,14 @@ class SEOIndexingTests(unittest.TestCase):
             self.assertTrue(loc.startswith("https://www.politicshub.in/"),loc)
         self.assertIn("https://www.politicshub.in/",[x[0].text for x in static])
 
+    def test_served_static_sitemap_matches_generator_exactly(self):
+        # Vercel serves this file directly; changing only the Python generator
+        # does NOT update the URLs actually seen by crawlers.
+        served=Path("public/static-sitemap.xml").read_text(encoding="utf-8").strip()
+        generated=static_sitemap_xml()
+        self.assertEqual(served,generated)
+        self.assertEqual(len(ET.fromstring(served)),23)
+
     def test_active_category_landings_are_discoverable_but_retired_desks_are_not(self):
         from app.seo_indexing import STATIC_PAGES
         locations={node[0].text for node in ET.fromstring(static_sitemap_xml())}
