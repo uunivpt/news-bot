@@ -17,3 +17,12 @@ html[data-admin-theme=dark]{color-scheme:dark;--bg:#111c19;--panel:#192722;--sof
 .editorial-source-list{max-height:640px;overflow:auto}.editorial-source{display:block;padding:14px 0;border-bottom:1px solid var(--border,#dbe1dc);overflow-wrap:anywhere}.editorial-source small,.source-report small{display:block;margin:6px 0}.editorial-source input{margin-right:10px}.source-report{padding:16px 0;border-bottom:1px solid var(--border,#dbe1dc);overflow-wrap:anywhere}.source-report blockquote{margin:12px 0;padding-left:14px;border-left:3px solid #88a594;white-space:pre-wrap}.studio-preview{max-width:390px;margin:20px auto;line-height:1.8;overflow-wrap:anywhere}.studio-preview p{white-space:pre-wrap}.studio-preview h2{line-height:1.5}.editorial-permissions{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}.editorial-claim{margin:18px 0;padding:14px;border:1px solid var(--border,#dbe1dc);border-radius:12px}.editorial-claim .field{margin-bottom:8px}#policyDialog .switch-row{gap:10px}#studioId{max-width:180px}#studioForm .btn,#updateForm .btn,#claimForm .btn,#eventCreateForm .btn{margin-top:12px}#readinessTechnical a,#studioSourceList a{overflow-wrap:anywhere}
 /* Keep the account controls reachable as more editorial desks are added. */
 .side{overflow-y:auto}.side .nav{flex:1;min-height:0;overflow-y:auto;align-content:start}.side-bottom{flex-shrink:0;padding-top:12px}#shell [hidden]{display:none!important}
+
+/* Phase 3 operations: preserve the existing admin theme and mobile grid. */
+.source-ops-heading{font-size:13px;font-weight:650;margin:24px 0 12px;letter-spacing:-.015em}
+#sourceTriageNotice{margin:0 0 18px;font-size:11px}
+#sourceTriageMetrics,#sourceOperationsMetrics{grid-template-columns:repeat(4,minmax(0,1fr))}
+#sourceIncidents{overflow-x:auto}
+#sourceIncidents .table td{max-width:270px}
+@media(max-width:1100px){#sourceTriageMetrics,#sourceOperationsMetrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){#sourceTriageMetrics,#sourceOperationsMetrics{grid-template-columns:1fr}.source-ops-heading{margin-top:18px}}
