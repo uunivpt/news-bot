@@ -110,16 +110,9 @@ def static_sitemap_xml():
     return '<?xml version="1.0" encoding="UTF-8"?>' + '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + entries + "</urlset>"
 
 
-# Manually reviewed, independently sourced editorial page already published on-site.
-# Never add a new page without a real published HTML article and verified sources.
-STANDALONE_NEWS = (
-    {
-        "path": "/nana-patekar-tribute.html",
-        "title": "Nana Patekar dies at 75 in Goa, leaving a lasting cinema legacy",
-        "published_at": "2026-10-08T06:00:00+05:30",
-        "language": "en",
-    },
-)
+# Standalone articles need documented source verification before discovery.
+# Previously promoted static reports are withheld; their URLs show review notices.
+STANDALONE_NEWS = ()
 
 
 def standalone_sitemap_url_xml():

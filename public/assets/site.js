@@ -2,9 +2,7 @@
 const CATS=[['all','Home'],['maharashtra','Maharashtra'],['india','India'],['politics','Politics'],['world','World'],['hindi','Hindi']];
 const TABS=[['all','All'],['maharashtra','Maharashtra'],['politics','Politics'],['india','India'],['world','World'],['hindi','Hindi']];
 const ENDPOINTS={api:'/api/news?category=all&limit=120',item:'/api/news/',search:'/api/search',snap:'/news-data.json',hindi:'/api/hindi-feed'};
-// Editorially verified one-off story stays visible even during a DB quota outage.
-const MUSK_STARLINK={id:'202610090923',title:'Elon Musk targets Mukesh Ambani over Starlink India launch delay',category:'india',source:'PoliticsHub News Desk / Reuters',source_name:'PoliticsHub News Desk',date:'2026-10-09T23:23:00+05:30',published_at_site:'2026-10-09T23:23:00+05:30',summary:'In a sarcastic X post, Elon Musk called Mukesh Ambani “Prime Minister Ambani” and alleged obstacles to Starlink. India denies favouritism, citing mandatory security and spectrum approvals.',image:'',url:'https://www.reuters.com/business/media-telecom/india-rejects-monopoly-claim-after-musk-accuses-ambani-blocking-starlink-launch-2026-10-09/',editorial_pick:true};
-const NANA_TRIBUTE={id:'nana-tribute',title:'Nana Patekar dies at 75 in Goa, leaving a lasting cinema legacy',category:'india',source:'Reuters / AP',source_name:'Reuters',date:'2026-10-08T06:00:00+05:30',published_at_site:'2026-10-08T06:00:00+05:30',summary:'Veteran actor Nana Patekar died in Goa on 8 October 2026, aged 75. His celebrated films included Parinda, Krantiveer, Ab Tak Chhappan and Natsamrat.',image:'',url:'https://www.reuters.com/business/media-telecom/bollywood-actor-nana-patekar-dies-75-2026-10-08/',is_breaking:true};
+// Static reports under source review are not injected into the news feed.
 
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
