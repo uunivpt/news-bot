@@ -273,7 +273,7 @@ function filteredSnapshot() {
   return result.sort((a,b) => sort === 'oldest' ? (a.timestamp || 0)-(b.timestamp || 0) : sort === 'views' ? Number(b.view_count || 0)-Number(a.view_count || 0) : sort === 'quality' ? b.quality_flags.length-a.quality_flags.length : (b.timestamp || 0)-(a.timestamp || 0));
 }
 function storyActions(row) {
-  if(row.archived && !workspace?.access.read_only) return `<button class="btn" data-restore-archive="${esc(row.news_number)}">Restore for editing</button>`;
+  if(row.archived && !workspace?.access.read_only) return `<button class="btn" data-inspect="${Number(row.id)}">Inspect saved article</button><button class="btn" data-restore-archive="${esc(row.news_number)}">Restore for editing</button>`;
   if (workspace?.access.read_only) return `<button class="btn" data-inspect="${Number(row.id)}">Inspect ↗</button>`;
   const id = Number(row.id);
   return `<button class="btn" data-inspect="${id}">Inspect</button><button class="btn" data-studio="${id}">Studio</button>` + (!row.article_available ? `<button class="btn" data-permission="news.process" data-news="process" data-id="${id}" data-write>Process</button>` : '') + (row.status === 'pending' ? `<button class="btn" data-permission="news.publish" data-news="approve" data-id="${id}" data-write>Verify &amp; publish</button>` : '') + (row.status !== 'rejected' ? `<button class="btn danger" data-permission="news.reject" data-news="reject" data-id="${id}" data-write>Reject</button>` : '');
@@ -290,22 +290,66 @@ function renderNews(list, total) {
   updateSelection();
   applyCapabilities();
 }
+function newsNumberInput(value) {
+  const text=String(value || '').trim().replace(/^(?:News\s*No\.?\s*[:#]?\s*|#)/i,'');
+  if (/^\d{9,16}$/.test(text)) return text;
+  try { const url=new URL(text); return /^https?:$/.test(url.protocol) ? (url.pathname.match(/\/(\d{9,16})(?:-[^/]*)?\/?$/)?.[1] || '') : ''; }
+  catch { return ''; }
+}
 async function loadNews(reset = false, {silent = false} = {}) {
   if (!workspace) return false;
   if (reset) { pageNumber = 1; selected.clear(); }
   const sequence = ++newsSequence;
   newsController?.abort();
-  if (workspace.mode === 'snapshot' && /^\d{9,16}$/.test($('search').value.trim())) {
-   try {const data=await api('/api/admin/archive/search?number='+encodeURIComponent($('search').value.trim())); if(sequence===newsSequence)renderNews(data.stories,data.total);return true;}
-   catch(error){notice(error.message,'err');return false;}
-  }
-  if (workspace.mode === 'snapshot') { const result = filteredSnapshot(); renderNews(result.slice((pageNumber-1)*25,pageNumber*25),result.length); return true; }
   newsController = new AbortController();
+  const signal=newsController.signal;
+  const numberQuery=newsNumberInput($('search').value);
   $('newsList').setAttribute('aria-busy','true');
-  const query = new URLSearchParams({page:pageNumber,search:$('search').value.trim(),category:$('category').value,source:$('source').value,status:$('status').value,review:$('review').value,sort:$('sort').value,quality:queue === 'quality' ? '1' : '0'});
-  try { const data = await api('/api/admin/stories?' + query,{signal:newsController.signal}); if (sequence === newsSequence) { renderNews(data.stories,data.total); return true; } return false; }
-  catch (error) { if (sequence === newsSequence && error.name !== 'AbortError') { if (!silent) notice(error.name === 'TimeoutError' ? 'News refresh timed out. Displayed stories are retained.' : error.message,'err'); $('newsScope').textContent = 'News refresh failed. Displayed stories may be out of date; use Refresh to retry.'; } return false; }
-  finally { if (sequence === newsSequence) $('newsList').removeAttribute('aria-busy'); }
+  try {
+    if (numberQuery) {
+      let article;
+      try { article=await api('/api/news/'+encodeURIComponent(numberQuery),{signal}); }
+      catch(error) { if (error.status !== 404) throw error; }
+      if (sequence !== newsSequence || signal.aborted) return false;
+      if (article?.id) {
+        const stamp=Date.parse(article.published_at_iso || article.published_at_site || article.published_at);
+        const story={...article,news_number:String(article.news_number || numberQuery),
+          summary:article.bot_summary || article.summary || '', quality_flags:[],
+          article_available:!!(article.article || article.bot_article), timestamp:Number.isFinite(stamp)?stamp/1000:null,
+          status:'published',fact_check_status:null,archived:true};
+        renderNews([story],1);
+        $('newsScope').textContent='Exact news number match across the public archive. Queue and desk filters do not hide this result.';
+        // Public identity resolution must work even while the phone runs an
+        // older queue implementation or the article is absent from its database.
+        if (!workspace.access.read_only) {
+          try {
+            const draft=await api('/api/admin/story/'+encodeURIComponent(story.id),{signal});
+            if(sequence !== newsSequence || signal.aborted)return false;
+            if(String(draft.id)===String(story.id)) {
+              Object.assign(story,draft,{archived:false,status:draft.status || 'unknown'});
+              renderNews([story],1);
+              $('newsScope').textContent='Exact news number match. The connected editor contains this story.';
+            }
+          } catch(error) {
+            if(sequence !== newsSequence || signal.aborted || error.status===401)return false;
+            $('newsScope').textContent='Public article found. Its saved text is available to inspect; the connected editor has not confirmed an editable copy.';
+          }
+        }
+        return true;
+      }
+    }
+    if (workspace.mode === 'snapshot') { const result = filteredSnapshot(); renderNews(result.slice((pageNumber-1)*25,pageNumber*25),result.length); return true; }
+    const query = new URLSearchParams({page:pageNumber,search:numberQuery || $('search').value.trim(),category:$('category').value,source:$('source').value,status:$('status').value,review:$('review').value,sort:$('sort').value,quality:queue === 'quality' ? '1' : '0'});
+    const data = await api('/api/admin/stories?' + query,{signal});
+    if (sequence === newsSequence) { renderNews(data.stories,data.total); return true; }
+    return false;
+  } catch (error) {
+    if (sequence === newsSequence && error.name !== 'AbortError') {
+      if (!silent) notice(error.name === 'TimeoutError' ? 'News refresh timed out. Displayed stories are retained.' : error.message,'err');
+      $('newsScope').textContent = 'News refresh failed. Displayed stories may be out of date; use Refresh to retry.';
+    }
+    return false;
+  } finally { if (sequence === newsSequence) $('newsList').removeAttribute('aria-busy'); }
 }
 function updateSelection() {
   $('bulkBar').classList.toggle('hidden',!selected.size);
@@ -449,15 +493,15 @@ async function inspectStory(id) {
   const row = [...visibleRows,...rows].find(item => Number(item.id) === id);
   if (!row) return;
   const sequence = ++inspectorSequence, url = safeUrl(row.url);
-  $('inspectorBody').innerHTML = `<span class="desk-tag">${esc(row.category || 'General')} / #${id}</span><h2 id="inspectorTitle">${esc(row.title)}</h2><span class="pill ${row.status === 'published' ? 'green' : 'amber'}">${esc(row.status)}</span><dl class="detail-grid">${detail('Source',row.source_name || 'Unknown')}${detail('Published',date(row.timestamp ? row.timestamp*1000 : row.published_at))}${detail('Review',row.fact_check_status || 'Not available in public snapshot')}${detail('Recorded views',number(row.view_count))}</dl><p class="inspector-summary">${esc(row.summary || 'No summary available.')}</p><div class="quality-flags">${row.quality_flags.map(flag => `<span class="pill amber">${esc(flag)}</span>`).join('')}</div><div class="actions">${url ? `<a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(url)}">Open original source ↗</a>` : ''}<button id="loadArticle" class="btn">Load article text</button><button id="copySource" class="btn" ${url ? '' : 'disabled'}>Copy source URL</button></div><div id="inspectorArticle" class="article-body"></div>`;
+  $('inspectorBody').innerHTML = `<span class="desk-tag">${esc(row.category || 'General')} / News No. ${esc(row.news_number || id)}</span><h2 id="inspectorTitle">${esc(row.title)}</h2><span class="pill ${row.status === 'published' ? 'green' : 'amber'}">${esc(row.status)}</span><dl class="detail-grid">${detail('Source',row.source_name || 'Unknown')}${detail('Published',date(row.timestamp ? row.timestamp*1000 : row.published_at))}${detail('Review',row.fact_check_status || 'Not available in public snapshot')}${detail('Recorded views',number(row.view_count))}</dl><p class="inspector-summary">${esc(row.summary || 'No summary available.')}</p><div class="quality-flags">${row.quality_flags.map(flag => `<span class="pill amber">${esc(flag)}</span>`).join('')}</div><div class="actions">${url ? `<a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(url)}">Open original source ↗</a>` : ''}<button id="loadArticle" class="btn">Load article text</button><button id="copySource" class="btn" ${url ? '' : 'disabled'}>Copy source URL</button></div><div id="inspectorArticle" class="article-body"></div>`;
   if (!$('inspector').open) $('inspector').showModal();
   $('loadArticle').onclick = async () => {
     $('loadArticle').disabled = true; $('inspectorArticle').textContent = 'Loading article…';
-    try { const data = await api((workspace && !workspace.access.read_only ? '/api/admin/story/' + id + '/article' : '/api/news/' + id)); if (sequence !== inspectorSequence || !$('inspector').open) return; $('inspectorArticle').textContent = data.article || data.bot_article || data.summary || 'No article text available.'; }
+    try { const data = await api((workspace && !workspace.access.read_only && !row.archived ? '/api/admin/story/' + id + '/article' : '/api/news/' + id)); if (sequence !== inspectorSequence || !$('inspector').open) return; $('inspectorArticle').textContent = data.article || data.bot_article || data.summary || 'No article text available.'; }
     catch (error) { if (sequence === inspectorSequence && $('inspector').open) { $('inspectorArticle').textContent = error.message; $('loadArticle').disabled = false; } }
   };
   $('copySource').onclick = async () => { try { await navigator.clipboard.writeText(url); notice('Source link copied'); } catch { notice('Clipboard unavailable. Open the original source link.','err'); } };
-  if (can('news.edit')) {
+  if (can('news.edit') && !row.archived) {
     const editor = document.createElement('details'); editor.className = 'story-editor';
     editor.innerHTML = `<summary>Edit headline &amp; summary</summary><form id="editStoryForm"><label class="label" for="editTitle">Headline</label><textarea id="editTitle" class="field" maxlength="500" required rows="3">${esc(row.title)}</textarea><label class="label" for="editCategory">Editorial desk</label><select id="editCategory" class="field">${['general','india','world','politics','business','technology','sports','entertainment','science','health','hindi','maharashtra'].map(category => `<option ${category === row.category ? 'selected' : ''}>${category}</option>`).join('')}</select><label class="label" for="editSummary">Summary</label><textarea id="editSummary" class="field" maxlength="6000" rows="5">${esc(row.summary)}</textarea><p class="panel-foot">Changes are saved to the database and recorded in the audit trail. Source links stay attached to the story.</p><button class="btn primary" type="submit">Save story</button></form>`;
     $('inspectorBody').append(editor);
