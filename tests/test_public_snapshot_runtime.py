@@ -73,6 +73,38 @@ class PublicSnapshotRuntimeTests(unittest.TestCase):
    self.assertIn('<a href="/india/">India<small>2</small>',rendered)
    self.assertIn('<a href="/maharashtra/">Maharashtra<small>—</small>',rendered)
    self.assertIn('<a href="/hindi/">Hindi<small>—</small>',rendered)
+ def test_independent_hindi_article_api_matches_public_html_with_database_unavailable(self):
+  hindi={'id':762,'title':'भारत में महत्वपूर्ण नई सरकारी घोषणा','summary':'मूल स्रोत से खबर.',
+         'category':'hindi','status':'published','public_source':True,
+         'url':'https://example.org/hindi-source'}
+  with patch.object(api.public_archive,'by_id',return_value=None), \\
+       patch.object(api,'_snapshot_rows',return_value=[]), \\
+       patch.object(api,'_official_exam_rows',return_value=[]), \\
+       patch.object(api,'_hindi_rows',return_value=[hindi]), \\
+       patch.object(api,'db',side_effect=DatabaseUnavailable('down')):
+   detail=self.client.get('/api/news/762')
+   self.assertEqual(detail.status_code,200)
+   self.assertEqual(detail.json['category'],'hindi')
+   page=self.client.get('/hindi/'+api.news_number(hindi))
+   self.assertEqual(page.status_code,200)
+   self.assertIn(hindi['title'],page.get_data(as_text=True))
+
+ def test_independent_hindi_article_api_works_with_healthy_database(self):
+  hindi={'id':763,'title':'भारत में एक महत्वपूर्ण नई घोषणा','summary':'मूल स्रोत का सारांश.',
+         'category':'hindi','status':'published','public_source':True,
+         'url':'https://example.org/hindi-source-2'}
+  database=Mock()
+  database.get_by_id.return_value=None
+  with patch.object(api.public_archive,'by_id',return_value=None), \\
+       patch.object(api,'_snapshot_rows',return_value=[]), \\
+       patch.object(api,'_official_exam_rows',return_value=[]), \\
+       patch.object(api,'_hindi_rows',return_value=[hindi]), \\
+       patch.object(api,'db',return_value=database):
+   detail=self.client.get('/api/news/763')
+   self.assertEqual(detail.status_code,200)
+   self.assertEqual(detail.json['id'],763)
+   database.close.assert_called()
+
  def test_missing_category_returns_empty_list_when_global_feed_is_healthy(self):
   def rows(category="all", search=None):
    return [{"id":12,"title":"Valid India public report","category":"india"}] if category=="all" else []
