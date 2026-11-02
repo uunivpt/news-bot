@@ -62,7 +62,7 @@ class LocalAdminAccessTests(unittest.TestCase):
             run.return_value.returncode = 0
             connect.return_value.__enter__.return_value = conn
             self.assertEqual(termux_local_admin.start(reset=True), 0)
-        create.assert_called_once_with(conn, 'new owner password', reset=True)
+        create.assert_called_once_with(conn, 'new owner password', reset=True, username='pushkarthawari')
         spawn.assert_not_called()
 
     def test_loopback_port_and_local_postgres_only(self):
@@ -73,7 +73,7 @@ class LocalAdminAccessTests(unittest.TestCase):
 
     def test_local_owner_requires_strong_password(self):
         connection = MagicMock()
-        with self.assertRaisesRegex(ValueError, "12"):
+        with self.assertRaisesRegex(ValueError, "10"):
             termux_local_admin.create_local_owner(connection, "short")
         connection.execute.assert_not_called()
 
@@ -89,9 +89,36 @@ class LocalAdminAccessTests(unittest.TestCase):
         password = "my strong private password"
         self.assertTrue(termux_local_admin.create_local_owner(connection, password))
         sent = connection.execute.call_args.args[1]
-        self.assertEqual(sent[0], "localowner")
+        self.assertEqual(sent[0], "pushkarthawari")
         self.assertTrue(sent[1].startswith("scrypt:"))
         self.assertNotIn(password, sent[1])
+
+    def test_requested_username_accepts_eleven_character_password_as_hash_only(self):
+        from werkzeug.security import check_password_hash
+        connection = MagicMock()
+        connection.execute.return_value.fetchone.return_value = None
+        password = 'fixture1234'
+        self.assertEqual(len(password), 11)
+        self.assertTrue(termux_local_admin.create_local_owner(
+            connection, password, reset=True, username='pushkarthawari'))
+        sent = connection.execute.call_args.args[1]
+        self.assertEqual(sent[0], 'pushkarthawari')
+        self.assertTrue(check_password_hash(sent[1], password))
+        self.assertNotIn(password, sent[1])
+
+    def test_custom_owner_is_parameterized_and_does_not_delete_other_accounts(self):
+        connection = MagicMock()
+        connection.execute.return_value.fetchone.return_value = None
+        termux_local_admin.create_local_owner(connection, 'a fixture password',
+                                              reset=True, username='chosen_owner')
+        self.assertEqual(connection.execute.call_args.args[1][0], 'chosen_owner')
+        self.assertFalse(any('DELETE' in call.args[0].upper() for call in connection.execute.call_args_list))
+
+    def test_invalid_owner_stops_before_database_or_process_checks(self):
+        with patch.object(termux_local_admin, '_listening') as listening:
+            with self.assertRaisesRegex(ValueError, 'username'):
+                termux_local_admin.start(reset=True, username="not a valid username")
+        listening.assert_not_called()
 
     def test_approve_requires_explicit_editor_confirmation(self):
         with patch.dict(os.environ, {"POLITICSHUB_LOCAL_ADMIN": "1"}):
