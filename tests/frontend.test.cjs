@@ -111,3 +111,14 @@ test('archive search loads beyond fifty results and filters category on the serv
  assert.match(elements['#sres'].innerHTML,/Result 62/);
  assert.doesNotMatch(elements['#sres'].innerHTML,/id="searchMore"/);
 });
+
+test('archive search displays the server total rather than only the loaded page count',async()=>{
+ const elements={'#si':{value:'exam'},'#sc':{textContent:''},'#sres':{innerHTML:''},'#searchMore':{}};
+ const context=vm.createContext({AbortController,Number,window:{},$:(s)=>elements[s],get:async()=>{
+  const rows=Array.from({length:50},(_,i)=>({id:String(i),title:'Official exam notice'}));rows.searchTotal=127;return rows;
+ },ENDPOINTS:{search:'/api/search'},S:{items:[]},norm:x=>x,inCat:()=>true,esc:String,articleHref:x=>'/'+x.id,ago:()=>'',doS(){}});
+ vm.runInContext(source.slice(source.indexOf('let searchRequest='),source.indexOf('const __article=')),context);
+ await vm.runInContext('doS()',context);
+ assert.match(elements['#sc'].textContent,/50 of 127/);
+ assert.match(elements['#sres'].innerHTML,/searchMore/);
+});

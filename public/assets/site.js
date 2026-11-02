@@ -48,7 +48,7 @@ function newsCategory(category,title,summary){
 function norm(a,i){const id=a.id??a.slug??a._id??'n'+i;const img=a.image||a.image_url||a.imageUrl||a.urlToImage||a.thumbnail||a.img||'';
  return{...a,id:String(id),title:a.title||a.headline||'Untitled',summary:a.summary||a.description||a.excerpt||'',body:a.article||a.bot_article||a.content||a.body||a.text||'',image:typeof img==='string'?img:'',category:newsCategory(a.category||a.section||'General',a.title||a.headline,a.summary||a.description||a.excerpt),source:(a.source&&a.source.name)||a.source||a.publisher||'',date:a.published_at_iso||a.publishedAt||a.pubDate||a.date||a.published_at||a.created_at||'',url:a.url||a.link||'',author:a.author||a.author_name||'PoliticsHub Editorial Desk'}}
 const pick=j=>Array.isArray(j)?j:(j.articles||j.news||j.items||j.data||j.results||[]);
-async function get(u,options={}){const deadline=AbortSignal.timeout(10000);const signal=options.signal?AbortSignal.any([options.signal,deadline]):deadline;const r=await fetch(u,{signal,cache:'default',headers:{'Accept':'application/json'}});if(!r.ok)throw Error('News request failed');if(u===ENDPOINTS.api)S.apiMode=r.headers.get('X-News-Mode')||'live';const rows=pick(await r.json());if(!Array.isArray(rows))throw Error('Invalid news response');return rows.filter(x=>x&&typeof x==='object'&&!Array.isArray(x)).map((x,i)=>{const img=x.image_url||x.image||x.imageUrl||x.urlToImage||x.thumbnail||x.img||'';const source=x.source_name||(x.source&&x.source.name)||x.source||x.publisher||'PoliticsHub';const date=x.published_at_iso||x.published_at_site||x.publishedAt||x.pubDate||x.date||x.published_at||x.created_at||'';const body=x.article||x.bot_article||x.content||x.body||x.text||'';const summary=x.summary||x.bot_summary||x.description||x.excerpt||'';return {...x,title:String(x.title||x.headline||'Untitled'),category:newsCategory(x.category||x.section||'india',x.title||x.headline,summary),id:String(x.id??x.slug??x._id??'n'+i),image:typeof img==='string'?img:'',source:String(source),date,body:String(body),summary:String(summary)};})}
+async function get(u,options={}){const deadline=AbortSignal.timeout(10000);const signal=options.signal?AbortSignal.any([options.signal,deadline]):deadline;const r=await fetch(u,{signal,cache:'default',headers:{'Accept':'application/json'}});if(!r.ok)throw Error('News request failed');if(u===ENDPOINTS.api)S.apiMode=r.headers.get('X-News-Mode')||'live';const rows=pick(await r.json());if(!Array.isArray(rows))throw Error('Invalid news response');const normalizedRows=rows.filter(x=>x&&typeof x==='object'&&!Array.isArray(x)).map((x,i)=>{const img=x.image_url||x.image||x.imageUrl||x.urlToImage||x.thumbnail||x.img||'';const source=x.source_name||(x.source&&x.source.name)||x.source||x.publisher||'PoliticsHub';const date=x.published_at_iso||x.published_at_site||x.publishedAt||x.pubDate||x.date||x.published_at||x.created_at||'';const body=x.article||x.bot_article||x.content||x.body||x.text||'';const summary=x.summary||x.bot_summary||x.description||x.excerpt||'';return {...x,title:String(x.title||x.headline||'Untitled'),category:newsCategory(x.category||x.section||'india',x.title||x.headline,summary),id:String(x.id??x.slug??x._id??'n'+i),image:typeof img==='string'?img:'',source:String(source),date,body:String(body),summary:String(summary)};});const total=r.headers.get('X-Search-Total');if(total!==null&&Number.isFinite(Number(total)))normalizedRows.searchTotal=Number(total);return normalizedRows}
 const CACHE_KEY='ph-news-cache';
 const LEGACY_CACHE_KEYS=['ph-news-cache-v6','ph-news-cache-v5','ph-news-cache-v4'];
 function cacheSave(items){if(!preferencesAllowed())return;try{localStorage.setItem(CACHE_KEY,JSON.stringify({ts:Date.now(),items}));}catch(e){}}
@@ -349,9 +349,10 @@ const __doS=doS; doS=async function(append=false){
  const offset=searchOffset;
  if(q.length<2){$('#sc').textContent='Enter at least 2 characters to search the archive';$('#sres').innerHTML='';return}
  $('#sc').textContent='Searching…';
- let r=[],localFallback=false;
+ let r=[],localFallback=false,totalMatches=null;
  try{
   r=await get(ENDPOINTS.search+'?q='+encodeURIComponent(q)+'&limit=50&offset='+offset+'&category='+encodeURIComponent(cat)+'&source='+encodeURIComponent(source)+'&period='+encodeURIComponent(period),{signal:searchController.signal});
+  if(Number.isFinite(r.searchTotal))totalMatches=r.searchTotal;
  }catch(e){
   if(requestId!==searchRequest||searchController.signal.aborted)return;
   localFallback=true;
@@ -359,11 +360,11 @@ const __doS=doS; doS=async function(append=false){
   r=S.items.filter(i=>(cat==='all'||inCat(i,cat))&&(!source||i.source===source)&&(!cutoff||ts(i.date)>=cutoff)&&[i.title,i.summary,i.source,i.category].join(' ').toLowerCase().includes(q.toLowerCase())).slice(offset,offset+50);
  }
  if(requestId!==searchRequest)return;
- const hasMore=r.length===50;searchOffset=offset+r.length;
+ const hasMore=totalMatches!==null?offset+r.length<totalMatches:r.length===50;searchOffset=offset+r.length;
  const seen=new Set(searchResults.map(i=>i.id));
  searchResults=searchResults.concat(r.map(norm).filter(i=>{if((cat!=='all'&&!inCat(i,cat))||seen.has(i.id))return false;seen.add(i.id);return true}));
  r=searchResults;
- $('#sc').textContent=(r.length?(r.length+' '+(r.length===1?'story':'stories')+' found'):'No stories match your search.')+(localFallback?' Archive unavailable; searching loaded stories only.':'');
+ $('#sc').textContent=(r.length?(r.length+(totalMatches!==null?' of '+totalMatches:'')+' '+(r.length===1?'story':'stories')+' found'):'No stories match your search.')+(localFallback?' Archive unavailable; searching loaded stories only.':'');
  $('#sres').innerHTML=r.map(i=>'<a class="sr" href="'+esc(articleHref(i))+'">'+(i.image?'<img src="'+esc(i.image)+'" alt="" loading="lazy">':'')+'<div><span class="lbl red">'+esc(i.category)+'</span><h3>'+esc(i.title)+'</h3><small>'+esc(i.source)+' '+ago(i.date)+'</small></div></a>').join('')+(hasMore?'<button type="button" class="btn" id="searchMore">Load more stories</button>':'');
  const more=$('#searchMore');if(more)more.onclick=()=>{more.disabled=true;doS(true)};
 };

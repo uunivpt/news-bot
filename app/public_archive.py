@@ -40,10 +40,9 @@ def _load():
 
 
 def rows(search=None):
-    query = str(search or "").casefold()
-    return [dict(row) for row in _load() if not query or query in " ".join(
-        str(row.get(key) or "") for key in ("id", "news_number", "title", "summary", "bot_summary", "bot_article", "source_name")
-    ).casefold()]
+    from .news_search import matching
+    records=[dict(row) for row in _load()]
+    return matching(records,search) if search else records
 
 
 def by_id(item_id):
