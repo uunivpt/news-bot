@@ -8,6 +8,7 @@ from app.article_fetcher import enrich_source_text
 from app.database import NewsDatabase
 from app.news_text import clean_news_text
 from app.newsroom import process_news, validate_news_copy
+from app.editorial_gate import longform_review, longform_mode_enabled
 from app.publish_policy import risk_flags
 from app.phase_system import ensure_schema, run as agent_run, quality_gate, manager_route
 from app.advanced_ops import audit_stage, state_transition, record_verification, find_duplicate_story
@@ -72,6 +73,9 @@ def prepare_content(db,row):
   db.update(int(row["id"]),**fields)
   row.update(fields)
   return True
+ if longform_mode_enabled():
+  # RSS snippets are leads for research, not publishable standalone reports.
+  return False
  fallback=_direct_fallback_content(row)
  if not fallback:return False
  db.update(int(row["id"]),**fallback); row.update(fallback)
@@ -168,6 +172,13 @@ def main():
   with agent_run(db, "writer", "prepare_story", int(row["id"]), {"route":route}):
    ready=prepare_content(db,row)
   if not ready:held+=1; print(f"Website publish held for item {row['id']}: no usable source text"); continue
+  if longform_mode_enabled():
+   editorial=longform_review(row)
+   if not editorial["passed"]:
+    held+=1
+    audit_stage(db,int(row["id"]),"EDITORIAL_REVIEW","held",editorial)
+    print(f"Website publish held for item {row['id']}: {editorial['errors']} ({editorial['words']} words)")
+    continue
   if not publish_lock(db,int(row["id"]),event_id):
    held+=1; audit_stage(db,int(row["id"]),"PUBLISH_LOCK","blocked",{"story_key":event_id}); print(f"Website duplicate lock blocked item {row['id']}"); continue
   with agent_run(db, "publisher", "publish_website", int(row["id"])):
