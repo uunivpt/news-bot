@@ -125,3 +125,57 @@ test('Phase 3 snapshot remains unavailable; incident text is HTML-escaped',()=>{
   assert.match(html,/&lt;script/);
   assert.doesNotMatch(html,/<img|<script/);
 });
+
+test('Phase 4 renders real operational alerts and 14-day history without auto actions',()=>{
+  const h=harness(inventory());
+  h.workspace.newsroom_alerts={
+    scope:'database',status:'attention',alert_limit:30,
+    alerts:[{kind:'source',severity:'high',title:'Source failed',source:'TV9 Marathi',
+      detail:'Check actual phone logs.',at:'2026-11-02T10:00:00Z'},
+      {kind:'correction',severity:'high',title:'Correction awaiting review',item_id:12,
+      detail:'Human review required',at:'2026-11-01T10:00:00Z'}],
+    followups:[{kind:'correction',item_id:12,age_minutes:1000}],
+    availability:{collector_history:true,delivery:true,corrections:true},
+    trend:{collector_history_available:true,recorded_outcomes:3,series:[
+      {day:'2026-11-01',healthy:2,failed:1,not_configured:0,published:4}
+    ],note:'Actual append-only checks; not generated history.'},
+    note:'Do not automatically publish or retry.'
+  };
+  h.render();
+  assert.match(h.elements.get('phase4Metrics').innerHTML,/Active alerts:2/);
+  assert.match(h.elements.get('phase4Metrics').innerHTML,/Overdue corrections:1/);
+  assert.match(h.elements.get('phase4Metrics').innerHTML,/Recorded source outcomes:3/);
+  assert.match(h.elements.get('phase4Alerts').innerHTML,/TV9 Marathi/);
+  assert.match(h.elements.get('phase4Alerts').innerHTML,/Story #12/);
+  assert.match(h.elements.get('phase4Trend').innerHTML,/2026-11-01/);
+  assert.match(h.elements.get('phase4Trend').innerHTML,/>4<\/td>/);
+  assert.match(h.elements.get('phase4Notice').textContent,/Do not automatically publish/);
+});
+test('Phase 4 refuses to paint private phone metrics from a public snapshot',()=>{
+  const h=harness({...inventory(),scope:'snapshot'},'snapshot');
+  h.workspace.newsroom_alerts={scope:'unavailable',status:'unavailable',alerts:[],trend:null};
+  h.render();
+  assert.match(h.elements.get('phase4Metrics').innerHTML,/Operational alerts:Unavailable/);
+  assert.match(h.elements.get('phase4Alerts').innerHTML,/Private alerts unavailable/);
+  assert.match(h.elements.get('phase4Trend').innerHTML,/Historical data unavailable/);
+  assert.doesNotMatch(h.elements.get('phase4Metrics').innerHTML,/Active alerts:0/);
+});
+test('Phase 4 escapes source-provided alert strings before writing to the DOM',()=>{
+  const h=harness(inventory());
+  h.workspace.newsroom_alerts={
+    scope:'database',status:'attention',alert_limit:30,
+    alerts:[{severity:'high',kind:'source',title:'<script>alert(1)</script>',
+      source:'<img src=x onerror=alert(1)>',detail:'<svg onload=alert(1)>',
+      at:'2026-11-02T10:00:00Z'}],
+    followups:[],availability:{collector_history:true,delivery:true,corrections:true},
+    trend:{collector_history_available:true,recorded_outcomes:1,series:[
+      {day:'<svg onload=alert(1)>',healthy:1,failed:0,not_configured:0,published:1}
+    ]}
+  };
+  h.render();
+  const markup=h.elements.get('phase4Alerts').innerHTML+' '+h.elements.get('phase4Trend').innerHTML;
+  assert.match(markup,/&lt;script/);
+  assert.match(markup,/&lt;img/);
+  assert.match(markup,/&lt;svg/);
+  assert.doesNotMatch(markup,/<script|<img|<svg/);
+});

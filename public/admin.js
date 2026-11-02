@@ -31,7 +31,7 @@ function showLogin(message = '') {
   pending.clear(); workspacePromise = null;
   for (const id of ['inspector','commandDialog','confirmDialog']) if ($(id).open) $(id).close();
   workspace = null; rows = []; visibleRows = []; settings = {}; selected.clear(); csrf = '';
-  for (const id of ['newsList','recentStories','activityList','inspectorBody','agents','errors','overviewMetrics','health','attentionList','sourceMetrics','sourceChart','sourceTable','sourceTriageMetrics','sourceIncidents','sourceOperationsMetrics','qualityChart','deskChart','opsTotals','opsPhases','quality','advancedReport','upgradeMetrics','upgradeAlerts','upgradeScores','upgradeSources','upgradeEvents','upgradeResources','upgradeHistory','upgradeRegression','sessionDetails','systemChecks']) $(id).replaceChildren();
+  for (const id of ['newsList','recentStories','activityList','inspectorBody','agents','errors','overviewMetrics','health','attentionList','sourceMetrics','sourceChart','sourceTable','sourceTriageMetrics','sourceIncidents','sourceOperationsMetrics','phase4Metrics','phase4Alerts','phase4Trend','qualityChart','deskChart','opsTotals','opsPhases','quality','advancedReport','upgradeMetrics','upgradeAlerts','upgradeScores','upgradeSources','upgradeEvents','upgradeResources','upgradeHistory','upgradeRegression','sessionDetails','systemChecks']) $(id).replaceChildren();
   $('shell').classList.add('hidden'); $('login').classList.remove('hidden');
   $('loginErr').textContent = message;
 }
@@ -567,6 +567,7 @@ function renderSources() {
     return `<tr><td><b>${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(source.name)} ↗</a>` : esc(source.name)}</b><small>${esc([categories,configured].filter(Boolean).join(' · '))}</small></td><td>${esc(count)}</td><td><span class="pill ${status.tone}">${esc(status.label)}</span>${status.detail ? `<small>${esc(status.detail)}</small>` : ''}</td><td>${esc(latest ? date(latest) : 'Not recorded')}</td><td>${canFilter ? `<button class="text-btn" data-source-filter="${esc(source.name)}">${database ? 'View stories' : 'View saved stories'} ↗</button>` : `<span class="muted">${source.story_count == null ? 'Counts unavailable' : 'No stored stories'}</span>`}</td></tr>`;
   }).join('') + '</tbody></table>' : empty('No matching publishers','Try another publisher name, language or desk.');
   renderPhase3Operations();
+  renderPhase4Operations();
 }
 
 /* Private operational evidence only; snapshots may describe published stories,
@@ -616,6 +617,47 @@ function renderPhase3Operations() {
     +metric('Pending editorial updates',corrections.recorded?number(edits.pending||0):'Unavailable','Includes proposed corrections awaiting review');
   opNote.textContent=(latency.definition||'Collection-to-publication timestamps are measured from private records.')+' Latest sample limited to '+number(latency.sample_limit)+' published rows. A synced queue state does not prove public visibility; check the signed receipt and live article.';
 }
+
+/* Phase 4: display only source-backed, authorized operations. Nothing in this
+   renderer sends a notification, edits a story, or retries a publication. */
+function renderPhase4Operations() {
+  const d=workspace?.newsroom_alerts;
+  const metrics=$('phase4Metrics'), table=$('phase4Alerts'), trend=$('phase4Trend');
+  const notice=$('phase4Notice'), trendNote=$('phase4TrendNote');
+  if(!d || d.scope!=='database' || !d.trend) {
+    metrics.innerHTML=metric('Operational alerts','Unavailable','Private phone database not verified')
+      +metric('Corrections follow-up','Unavailable','Private editorial queue not checked')
+      +metric('Collection trends','Unavailable','Requires completed phone checks');
+    table.innerHTML=empty('Private alerts unavailable','Sign into an authorized phone-connected Admin Room. Public GitHub snapshots do not contain collector incidents.');
+    trend.innerHTML=empty('Historical data unavailable','Collector history and signed-in publication records are held on the phone.');
+    notice.textContent='No authenticated private operational telemetry; unavailable is not a healthy result.';
+    trendNote.textContent='Collection history begins with the upgraded phone worker. Previously completed checks cannot be recreated.';
+    return;
+  }
+  const alerts=arr(d.alerts), followups=arr(d.followups), history=d.trend||{};
+  const availability=d.availability||{};
+  const corrections=followups.filter(x=>x.kind==='correction');
+  const delivery=alerts.filter(x=>x.kind==='delivery');
+  metrics.innerHTML=metric('Active alerts',number(alerts.length),'Only up to '+number(d.alert_limit||30)+' alerts are shown')
+    +metric('Overdue corrections',availability.corrections?number(corrections.length):'Unavailable','Pending correction proposals older than 6 hours')
+    +metric('Delivery warnings',availability.delivery?number(delivery.length):'Unavailable','Failed delivery or stalled for over 45 minutes')
+    +metric('Recorded source outcomes',history.collector_history_available?number(history.recorded_outcomes):'Unavailable','Completed collector attempts in the last 14 days');
+  notice.textContent=(d.status==='attention'?'Recorded incidents require editorial/operational review. ':d.status==='partial'?'Some private histories are not available yet. ':'No current alerts among checked records. ')
+    +(d.note||'');
+  table.innerHTML=alerts.length
+    ? '<table class="table"><thead><tr><th>Priority</th><th>Alert</th><th>Source / story</th><th>Recorded time</th><th>Next action</th></tr></thead><tbody>'
+      +alerts.map(a=>'<tr><td><span class="pill '+(a.severity==='high'?'red':'amber')+'">'+esc(a.severity)+'</span></td><td><b>'+esc(a.title)+'</b></td><td>'+esc(a.source||(a.item_id!=null?'Story #'+a.item_id:'—'))+'</td><td>'+esc(date(a.at))+'</td><td>'+esc(a.detail)+'</td></tr>').join('')
+      +'</tbody></table>'
+    : empty('No current alerts in the available records',d.status==='partial'?'Some source or delivery histories have not been recorded yet; do not interpret this as a verified healthy system.':'The available private evidence has no triggered thresholds; refresh to check again.');
+  const series=arr(history.series);
+  trend.innerHTML=series.length
+    ? '<table class="table phase4-daily"><thead><tr><th>UTC day</th><th>Successful checks</th><th>Failed checks</th><th>Not configured</th><th>Published stories</th></tr></thead><tbody>'
+      +series.map(day=>'<tr><td><b>'+esc(day.day)+'</b></td><td>'+esc(day.healthy==null?'Not recorded':number(day.healthy))+'</td><td>'+esc(day.failed==null?'Not recorded':number(day.failed))+'</td><td>'+esc(day.not_configured==null?'Not recorded':number(day.not_configured))+'</td><td>'+esc(number(day.published))+'</td></tr>').join('')
+      +'</tbody></table>'
+    : empty('No historical measurements available','No private records have been loaded.');
+  trendNote.textContent=history.note||'These series use committed database records only, not live external website checks.';
+}
+
 function sourceCollectionStatus(source,scope) {
   if (source.configured === false) return {label:'Stored source',tone:'',detail:'Not in current configuration'};
   if (source.enabled === false) return {label:'Disabled',tone:'',detail:'Not enabled for collection'};
