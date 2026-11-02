@@ -34,7 +34,7 @@ log = logging.getLogger("offline_feed")
 # headline. Such placeholders must not enter (or remain in) the public feed.
 SOURCE_ERROR_PAGE_TITLE = re.compile(
     r"^(?:the page you requested cannot be found|page (?:unavailable|not found)|"
-    r"(?:404\\s*[:\\-]?\\s*)?not found|access denied|error\\s*404)"
+    r"(?:404[ \t]*[:-]?[ \t]*)?not found|access denied|error[ \t]*404)"
     r"(?:[.!])?$",
     re.IGNORECASE,
 )
