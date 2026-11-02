@@ -43,7 +43,7 @@ def _config():
     return load_sources(str(ROOT / 'config/sources.json'))
 
 
-def source_inventory(database=None, *, rows=None, config=None, now=None):
+def source_inventory(database=None, *, rows=None, config=None, now=None, where="", params=()):
     now = now or datetime.now(timezone.utc)
     errors = []
     if config is None:
@@ -60,10 +60,10 @@ def source_inventory(database=None, *, rows=None, config=None, now=None):
         for raw in database.conn.execute("""SELECT source_name,COUNT(*) AS story_count,
             MAX(collected_at) AS latest_collected_at,
             MAX(CASE WHEN status='published' THEN COALESCE(NULLIF(published_at_site,''),published_at) END) AS latest_published_at
-            FROM news_items GROUP BY source_name""").fetchall():
+            FROM news_items"""+where+" GROUP BY source_name",params).fetchall():
             aggregates[str(raw['source_name'] or 'Unknown')] = dict(raw)
         categories = {str(row['category'] or 'general') for row in
-                      database.conn.execute('SELECT DISTINCT category FROM news_items').fetchall()}
+                      database.conn.execute('SELECT DISTINCT category FROM news_items'+where,params).fetchall()}
         try:
             checks = _collection_checks(database)
         except Exception:

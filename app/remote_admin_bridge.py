@@ -34,6 +34,8 @@ _MAX_BODY = 1024 * 1024
 
 
 def is_private_endpoint(path: str) -> bool:
+    if re.fullmatch(r'/api/admin/(?:editorial/(?:sources|events|events/[a-f0-9]{24}/sources|readiness(?:/probe)?|story/[0-9]+/(?:assign|claims(?:/[0-9]+)?|updates(?:/[0-9]+/publish)?))|studio/[0-9]+(?:/(?:prepare|save|jobs/[a-f0-9]{24}))?)',path):
+        return True
     if path in {'/api/admin/diagnostics','/api/admin/diagnostics.pdf','/api/admin/users'} or re.fullmatch(r'/api/admin/users/[A-Za-z0-9._-]{3,40}',path):
         return True
     if path == "/api/admin/news/create":
