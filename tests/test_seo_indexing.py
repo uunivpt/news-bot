@@ -58,6 +58,48 @@ class SEOIndexingTests(unittest.TestCase):
             self.assertTrue(loc.startswith("https://www.politicshub.in/"),loc)
         self.assertIn("https://www.politicshub.in/",[x[0].text for x in static])
 
+    def test_active_category_landings_are_discoverable_but_retired_desks_are_not(self):
+        from app.seo_indexing import STATIC_PAGES
+        locations={node[0].text for node in ET.fromstring(static_sitemap_xml())}
+        for path in ("/india/", "/politics/", "/world/", "/hindi/", "/maharashtra/"):
+            self.assertIn(path,STATIC_PAGES)
+            self.assertIn(SITE_ORIGIN+path,locations)
+        for desk in ("business","technology","sports","entertainment","science","health"):
+            self.assertNotIn(SITE_ORIGIN+"/"+desk+"/",locations)
+
+    def test_marathi_maharashtra_landing_has_source_links_and_correct_schema(self):
+        page=Path("public/maharashtra/index.html").read_text(encoding="utf-8")
+        self.assertIn('lang="mr"',page)
+        self.assertIn('rel="canonical" href="'+SITE_ORIGIN+'/maharashtra/"',page)
+        self.assertIn("TV9 मराठी",page)
+        self.assertIn("ABP माझा",page)
+        self.assertIn("www.tv9marathi.com/maharashtra",page)
+        self.assertIn("marathi.abplive.com/news/maharashtra",page)
+        self.assertIn('data-i18n="regionIntroBody"',page)
+        self.assertNotIn("LocalBusiness",page)
+        match=re.search(r'<script type="application/ld\\+json">([\\s\\S]*?)</script>',page)
+        self.assertIsNotNone(match)
+        structured=json.loads(match.group(1))
+        page_nodes=[node for node in structured["@graph"] if node["@type"]=="CollectionPage"]
+        self.assertEqual(len(page_nodes),1)
+        self.assertEqual(page_nodes[0]["url"],SITE_ORIGIN+"/maharashtra/")
+        self.assertEqual(page_nodes[0]["inLanguage"],["mr","en"])
+
+    def test_google_news_language_is_not_hardcoded_to_english(self):
+        now=datetime.now(timezone.utc)
+        english=example()
+        hindi=dict(example(),id=45,url="https://example.org/news/45",category="hindi",
+                   title="Latest India government minister policy news report")
+        marathi=dict(example(),id=46,url="https://example.org/news/46",source_name="TV9 Marathi",
+                     title="महाराष्ट्रातील आजच्या महत्त्वाच्या बातम्या शहरातील राजकीय घडामोडी")
+        xml=google_news_sitemap_xml([english,hindi,marathi],now=now)
+        root=ET.fromstring(xml)
+        ns={"u":"http://www.sitemaps.org/schemas/sitemap/0.9",
+            "n":"http://www.google.com/schemas/sitemap-news/0.9"}
+        all_languages=[node.find("n:news/n:publication/n:language",ns).text
+                       for node in root.findall("u:url",ns)]
+        self.assertCountEqual(all_languages,["en","hi","mr"])
+
     def test_flask_html_and_status_codes(self):
         client=api.app.test_client()
         row=example()
@@ -83,6 +125,12 @@ class SEOIndexingTests(unittest.TestCase):
         for path in STATIC_PAGES:
             if path=="/archive/":
                 continue  # Server-rendered dynamic archive, not a static HTML file.
+            if path in {"/india/", "/politics/", "/world/", "/hindi/"}:
+                with patch.object(api, "_public_rows_for_section", return_value=[]):
+                    response=api.app.test_client().get("/api/seo-section"+path)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn('<link rel="canonical" href="'+SITE_ORIGIN+path+'">', response.get_data(as_text=True))
+                continue
             source_path = "public/index.html" if path=="/" else "public"+path
             if source_path.endswith("/"):
                 source_path += "index.html"
