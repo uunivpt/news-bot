@@ -23,12 +23,12 @@ env -u DATABASE_URL -u DATABASE_3URL python scripts/termux_local_admin.py --star
 The launcher:
 1. Checks local PostgreSQL on `127.0.0.1:5432`.
 2. Requests the **local postgres database password** in a hidden prompt.
-3. On first use, requests a new **localowner website login password** twice.
+3. On first use, requests a new **website login password for `pushkarthawari`** twice.
 4. Hashes the browser login password in the private local `admin_users` table.
 5. Starts a separate loopback-only Admin Room service, then reports its address.
 
 Open **http://127.0.0.1:8765/admin/** from the **same phone**, and log in as
-`localowner` with the password you chose. The server runs in Termux while
+`pushkarthawari` with the password you chose. The server runs in Termux while
 Android allows the background process. It never displays or stores the
 postgres password on disk, and neither secret is sent to GitHub/Vercel.
 
@@ -120,3 +120,13 @@ The launcher automatically loads a matching bridge secret already provided in
 missing secret permits direct phone access only; a short or insecure secret file
 fails visibly. No new shared secret is generated or substituted for Vercel's.
 Do not share passwords or private logs in chat.
+
+## Set the intended website login
+
+The default owner username is `pushkarthawari`. Use
+`python scripts/termux_local_admin.py --owner pushkarthawari --reset-owner`
+to create/update that account after entering the local PostgreSQL password and
+then the intended website password twice in hidden prompts. Passwords are stored
+only as salted hashes in the phone database. Other accounts and news records
+are preserved. An already-running admin daemon can use the updated account
+without being restarted.
