@@ -26,3 +26,12 @@ html[data-admin-theme=dark]{color-scheme:dark;--bg:#111c19;--panel:#192722;--sof
 #sourceIncidents .table td{max-width:270px}
 @media(max-width:1100px){#sourceTriageMetrics,#sourceOperationsMetrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:620px){#sourceTriageMetrics,#sourceOperationsMetrics{grid-template-columns:1fr}.source-ops-heading{margin-top:18px}}
+
+/* Phase 4: accessible, compact operations tables and mobile summary cards. */
+#phase4Metrics{grid-template-columns:repeat(4,minmax(0,1fr))}
+#phase4Alerts .table td{max-width:270px;overflow-wrap:anywhere}
+#phase4Trend .table{min-width:565px}
+#phase4Notice{margin:0 0 18px;white-space:normal}
+#phase4TrendNote{margin:16px 0 0}
+@media(max-width:1100px){#phase4Metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){#phase4Metrics{grid-template-columns:1fr}}
