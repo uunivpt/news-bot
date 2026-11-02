@@ -127,6 +127,34 @@ class PostgresDeliveryTests(unittest.TestCase):
         self.assertFalse({row['id'] for row in first.json['stories']} & {row['id'] for row in second.json['stories']})
         self.assertTrue(all('bot_article' not in row for row in first.json['stories']))
 
+    def test_staff_role_and_password_changes_persist_in_postgres(self):
+        from werkzeug.security import generate_password_hash
+        from app.diagnostics import diagnosis, diagnosis_pdf
+        api._PUBLIC_RATE.clear();api._ADMIN_LOGIN_RATE.clear()
+        database=self.database
+        with patch.object(api,'db',return_value=database),patch.object(database,'close'):
+            api._ensure_admin_users(database)
+            database.conn.execute("INSERT INTO admin_users(username,password_hash,role,created_at) VALUES (%s,%s,'owner','2026-11-02T00:00:00Z') ON CONFLICT(username) DO UPDATE SET password_hash=EXCLUDED.password_hash,role='owner'",('pushkarthawari',generate_password_hash('isolated-pg-owner-password')))
+            owner=api.app.test_client()
+            login=owner.post('/api/admin/login',json={'username':'pushkarthawari','password':'isolated-pg-owner-password'})
+            self.assertEqual(login.status_code,200)
+            headers={'X-CSRF-Token':login.json['csrf_token']}
+            created=owner.post('/api/admin/users',json={'username':'pg_fixture_staff','role':'publisher'},headers=headers)
+            self.assertEqual(created.status_code,201,created.data)
+            staff=api.app.test_client()
+            self.assertEqual(staff.post('/api/admin/login',json={'username':'pg_fixture_staff','password':created.json['password']}).status_code,200)
+            changed=owner.post('/api/admin/users/pg_fixture_staff',json={'operation':'role','role':'viewer'},headers=headers)
+            self.assertEqual(changed.status_code,200)
+            self.assertFalse(staff.get('/api/admin/workspace').json['capabilities']['publish'])
+            reset=owner.post('/api/admin/users/pg_fixture_staff',json={'operation':'reset_password'},headers=headers)
+            self.assertEqual(reset.status_code,200)
+            self.assertEqual(staff.get('/api/admin/workspace').status_code,401)
+            self.assertEqual(staff.post('/api/admin/login',json={'username':'pg_fixture_staff','password':reset.json['password']}).status_code,200)
+            report=diagnosis(database,actor='PostgreSQL integration fixture')
+            self.assertEqual(report['sources']['total_stories'],100000)
+            self.assertTrue(diagnosis_pdf(report).startswith(b'%PDF-'))
+            database.conn.execute("DELETE FROM admin_users WHERE username IN ('pushkarthawari','pg_fixture_staff')")
+
 
 if __name__ == '__main__':
     unittest.main()
