@@ -10,6 +10,7 @@ from app.news_text import clean_news_text
 from app.newsroom import process_news, validate_news_copy
 from app.editorial_gate import longform_review, longform_mode_enabled
 from app.editorial_research import Evidence, build_research_brief
+from app.editorial_verification import assess_automatic_publication
 from app.publish_policy import risk_flags
 from app.phase_system import ensure_schema, run as agent_run, quality_gate, manager_route
 from app.advanced_ops import audit_stage, state_transition, record_verification, find_duplicate_story
@@ -71,6 +72,12 @@ def _process_content(db,row):
    if not draft.get("ready"):
     print(f"Long-form draft held for {row.get('id')}: {draft.get('reason')}")
     return False
+   check=assess_automatic_publication(draft["headline"],draft["summary"],draft["article"],research)
+   audit_stage(db,int(row["id"]),"AUTOMATED_EVIDENCE","passed" if check["passed"] else "held",check)
+   if not check["passed"]:
+    print(f"Automated evidence check held {row.get('id')}: {check['errors']}")
+    return False
+   row["_automated_verification"]=check
    result={"headline":draft["headline"],"summary":draft["summary"],"article":draft["article"],
            "ai_summary":draft["summary"],"ai_article":draft["article"]}
   else:
@@ -143,7 +150,7 @@ def publish_website_first(db,row,now):
  # Do not search/acquire replacement images for text-only source stories.
  flags=risk_flags(row["title"],row.get("bot_summary") or row.get("summary") or "")
  existing_review=str(row.get("fact_check_status") or "").lower()
- review=existing_review if existing_review in {"reviewed","approved"} else ("needs_review" if flags else "pending")
+ review=existing_review if existing_review in {"reviewed","approved"} else ("automated_screened" if row.get("_automated_verification",{}).get("passed") else ("needs_review" if flags else "pending"))
  db.update(int(row["id"]),status="published",published_at_site=now,fact_check_status=review,fact_check_notes=", ".join(flags) if flags else None); row["status"]="published"; return row
 
 def repair_published_content(db,limit):
@@ -216,17 +223,12 @@ def main():
    pass
   with agent_run(db, "writer", "prepare_story", int(row["id"]), {"route":route}):
    # Never overwrite the author's already approved copy with source extraction.
-   if longform_mode_enabled() and row.get("bot_article") and (
-    str(row.get("fact_check_status") or "").lower() in {"reviewed","approved"}
-    or longform_review(row)["words"] >= 800
-   ):
-    # Reuse an existing substantive draft while it awaits manual review.
-    ready=True
-   else:
-    ready=prepare_content(db,row)
+   # Re-evaluate source evidence on each run; never trust an old approval
+   # flag after a published source has been corrected.
+   ready=prepare_content(db,row)
   if not ready:held+=1; print(f"Website publish held for item {row['id']}: no usable source text"); continue
   if longform_mode_enabled():
-   editorial=longform_review(row)
+   editorial=longform_review(row, verification=row.get("_automated_verification"))
    if not editorial["passed"]:
     held+=1
     audit_stage(db,int(row["id"]),"EDITORIAL_REVIEW","held",editorial)
