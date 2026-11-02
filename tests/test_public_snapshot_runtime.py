@@ -77,10 +77,10 @@ class PublicSnapshotRuntimeTests(unittest.TestCase):
   hindi={'id':762,'title':'भारत में महत्वपूर्ण नई सरकारी घोषणा','summary':'मूल स्रोत से खबर.',
          'category':'hindi','status':'published','public_source':True,
          'url':'https://example.org/hindi-source'}
-  with patch.object(api.public_archive,'by_id',return_value=None), \\
-       patch.object(api,'_snapshot_rows',return_value=[]), \\
-       patch.object(api,'_official_exam_rows',return_value=[]), \\
-       patch.object(api,'_hindi_rows',return_value=[hindi]), \\
+  with patch.object(api.public_archive,'by_id',return_value=None), \
+       patch.object(api,'_snapshot_rows',return_value=[]), \
+       patch.object(api,'_official_exam_rows',return_value=[]), \
+       patch.object(api,'_hindi_rows',return_value=[hindi]), \
        patch.object(api,'db',side_effect=DatabaseUnavailable('down')):
    detail=self.client.get('/api/news/762')
    self.assertEqual(detail.status_code,200)
@@ -95,10 +95,10 @@ class PublicSnapshotRuntimeTests(unittest.TestCase):
          'url':'https://example.org/hindi-source-2'}
   database=Mock()
   database.get_by_id.return_value=None
-  with patch.object(api.public_archive,'by_id',return_value=None), \\
-       patch.object(api,'_snapshot_rows',return_value=[]), \\
-       patch.object(api,'_official_exam_rows',return_value=[]), \\
-       patch.object(api,'_hindi_rows',return_value=[hindi]), \\
+  with patch.object(api.public_archive,'by_id',return_value=None), \
+       patch.object(api,'_snapshot_rows',return_value=[]), \
+       patch.object(api,'_official_exam_rows',return_value=[]), \
+       patch.object(api,'_hindi_rows',return_value=[hindi]), \
        patch.object(api,'db',return_value=database):
    detail=self.client.get('/api/news/763')
    self.assertEqual(detail.status_code,200)
