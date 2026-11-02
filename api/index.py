@@ -2023,7 +2023,7 @@ def admin_editorial_draft(item_id):
   row=database.get_by_id(item_id)
   if not row:return jsonify({'error':'story not found'}),404
   row=dict(row)
-  return jsonify({'id':item_id,'title':row.get('title') or '',
+  return jsonify({'id':item_id,'status':row.get('status'),'news_number':news_number(row),'title':row.get('title') or '',
    'summary':row.get('bot_summary') or row.get('summary') or '',
    'category':row.get('category') or 'general','revision':editorial_revision(row)})
  finally:database.close()
