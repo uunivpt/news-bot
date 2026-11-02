@@ -22,8 +22,12 @@ class SourceConfigTests(unittest.TestCase):
         config = json.loads(Path("config/sources.json").read_text(encoding="utf-8"))
         rows = {row["name"]:row for row in config["rss"]}
         released = rows["PIB Press Releases"]
-        self.assertTrue(released["enabled"])
+        self.assertFalse(released["enabled"])
         self.assertEqual(released["url"],"https://pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=3")
+        self.assertIn("Re-enable only", released["note"])
+        phone_pib = next(x for x in config["website"] if x["name"] == "Government of India - PIB")
+        self.assertTrue(phone_pib["enabled"])
+        self.assertTrue(phone_pib["collection_allowed"])
         invitation = rows["PIB Media Invitations"]
         self.assertFalse(invitation["enabled"])
         self.assertIn("Re-enable only",invitation["note"])
