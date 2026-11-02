@@ -1,4 +1,5 @@
 """Small, explicit newsroom projections shared by live and recovery workspaces."""
+from .news_numbers import news_number
 from collections import Counter
 from datetime import datetime, timezone
 import hashlib
@@ -32,6 +33,7 @@ def project_rows(rows, *, snapshot=False, now=None):
     for raw in rows:
         raw = dict(raw)
         row = {key: raw.get(key) for key in LIST_FIELDS}
+        row['news_number'] = news_number(raw)
         row['summary'] = str(raw.get('bot_summary') or raw.get('summary') or '')[:1600]
         row.pop('bot_summary', None)
         row['title'] = str(row.get('title') or 'Untitled')[:500]

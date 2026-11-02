@@ -48,7 +48,8 @@ class ArchiveTests(unittest.TestCase):
             self.assertEqual(article.status_code,200)
             self.assertIn('Distinct archival phrase',article.json['article'])
             page=self.client.get('/india/991-parliament-public-services-report-number-991')
-            self.assertEqual(page.status_code,200)
+            self.assertIn(page.status_code,(200,301))
+            if page.status_code==301:page=self.client.get(page.headers['Location'])
             self.assertIn(b'Distinct archival phrase',page.data)
 
     def test_pagination_does_not_merge_similar_reports_on_different_dates(self):

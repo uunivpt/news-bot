@@ -106,7 +106,7 @@ class RealGitDeliveryTests(unittest.TestCase):
                 self.git(seed,'-c','user.name=Fixture','-c','user.email=fixture@example.org','commit','-m','seed')
                 self.git(seed,'remote','add','origin',str(remote)); self.git(seed,'push','origin','main')
                 result=sync_public_rows([reviewed()],managed,str(remote),now=NOW)
-                self.assertIn('/900-',result['public_urls']['455'])
+                self.assertRegex(result['public_urls']['455'],r'/india/[0-9]{12}\?v=')
                 exported=json.loads(self.git(remote,'show','main:public/mobile-reviewed.json'))
                 self.assertEqual(exported[0]['id'],900)
                 public=json.loads(self.git(remote,'show','main:public/news-data.json'))

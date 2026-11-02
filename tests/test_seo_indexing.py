@@ -31,7 +31,7 @@ class SEOIndexingTests(unittest.TestCase):
     def test_valid_source_story_and_canonical(self):
         row=example()
         self.assertTrue(is_indexable(row))
-        self.assertEqual(canonical_path(row),"/india/44-india-parliament-passes-a-significant-new-public-services-law")
+        self.assertEqual(canonical_path(row),"/india/"+__import__("app.news_numbers",fromlist=["news_number"]).news_number(row))
         xml=news_sitemap_xml([row,row])
         root=ET.fromstring(xml)
         self.assertEqual(len(list(root)),1)

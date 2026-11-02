@@ -268,18 +268,19 @@ async function loadOverview(silent = false, {fresh = false} = {}) {
 }
 function filteredSnapshot() {
   const query = $('search').value.trim().toLowerCase();
-  const result = rows.filter(row => (!query || [row.title,row.summary,row.source_name].join(' ').toLowerCase().includes(query)) && ($('category').value === 'all' || row.category === $('category').value) && ($('source').value === 'all' || row.source_name === $('source').value) && ($('status').value === 'all' || row.status === $('status').value) && (queue !== 'quality' || row.quality_flags.length));
+  const result = rows.filter(row => (!query || [row.id,row.news_number,row.title,row.summary,row.source_name].join(' ').toLowerCase().includes(query)) && ($('category').value === 'all' || row.category === $('category').value) && ($('source').value === 'all' || row.source_name === $('source').value) && ($('status').value === 'all' || row.status === $('status').value) && (queue !== 'quality' || row.quality_flags.length));
   const sort = $('sort').value;
   return result.sort((a,b) => sort === 'oldest' ? (a.timestamp || 0)-(b.timestamp || 0) : sort === 'views' ? Number(b.view_count || 0)-Number(a.view_count || 0) : sort === 'quality' ? b.quality_flags.length-a.quality_flags.length : (b.timestamp || 0)-(a.timestamp || 0));
 }
 function storyActions(row) {
+  if(row.archived && !workspace?.access.read_only) return `<button class="btn" data-restore-archive="${esc(row.news_number)}">Restore for editing</button>`;
   if (workspace?.access.read_only) return `<button class="btn" data-inspect="${Number(row.id)}">Inspect ↗</button>`;
   const id = Number(row.id);
   return `<button class="btn" data-inspect="${id}">Inspect</button><button class="btn" data-studio="${id}">Studio</button>` + (!row.article_available ? `<button class="btn" data-permission="news.process" data-news="process" data-id="${id}" data-write>Process</button>` : '') + (row.status === 'pending' ? `<button class="btn" data-permission="news.publish" data-news="approve" data-id="${id}" data-write>Verify &amp; publish</button>` : '') + (row.status !== 'rejected' ? `<button class="btn danger" data-permission="news.reject" data-news="reject" data-id="${id}" data-write>Reject</button>` : '');
 }
 function renderNews(list, total) {
   visibleRows = list; pageTotal = total;
-  $('newsList').innerHTML = list.map(row => `<article class="story"><input type="checkbox" data-select="${Number(row.id)}" aria-label="Select story ${Number(row.id)}" ${selected.has(Number(row.id)) ? 'checked' : ''}><div class="story-content"><div class="story-tags"><span class="desk-tag">${esc(row.category || 'General')}</span><span class="pill ${row.status === 'published' ? 'green' : 'amber'}">${esc(row.status)}</span><span class="quality-tag">${row.quality_flags.length ? row.quality_flags.length+' completeness flags' : 'No completeness flags'}</span></div><h3><button class="story-title" data-inspect="${Number(row.id)}">${esc(row.title)}</button></h3><div class="meta">#${Number(row.id)} · ${esc(row.source_name || 'Unknown source')} · ${esc(date(row.timestamp ? row.timestamp * 1000 : row.published_at))}</div><p>${esc(row.summary)}</p></div><div class="actions">${storyActions(row)}</div></article>`).join('') || empty('No matching stories','Try another search or reset your filters.');
+  $('newsList').innerHTML = list.map(row => `<article class="story"><input type="checkbox" data-select="${Number(row.id)}" aria-label="Select story ${Number(row.id)}" ${selected.has(Number(row.id)) ? 'checked' : ''}><div class="story-content"><div class="story-tags"><span class="desk-tag">${esc(row.category || 'General')}</span><span class="pill ${row.status === 'published' ? 'green' : 'amber'}">${esc(row.status)}</span><span class="quality-tag">${row.quality_flags.length ? row.quality_flags.length+' completeness flags' : 'No completeness flags'}</span></div><h3><button class="story-title" data-inspect="${Number(row.id)}">${esc(row.title)}</button></h3><div class="meta">News No. ${esc(row.news_number || row.id)} · ${esc(row.source_name || 'Unknown source')} · ${esc(date(row.timestamp ? row.timestamp * 1000 : row.published_at))}</div><p>${esc(row.summary)}</p></div><div class="actions">${storyActions(row)}</div></article>`).join('') || empty('No matching stories','Try another search or reset your filters.');
   $('newsCount').textContent = `${number(total)} matching ${total === 1 ? 'story' : 'stories'}`;
   $('newsScope').textContent = workspace.mode === 'snapshot' ? `Read-only search across ${rows.length} saved public reports. Private queues require the database.` : 'Search the full database. Showing 25 stories per page.';
   $('exportNews').textContent = workspace.mode === 'snapshot' ? '↓ Export filtered CSV' : '↓ Export page CSV';
@@ -294,6 +295,10 @@ async function loadNews(reset = false, {silent = false} = {}) {
   if (reset) { pageNumber = 1; selected.clear(); }
   const sequence = ++newsSequence;
   newsController?.abort();
+  if (workspace.mode === 'snapshot' && /^\d{9,16}$/.test($('search').value.trim())) {
+   try {const data=await api('/api/admin/archive/search?number='+encodeURIComponent($('search').value.trim())); if(sequence===newsSequence)renderNews(data.stories,data.total);return true;}
+   catch(error){notice(error.message,'err');return false;}
+  }
   if (workspace.mode === 'snapshot') { const result = filteredSnapshot(); renderNews(result.slice((pageNumber-1)*25,pageNumber*25),result.length); return true; }
   newsController = new AbortController();
   $('newsList').setAttribute('aria-busy','true');
@@ -733,3 +738,10 @@ $('themeToggle').onclick = () => { const theme = document.documentElement.datase
 window.addEventListener('hashchange',() => { if (workspace) go(location.hash.slice(1),false); });
 matchMedia('(max-width:800px)').addEventListener('change',() => closeMenu());
 document.addEventListener('DOMContentLoaded',async () => { closeMenu(); try { const data = await api('/api/admin/me'); if (data.authenticated) await signedIn(data); } catch (error) { $('loginErr').textContent = 'Session check unavailable. You can still try signing in.'; } });
+
+document.addEventListener('click',async event=>{
+ const button=event.target.closest('[data-restore-archive]'); if(!button)return;
+ button.disabled=true;
+ try {const result=await action('/api/admin/archive/restore',{number:button.dataset.restoreArchive}); await loadNews(true); notice('Archived story restored. Open its inspector to edit.');}
+ catch(error){notice(error.message,'err');}finally{button.disabled=false;}
+});

@@ -38,7 +38,7 @@ def is_private_endpoint(path: str) -> bool:
         return True
     if path in {'/api/admin/diagnostics','/api/admin/diagnostics.pdf','/api/admin/users'} or re.fullmatch(r'/api/admin/users/[A-Za-z0-9._-]{3,40}',path):
         return True
-    if path == "/api/admin/news/create":
+    if path in {"/api/admin/news/create", "/api/admin/archive/restore", "/api/admin/archive/search"}:
         return True
     if path.startswith("/api/admin/"):
         return bool(_REVIEW.fullmatch(path))

@@ -66,7 +66,7 @@ class UIAdSenseTests(unittest.TestCase):
         with patch('api.index._public_rows_for_section', return_value=[row]), \
              patch('api.index._public_row_by_id', return_value=row), \
              patch('api.index._published_sitemap_rows', return_value=[row]):
-            for path in ['/india/', '/india/44-india-parliament-passes-a-new-public-services-law']:
+            for path in ['/india/', '/india/'+__import__('app.news_numbers',fromlist=['news_number']).news_number(row)]:
                 with self.subTest(path=path):
                     response = client.get(path)
                     self.assertEqual(response.status_code, 200)

@@ -55,6 +55,9 @@ def main():
         })
 
     Path("public").mkdir(exist_ok=True)
+    from app.news_numbers import news_number, number_index
+    number_index(public)
+    for row in public: row['news_number'] = news_number(row)
     Path("public/news-data.json").write_text(
         json.dumps(public,ensure_ascii=False,separators=(",",":")),encoding="utf-8"
     )
