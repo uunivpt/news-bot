@@ -24,7 +24,7 @@ function showLogin(message = '') {
   pending.clear(); workspacePromise = null;
   for (const id of ['inspector','commandDialog','confirmDialog']) if ($(id).open) $(id).close();
   workspace = null; rows = []; visibleRows = []; settings = {}; selected.clear(); csrf = '';
-  for (const id of ['newsList','recentStories','activityList','inspectorBody','agents','errors','overviewMetrics','health','attentionList','sourceMetrics','sourceChart','sourceTable','qualityChart','deskChart','opsTotals','opsPhases','quality','advancedReport','upgradeMetrics','upgradeAlerts','upgradeScores','upgradeSources','upgradeEvents','upgradePreviews','upgradeResources','upgradeHistory','upgradeRegression','sessionDetails','systemChecks']) $(id).replaceChildren();
+  for (const id of ['newsList','recentStories','activityList','inspectorBody','agents','errors','overviewMetrics','health','attentionList','sourceMetrics','sourceChart','sourceTable','qualityChart','deskChart','opsTotals','opsPhases','quality','advancedReport','upgradeMetrics','upgradeAlerts','upgradeScores','upgradeSources','upgradeEvents','upgradeResources','upgradeHistory','upgradeRegression','sessionDetails','systemChecks']) $(id).replaceChildren();
   $('shell').classList.add('hidden'); $('login').classList.remove('hidden');
   $('loginErr').textContent = message;
 }
@@ -34,13 +34,18 @@ async function api(url, options = {}) {
     const version = sessionVersion;
     const response = await fetch(url, {credentials:'same-origin', cache:'no-store', signal:AbortSignal.timeout(15000), ...options});
     let data = {};
-    try { data = await response.json(); } catch { /* HTTP status still determines success. */ }
+    try { data = await response.json(); } catch {
+      if (response.ok) throw new Error('Admin service returned an invalid response. Please retry when the phone admin is available.');
+    }
     if (version !== sessionVersion) throw new DOMException('Session changed','AbortError');
     if (!response.ok) {
       if (response.status === 401 && !url.endsWith('/login')) showLogin('Your session has ended. Please sign in again.');
-      const error = new Error(data.error || `Request failed (${response.status})`);
+      const error = new Error(data?.error || `Request failed (${response.status})`);
       error.status = response.status;
       throw error;
+    }
+    if (!data || typeof data !== 'object') {
+      throw new Error('Admin service returned an invalid response. Please retry.');
     }
     return data;
   };
@@ -352,11 +357,22 @@ function renderCommands() {
   $('commandResults').innerHTML = Object.entries(views).filter(([,label]) => label.toLowerCase().includes(query)).map(([key,label],index) => `<button class="command-item" data-command="${key}" aria-selected="${index === 0}"><span>${esc(label)}</span><small>Open ↵</small></button>`).join('') || '<p class="muted">No matching sections.</p>';
 }
 async function signedIn(data) {
+  if (!data.authenticated) {
+    // A successful password response does not prove the browser retained the
+    // phone session cookie. Verify it before opening an empty workspace.
+    data = await api('/api/admin/me');
+  }
+  if (!data.authenticated || !data.csrf_token) {
+    throw new Error('Your sign-in session could not be saved. Allow cookies for this site and try again.');
+  }
   csrf = data.csrf_token || '';
   $('password').value = ''; $('password').type = 'password'; $('showPassword').textContent = 'Show'; $('showPassword').setAttribute('aria-pressed','false');
   $('login').classList.add('hidden'); $('shell').classList.remove('hidden');
   await loadOverview();
-  if (!workspace) return;
+  if (!workspace) {
+    showLogin('Your session is valid, but the phone workspace could not be loaded. Check that the phone admin is online and retry.');
+    return;
+  }
   go(location.hash.slice(1) || 'overview',false);
   if (!liveTimer) liveTimer = setInterval(() => { if (!document.hidden && currentView === 'overview' && !mutationBusy) loadOverview(true); },60000);
 }

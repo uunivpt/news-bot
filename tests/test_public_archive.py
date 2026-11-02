@@ -97,7 +97,7 @@ class ArchiveTests(unittest.TestCase):
 
     def test_retention_preserves_old_dates_and_excludes_private_fields(self):
         path=Path(self.tmp.name)/'archive.json.gz'
-        old=dict(story(991),password_hash='secret',instagram_access_token='secret')
+        old=dict(story(991),password_hash='secret',internal_access_token='secret')
         archive.retain_public_records([old],path)
         archive.retain_public_records([story(992),dict(story(993),status='pending')],path)
         data=json.loads(gzip.decompress(path.read_bytes()))

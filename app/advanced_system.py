@@ -13,8 +13,6 @@ STATES=("COLLECTED","RESEARCHING","VERIFICATION","PROCESSING","QUALITY_CHECK","P
 BREAKING_TERMS=("breaking","just in","urgent","alert","earthquake","attack","resigns","resignation","dead","dies","war","explosion","emergency","major","supreme court","prime minister","president","election result")
 IMPORTANCE_TERMS=("election","government","parliament","supreme court","prime minister","president","war","conflict","economy","market","budget","policy","earthquake","cyclone","flood","security")
 CATEGORY_WEIGHT={"politics":24,"india":20,"world":22,"business":17,"technology":14,"science":12,"sports":10,"health":15,"entertainment":8,"general":8}
-LAYOUT_FAMILIES={"politics":("editorial","split","quote","minimal","dark"),"india":("editorial","photo","minimal","magazine"),"world":("dark","photo","magazine","split"),"business":("data","magazine","editorial","minimal"),"technology":("data","split","minimal","dark"),"science":("data","photo","magazine","editorial"),"sports":("photo","split","minimal","editorial"),"entertainment":("photo","magazine","quote","minimal"),"health":("editorial","data","quote","photo"),"general":("editorial","minimal","magazine","photo")}
-PALETTES=("light","mono","red","dark","blue","amber","teal","violet")
 
 def now(): return datetime.now(timezone.utc).isoformat()
 def ph(db): return "%s" if getattr(db,"_postgres",False) else "?"
@@ -39,7 +37,6 @@ def ensure_schema(db):
           """CREATE TABLE IF NOT EXISTS ph_alerts(id BIGSERIAL PRIMARY KEY, severity TEXT NOT NULL, bot TEXT, step TEXT, item_id BIGINT, message TEXT NOT NULL, resolved INTEGER DEFAULT 0, created_at TEXT NOT NULL)""",
           """CREATE TABLE IF NOT EXISTS ph_publish_locks(item_id BIGINT PRIMARY KEY, story_key TEXT NOT NULL UNIQUE, website_published INTEGER DEFAULT 0, locked_at TEXT NOT NULL)""",
           """CREATE TABLE IF NOT EXISTS ph_resource_snapshots(id BIGSERIAL PRIMARY KEY, captured_at TEXT NOT NULL, payload TEXT NOT NULL)""",
-          """CREATE TABLE IF NOT EXISTS ph_reel_previews(item_id BIGINT PRIMARY KEY, video_path TEXT, preview_path TEXT, qa TEXT, layout_id TEXT, created_at TEXT NOT NULL)""",
           """CREATE TABLE IF NOT EXISTS ph_regression_runs(id BIGSERIAL PRIMARY KEY, commit_ref TEXT, status TEXT NOT NULL, results TEXT, created_at TEXT NOT NULL)""",
           """CREATE TABLE IF NOT EXISTS ph_event_updates(id BIGSERIAL PRIMARY KEY, event_id TEXT NOT NULL, item_id BIGINT, label TEXT NOT NULL, created_at TEXT NOT NULL)""",
         ]
@@ -100,18 +97,6 @@ def score_story(db,row,source_count=0,verification="UNVERIFIED",duplicate_risk=0
       (int(val(row,"id")),score,freshness,coverage,importance,duplicate_risk,verify,breaking,reason,now()))
     if not getattr(db,"_postgres",False): db.conn.commit()
     return {"score":score,"breaking":bool(breaking),"freshness":freshness,"coverage":coverage,"importance":importance,"duplicate_risk":duplicate_risk,"verification":verify}
-
-def select_layout(category,title,item_id,breaking=False,has_image=True):
-    cat=str(category or "general").lower()
-    families=LAYOUT_FAMILIES.get(cat,LAYOUT_FAMILIES["general"])
-    if breaking: families=("dark","editorial","split","minimal")+families
-    seed=int(hashlib.sha256(f"{item_id}|{title}|{cat}|{int(breaking)}".encode()).hexdigest(),16)
-    family=families[seed%len(families)]
-    palette=PALETTES[(seed//len(families))%len(PALETTES)]
-    base=seed%8
-    variant=(base*len(PALETTES)+PALETTES.index(palette))%64
-    if not has_image: variant=(variant+17)%64
-    return {"id":f"{family}_{palette}_{variant:02d}","family":family,"palette":palette,"variant":variant,"breaking":bool(breaking)}
 
 def record_source(db,source_name,success=True,broken=False,correction=False,coverage=True):
     if not source_name:return
@@ -207,22 +192,16 @@ def is_published(db,item_id,channel="website"):
 
 def capture_resources(db,root="."):
     ensure_schema(db); root=Path(root); sizes={}
-    for name,path in (("db","data"),("media","data/media"),("cloudinary_cache","data/cloudinary")):
+    for name,path in (("db","data"),("media","data/media")):
         p=root/path
         if p.exists():
             total=sum(x.stat().st_size for x in p.rglob("*") if x.is_file())
             sizes[name]=total
         else:sizes[name]=0
-    payload={"captured_at":now(),"local_bytes":sizes,"github_actions_minutes":None,"vercel_bytes":None,"cloudinary_bytes":None,"note":"External provider usage requires its authenticated API/connector; local metrics are always available."}
+    payload={"captured_at":now(),"local_bytes":sizes,"github_actions_minutes":None,"vercel_bytes":None,"note":"External provider usage requires its authenticated API/connector; local metrics are always available."}
     p=ph(db); db.conn.execute(f"INSERT INTO ph_resource_snapshots(captured_at,payload) VALUES ({p},{p})",(now(),json.dumps(payload)))
     if not getattr(db,"_postgres",False):db.conn.commit()
     return payload
-
-def record_preview(db,item_id,video_path,preview_path,qa,layout_id):
-    ensure_schema(db); p=ph(db); n=now()
-    db.conn.execute(f"""INSERT INTO ph_reel_previews(item_id,video_path,preview_path,qa,layout_id,created_at) VALUES ({p},{p},{p},{p},{p},{p})
-      ON CONFLICT(item_id) DO UPDATE SET video_path=EXCLUDED.video_path,preview_path=EXCLUDED.preview_path,qa=EXCLUDED.qa,layout_id=EXCLUDED.layout_id,created_at=EXCLUDED.created_at""",(int(item_id),str(video_path),str(preview_path or ""),json.dumps(qa),layout_id,n))
-    if not getattr(db,"_postgres",False):db.conn.commit()
 
 def historical_analytics(db,days=30):
     ensure_schema(db)
@@ -233,7 +212,6 @@ def historical_analytics(db,days=30):
     sources=(
         ("scores","ph_news_scores","updated_at"),
         ("alerts","ph_alerts","created_at"),
-        ("previews","ph_reel_previews","created_at"),
         ("failures","ph_bot_failures","created_at"),
         ("events","ph_events","updated_at"),
     )
@@ -246,7 +224,6 @@ def historical_analytics(db,days=30):
     for table,col in (
         ("ph_news_scores","updated_at"),
         ("ph_alerts","created_at"),
-        ("ph_reel_previews","created_at"),
         ("ph_bot_failures","created_at"),
     ):
         try:
@@ -275,9 +252,8 @@ def admin_snapshot(db):
     failures=[dict(r) for r in db.conn.execute("SELECT * FROM ph_bot_failures ORDER BY id DESC LIMIT 30").fetchall()]
     scores=[dict(r) for r in db.conn.execute("SELECT * FROM ph_news_scores ORDER BY updated_at DESC LIMIT 30").fetchall()]
     events=[dict(r) for r in db.conn.execute("SELECT * FROM ph_events ORDER BY updated_at DESC LIMIT 30").fetchall()]
-    previews=[dict(r) for r in db.conn.execute("SELECT * FROM ph_reel_previews ORDER BY created_at DESC LIMIT 20").fetchall()]
     regression=[dict(r) for r in db.conn.execute("SELECT * FROM ph_regression_runs ORDER BY id DESC LIMIT 10").fetchall()]
-    return {"updated_at":now(),"alerts":alerts,"failures":failures,"scores":scores,"events":events,"previews":previews,"regression":regression,"sources":source_reliability(db),"resources":capture_resources(db),"history":historical_analytics(db,30)}
+    return {"updated_at":now(),"alerts":alerts,"failures":failures,"scores":scores,"events":events,"regression":regression,"sources":source_reliability(db),"resources":capture_resources(db),"history":historical_analytics(db,30)}
 def regression_record(db,commit_ref,status,results):
     ensure_schema(db); p=ph(db)
     db.conn.execute(f"INSERT INTO ph_regression_runs(commit_ref,status,results,created_at) VALUES ({p},{p},{p},{p})",(commit_ref,status,json.dumps(results,ensure_ascii=False),now()))

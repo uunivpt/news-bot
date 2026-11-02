@@ -93,8 +93,5 @@ def translate(text: str, language: str) -> str:
 def neutrality_check(title: str, article: str) -> dict[str, Any]:
     return _json_object(_chat(f"Review this newsroom copy for loaded/opinionated wording. Do not fact-check it. Return JSON with keys neutral (boolean), issues (array of strings), replacement (string).\nTITLE: {title}\nARTICLE: {article[:16000]}", max_tokens=500))
 
-def reel_script(title: str, article: str) -> str:
-    return _chat(f"Create a concise 20-second neutral news Reel script from the supplied copy. Do not invent facts. Return only the script.\nTITLE: {title}\nARTICLE: {article[:12000]}", max_tokens=500)
-
 def newsroom_assistant(instruction: str, context: str = '') -> str:
     return _chat(f"Answer the newsroom instruction using only the supplied context. If context is insufficient, say so.\nINSTRUCTION: {instruction}\nCONTEXT: {context[:16000]}", max_tokens=700)

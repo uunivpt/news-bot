@@ -451,7 +451,13 @@ def _public_title(title,source_text=""):
 def _publicize(row):
  from app.monetization import is_monetizable
  ads_eligible=is_monetizable(dict(row))
- r={k:v for k,v in dict(row).items() if not k.startswith(("instagram_","reel_cloudinary_"))}
+ # Public news documents use a positive projection. Unknown fields from old
+ # database schemas never become JSON/API fields, even for an admin request.
+ public_fields={"id","title","url","source_name","source_type","summary","bot_summary","bot_article",
+  "article","body","published_at","published_at_site","published_at_iso","category","status",
+  "image_url","image_source","image_license","image_credit","image_source_url","public_source",
+  "view_count","last_viewed_at","editorial_value","source_count"}
+ r={k:v for k,v in dict(row).items() if k in public_fields}
  if not admin_ok():
   # Public readers may see the originating source and its public article URL.
   # Internal moderation, hashes and processing fields stay private.
@@ -811,7 +817,10 @@ def login():
    return jsonify({"error":"too many login attempts; try again later"}),429
   ph="%s" if database._postgres else "?"
   row=database.conn.execute("SELECT username,password_hash,role FROM admin_users WHERE username = "+ph,(username,)).fetchone()
-  valid=bool(row and check_password_hash(row["password_hash"] if database._postgres else row[1],password))
+  try:
+   valid=bool(row and check_password_hash(row["password_hash"] if database._postgres else row[1],password))
+  except (ValueError,TypeError):
+   valid=False
   role=(row["role"] if database._postgres else row[2]) if row else None
   if not valid:
    _auth_failed(database,attempt_key)
@@ -2044,23 +2053,6 @@ def ai_neutrality():
         from app.phi4 import neutrality_check
         result=neutrality_check(title,article)
         return jsonify({"ok":True,"provider":"microsoft_phi4","result":result})
-    except Exception as exc:
-        return jsonify({"error":str(exc)[:500]}),503
-
-
-@app.post("/api/ai/reel-script")
-def ai_reel_script():
-    err=require_admin()
-    if err:return err
-    err=require_csrf()
-    if err:return err
-    body=request.get_json(silent=True) or {}
-    title=str(body.get("title") or "").strip()
-    article=str(body.get("article") or "").strip()
-    if not title or not article:return jsonify({"error":"title and article are required"}),400
-    try:
-        from app.phi4 import reel_script
-        return jsonify({"ok":True,"provider":"microsoft_phi4","script":reel_script(title,article)})
     except Exception as exc:
         return jsonify({"error":str(exc)[:500]}),503
 

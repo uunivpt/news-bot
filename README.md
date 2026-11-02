@@ -13,7 +13,6 @@ Configure permitted sources in `config/sources.json`. Do not copy full copyright
 ## Environment
 - Database: `DATABASE_3URL` (preferred; legacy `DATABASE_URL` remains a local compatibility fallback)
 - Admin: `FLASK_SECRET_KEY`, `ADMIN_USERS_JSON` (username → Werkzeug password hash)
-- Fixed music: `FIXED_AUDIO_PATH` on the worker. Only use music you have permission to publish.
 - India news APIs: `NEWSAPI_KEY`, `NEWSDATA_API_KEY`.
 Story processing is deterministic-only: source text is cleaned, selected, and assembled without an external LLM/API.
 
@@ -35,12 +34,10 @@ GitHub schedules are best-effort. Code releases and other projects also use
 deployment capacity, and this does not reset an already-exhausted allowance.
 See [the deployment-budget notes](docs/DEPLOYMENT_BUDGET.md).
 
-Image acquisition tries up to five relevant licensed candidates before falling back to a text-only Reel. Article text retains the lead fact even when the headline repeats it; summaries still avoid headline repetition.
+Article text retains the lead fact even when the headline repeats it; summaries still avoid headline repetition.
 
-Weekly Dependabot update PRs cover Python requirements, the `/reel` npm project,
-and GitHub Actions. Limits are two Python PRs, two npm PRs and one Actions PR;
-Remotion packages are grouped so their coordinated versions can be reviewed
-together. Dependency updates still require the repository's compatibility checks.
+Weekly Dependabot update PRs cover Python requirements and GitHub Actions.
+Dependency updates still require the repository's compatibility checks.
 
 ## Local test
 `pip install -r requirements.txt`
@@ -80,7 +77,7 @@ stale environment variable. Plaintext passwords are rejected.
 
 ```bash
 python -m unittest discover -s tests -v
-node --test tests/*.test.cjs reel/scripts/layout.test.mjs
+node --test tests/*.test.cjs
 pip install -r requirements-dev.txt
 python -m playwright install chromium
 python scripts/browser_audit.py --serve-fixture --base-url http://127.0.0.1:8010

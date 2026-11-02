@@ -1,12 +1,70 @@
 import os
 import unittest
 from unittest.mock import MagicMock, patch
+from flask import Flask
 
 from api import index as api
 from scripts import termux_local_admin
 
 
 class LocalAdminAccessTests(unittest.TestCase):
+    def test_bridge_secret_survives_new_shell_using_existing_private_file(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            legacy = Path(tmp)/'.politicshub-admin-bridge.secret'
+            legacy.write_text('private-existing-bridge-key-1234567890')
+            legacy.chmod(0o600)
+            with patch.object(termux_local_admin, 'HOME', Path(tmp)), \
+                 patch.object(termux_local_admin, 'BRIDGE_SECRET_FILE', Path(tmp)/'new-secret'), \
+                 patch.dict(os.environ, {'POLITICSHUB_ADMIN_BRIDGE_SECRET':'', 'POLITICSHUB_ADMIN_BRIDGE_SECRET_FILE':''}):
+                self.assertTrue(termux_local_admin.load_bridge_secret())
+                self.assertEqual(os.environ['POLITICSHUB_ADMIN_BRIDGE_SECRET'], legacy.read_text())
+
+    def private_client(self, secret):
+        fresh = Flask('private-phone-tests')
+        fresh.get('/api/admin/me')(lambda: {'ok': True})
+        with patch.object(api, 'app', fresh), patch.dict(os.environ, {'POLITICSHUB_ADMIN_BRIDGE_SECRET': secret}):
+            termux_local_admin.configure_private_app()
+        return fresh.test_client()
+
+    def test_valid_bridge_signature_is_not_rejected_for_preserved_remote_address(self):
+        from app.remote_admin_bridge import _REPLAY, bridge_headers
+        _REPLAY.clear()
+        secret = 'only-a-private-bridge-test-key-1234567890'
+        client = self.private_client(secret)
+        with patch.dict(os.environ, {'POLITICSHUB_ADMIN_BRIDGE_SECRET': secret}):
+            response = client.get('/api/admin/me', base_url='https://phone.example.ts.net',
+                headers=bridge_headers(secret, 'GET', '/api/admin/me', b''),
+                environ_overrides={'REMOTE_ADDR': '198.51.100.12'})
+        self.assertEqual(response.status_code, 200)
+
+    def test_direct_loopback_still_works_with_bridge_configured(self):
+        secret = 'only-a-private-bridge-test-key-1234567890'
+        client = self.private_client(secret)
+        with patch.dict(os.environ, {'POLITICSHUB_ADMIN_BRIDGE_SECRET': secret}):
+            self.assertEqual(client.get('/api/admin/me', base_url='http://127.0.0.1:8765',
+                environ_overrides={'REMOTE_ADDR': '127.0.0.1'}).status_code, 200)
+            for peer, host in [('198.51.100.12', 'http://127.0.0.1:8765'),
+                               ('127.0.0.1', 'https://phone.example.ts.net')]:
+                self.assertEqual(client.get('/api/admin/me', base_url=host,
+                    environ_overrides={'REMOTE_ADDR': peer}).status_code, 403)
+
+    def test_reset_owner_updates_running_server_without_starting_duplicate(self):
+        conn = MagicMock()
+        conn.execute.return_value.fetchone.side_effect = [(8,), ('admin_users',), (1,)]
+        with patch.object(termux_local_admin, '_listening', return_value=True), \
+             patch('psycopg.connect') as connect, \
+             patch('getpass.getpass', side_effect=['private-pg-password', 'new owner password', 'new owner password']), \
+             patch.object(termux_local_admin, 'create_local_owner', return_value=True) as create, \
+             patch.object(termux_local_admin.subprocess, 'run') as run, \
+             patch.object(termux_local_admin.subprocess, 'Popen') as spawn:
+            run.return_value.returncode = 0
+            connect.return_value.__enter__.return_value = conn
+            self.assertEqual(termux_local_admin.start(reset=True), 0)
+        create.assert_called_once_with(conn, 'new owner password', reset=True)
+        spawn.assert_not_called()
+
     def test_loopback_port_and_local_postgres_only(self):
         self.assertEqual(termux_local_admin.HOST, "127.0.0.1")
         self.assertEqual(termux_local_admin.PORT, 8765)

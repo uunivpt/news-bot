@@ -2,7 +2,7 @@ import sqlite3
 import unittest
 
 from app.advanced_system import (
-    ensure_schema, score_story, select_layout, similarity, attach_event,
+    ensure_schema, score_story, similarity, attach_event,
     publish_lock, is_published, mark_published, source_reliability,
     historical_analytics, record_source, alert,
 )
@@ -17,14 +17,6 @@ class DB:
 
 
 class AdvancedSystemTests(unittest.TestCase):
-    def test_layout_selector_is_64_and_deterministic(self):
-        a = select_layout("politics", "Government announces new policy", 101, False, True)
-        b = select_layout("politics", "Government announces new policy", 101, False, True)
-        self.assertEqual(a, b)
-        self.assertGreaterEqual(a["variant"], 0)
-        self.assertLess(a["variant"], 64)
-        self.assertIn(a["family"], {"editorial", "split", "quote", "minimal", "dark"})
-
     def test_similarity_and_scoring(self):
         self.assertEqual(similarity("India announces new policy", "India announces new policy"), 1.0)
         db = DB()
