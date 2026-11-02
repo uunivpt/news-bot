@@ -1,6 +1,6 @@
 import unittest
 
-from app.category_routing import normalize_category
+from app.category_routing import normalize_category, is_political_headline
 from scripts.repair_news_categories import classify
 
 
@@ -21,13 +21,19 @@ class EditorialCategoryRoutingTests(unittest.TestCase):
         self.assertEqual(normalize_category("entertainment", "Nana Patekar dies at 75"), "india")
         self.assertEqual(classify("Bollywood actor passes away", "Indian cinema mourns"), "india")
 
-    def test_explicit_political_india_headlines_are_routed_without_overmatching(self):
-        self.assertEqual(normalize_category("india", "Naidu asks NDA leaders to focus on local body polls"), "politics")
-        self.assertEqual(normalize_category("india", "Congress seeks arrest over remarks on Mahatma Gandhi"), "politics")
-        self.assertEqual(normalize_category("india", "Three AAP MLAs join BJP in Punjab"), "politics")
-        self.assertEqual(normalize_category("india", "राष्ट्रवादीचे आमदार विधानसभेत पोहोचले"), "politics")
-        self.assertEqual(normalize_category("india", "Government notifies new grievance rules"), "india")
-        self.assertEqual(normalize_category("india", "Services of nurses invaluable, says Minister"), "india")
+    def test_politics_topical_headlines_preserve_original_india_category(self):
+        for title in (
+            "Naidu asks NDA leaders to focus on local body polls",
+            "Congress seeks arrest over remarks on Mahatma Gandhi",
+            "Three AAP MLAs join BJP in Punjab",
+            "राष्ट्रवादीचे आमदार विधानसभेत पोहोचले",
+            "India Parliament passes a significant new public services law",
+        ):
+            with self.subTest(title=title):
+                self.assertTrue(is_political_headline(title))
+                self.assertEqual(normalize_category("india", title), "india")
+        self.assertFalse(is_political_headline("Government notifies new grievance rules"))
+        self.assertFalse(is_political_headline("Services of nurses invaluable, says Minister"))
         self.assertEqual(normalize_category("world", "Congress meets in Europe"), "world")
 
     def test_existing_active_categories_unaffected(self):
