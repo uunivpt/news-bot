@@ -1198,8 +1198,11 @@ def author_page(): return _editorial_page("PoliticsHub News Desk","The PoliticsH
 def _resolve_news_id(value):
  row=public_archive.by_id(value)
  if row:return int(row['id'])
- for row in _snapshot_rows('all')+_hindi_rows()+_official_exam_rows():
-  if str(row.get('id'))==str(value) or news_number(row)==str(value):return int(row['id'])
+ # Stop at the first matching feed: avoid unnecessary Hindi/official-source
+ # network reads when the story already exists in the public news snapshot.
+ for load_rows in (lambda: _snapshot_rows('all'), _hindi_rows, _official_exam_rows):
+  for row in load_rows():
+   if str(row.get('id'))==str(value) or news_number(row)==str(value):return int(row['id'])
  try:
   database=db()
   try:
