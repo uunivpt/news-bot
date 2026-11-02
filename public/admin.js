@@ -31,7 +31,7 @@ function showLogin(message = '') {
   pending.clear(); workspacePromise = null;
   for (const id of ['inspector','commandDialog','confirmDialog']) if ($(id).open) $(id).close();
   workspace = null; rows = []; visibleRows = []; settings = {}; selected.clear(); csrf = '';
-  for (const id of ['newsList','recentStories','activityList','inspectorBody','agents','errors','overviewMetrics','health','attentionList','sourceMetrics','sourceChart','sourceTable','qualityChart','deskChart','opsTotals','opsPhases','quality','advancedReport','upgradeMetrics','upgradeAlerts','upgradeScores','upgradeSources','upgradeEvents','upgradeResources','upgradeHistory','upgradeRegression','sessionDetails','systemChecks']) $(id).replaceChildren();
+  for (const id of ['newsList','recentStories','activityList','inspectorBody','agents','errors','overviewMetrics','health','attentionList','sourceMetrics','sourceChart','sourceTable','sourceTriageMetrics','sourceIncidents','sourceOperationsMetrics','qualityChart','deskChart','opsTotals','opsPhases','quality','advancedReport','upgradeMetrics','upgradeAlerts','upgradeScores','upgradeSources','upgradeEvents','upgradeResources','upgradeHistory','upgradeRegression','sessionDetails','systemChecks']) $(id).replaceChildren();
   $('shell').classList.add('hidden'); $('login').classList.remove('hidden');
   $('loginErr').textContent = message;
 }
@@ -566,6 +566,55 @@ function renderSources() {
     const canFilter = source.story_count != null && Number(source.story_count) > 0;
     return `<tr><td><b>${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(source.name)} ↗</a>` : esc(source.name)}</b><small>${esc([categories,configured].filter(Boolean).join(' · '))}</small></td><td>${esc(count)}</td><td><span class="pill ${status.tone}">${esc(status.label)}</span>${status.detail ? `<small>${esc(status.detail)}</small>` : ''}</td><td>${esc(latest ? date(latest) : 'Not recorded')}</td><td>${canFilter ? `<button class="text-btn" data-source-filter="${esc(source.name)}">${database ? 'View stories' : 'View saved stories'} ↗</button>` : `<span class="muted">${source.story_count == null ? 'Counts unavailable' : 'No stored stories'}</span>`}</td></tr>`;
   }).join('') + '</tbody></table>' : empty('No matching publishers','Try another publisher name, language or desk.');
+  renderPhase3Operations();
+}
+
+/* Private operational evidence only; snapshots may describe published stories,
+   but are never promoted to collector success or phone delivery claims. */
+function renderPhase3Operations() {
+  const triage=workspace?.source_triage || {scope:'unavailable',status:'unavailable'};
+  const metrics=$('sourceTriageMetrics'), issues=$('sourceIncidents'), notice=$('sourceTriageNotice');
+  const opMetrics=$('sourceOperationsMetrics'), opNote=$('sourceOperationsNote');
+  if(triage.scope!=='database'||triage.status==='unavailable') {
+    metrics.innerHTML=metric('Collector checks','Unavailable','Private phone database not measured')
+      +metric('Source incidents','Unavailable','Cannot infer failures from the public feed')
+      +metric('Last successful fetch','Unavailable','No authenticated collector telemetry');
+    issues.innerHTML=empty('Phone collector status not checked','Public GitHub snapshots can show stories, not private source fetches or failures.');
+    notice.textContent='Private collector metrics are unavailable. A working public feed does not prove the phone collector is online.';
+  } else {
+    const counts=triage.counts||{};
+    metrics.innerHTML=metric('Recorded checks',number(triage.observed)+' / '+number(triage.tracked),'Enabled publishers managed by the phone collector')
+      +metric('Failed checks',number(counts.failed||0),'Latest recorded collector attempt')
+      +metric('Overdue sources',number(counts.stale||0),'Last recorded attempt older than its check window')
+      +metric('Awaiting first check',number(counts.awaiting_collection||0),'Configured, no attempt recorded');
+    notice.textContent=triage.status==='awaiting_checks'
+      ? 'No successful or failed collector attempts are recorded. Source statuses are not verified.'
+      : 'Based on actual phone collector records. A successful fetch does not independently verify the resulting news.';
+    const incidents=arr(triage.incidents);
+    issues.innerHTML=incidents.length
+      ? '<table class="table"><thead><tr><th>Publisher</th><th>Problem</th><th>Last attempt</th><th>Last success</th><th>Recorded error class</th></tr></thead><tbody>'
+        +incidents.map(item=>'<tr><td>'+esc(item.name)+'</td><td><span class="pill '+(item.state==='failed'?'red':'amber')+'">'+esc(item.state)+'</span></td><td>'+esc(date(item.last_attempt_at))+'</td><td>'+esc(date(item.last_success_at))+'</td><td>'+esc(item.error_class||'—')+'</td></tr>').join('')
+        +'</tbody></table>'
+      : triage.status==='awaiting_checks'
+        ? empty('No collection checks recorded','The worker must report actual attempts before a source can be called healthy.')
+        : empty('No failed or overdue sources recorded','This is only a summary of the latest available phone collection records.');
+  }
+  const ops=workspace?.newsroom_operations;
+  if(!ops||ops.scope!=='database') {
+    opMetrics.innerHTML=metric('Collection → publish','Unavailable','Requires real phone article history')
+      +metric('Delivery queue','Unavailable','Private website sync status not checked')
+      +metric('Pending corrections','Unavailable','Private editorial updates not checked');
+    opNote.textContent='Source fetches, delivery receipts and pending corrections cannot be inferred from the public website. Sign into the connected phone Admin Room to inspect them.';
+    return;
+  }
+  const latency=ops.latency||{}, delivery=ops.delivery||{}, corrections=ops.corrections||{};
+  const states=delivery.counts||{}, edits=corrections.counts||{};
+  const queue=delivery.recorded?(Number(states.queued||0)+Number(states.syncing||0)+Number(states.failed||0)):null;
+  opMetrics.innerHTML=metric('Median collection → publish',latency.median_minutes==null?'Unavailable':number(latency.median_minutes)+' min',number(latency.measured)+' measured / '+number(latency.evaluated)+' recent rows')
+    +metric('95th-percentile delay',latency.p95_minutes==null?'Unavailable':number(latency.p95_minutes)+' min','Recorded publication timestamps, not website reachability')
+    +metric('Queued / failed delivery',queue==null?'Unavailable':number(queue),delivery.recorded?'Failed: '+number(states.failed||0)+' · Synced: '+number(states.synced||0):'Delivery queue table not present')
+    +metric('Pending editorial updates',corrections.recorded?number(edits.pending||0):'Unavailable','Includes proposed corrections awaiting review');
+  opNote.textContent=(latency.definition||'Collection-to-publication timestamps are measured from private records.')+' Latest sample limited to '+number(latency.sample_limit)+' published rows. A synced queue state does not prove public visibility; check the signed receipt and live article.';
 }
 function sourceCollectionStatus(source,scope) {
   if (source.configured === false) return {label:'Stored source',tone:'',detail:'Not in current configuration'};
