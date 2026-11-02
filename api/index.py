@@ -1424,7 +1424,9 @@ def news():
  except Exception:
   # When the database is unavailable, publish only a valid saved snapshot.
   rows=_snapshot_rows(category,search)
-  if not rows:return jsonify({"error":"news backend unavailable"}),503
+  # A category or search can have zero matches while the snapshot is healthy.
+  if not rows and not _snapshot_rows("all"):
+   return jsonify({"error":"news backend unavailable"}),503
   rows=_rank_public(rows,threshold=0.78)
   payload=rows_json(rows[:limit],compact=compact)
   if not admin_ok():
