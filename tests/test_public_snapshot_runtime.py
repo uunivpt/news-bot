@@ -28,6 +28,15 @@ class PublicSnapshotRuntimeTests(unittest.TestCase):
    self.assertIn('Published original source story',article.json['article'])
    self.assertEqual(get.call_count,1)
    self.assertEqual(get.call_args.args[0],api.PUBLIC_FEED_URL)
+ def test_story_lookup_skips_other_feeds_when_first_snapshot_matches(self):
+  with patch.object(api.public_archive, 'by_id', return_value=None), \
+       patch.object(api, '_snapshot_rows', return_value=[{'id':42,'title':'Source story'}]) as snapshot, \
+       patch.object(api, '_hindi_rows') as hindi, \
+       patch.object(api, '_official_exam_rows') as exams:
+   self.assertEqual(api._resolve_news_id(42), 42)
+   snapshot.assert_called_once_with('all')
+   hindi.assert_not_called()
+   exams.assert_not_called()
  def test_serverless_prefers_fresh_feed_over_bundled_snapshot(self):
   import json
   from pathlib import Path

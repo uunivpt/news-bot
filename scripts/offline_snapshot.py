@@ -30,6 +30,20 @@ MAX_AGE = timedelta(hours=48)
 ARCHIVE_AGE = timedelta(days=5)
 log = logging.getLogger("offline_feed")
 
+# Source providers sometimes return their own 404/unavailable page as a news
+# headline. Such placeholders must not enter (or remain in) the public feed.
+SOURCE_ERROR_PAGE_TITLE = re.compile(
+    r"^(?:the page you requested cannot be found|page (?:unavailable|not found)|"
+    r"(?:404[ \t]*[:-]?[ \t]*)?not found|access denied|error[ \t]*404)"
+    r"(?:[.!])?$",
+    re.IGNORECASE,
+)
+
+
+def is_source_error_page(title):
+    return bool(SOURCE_ERROR_PAGE_TITLE.fullmatch(clean_text(title).strip()))
+
+
 
 def parse_date(value):
     if not value:
@@ -63,7 +77,7 @@ def public_story(item, now):
     title = clean_text(item.title)
     summary = clean_text(item.summary)
     published = parse_date(item.published_at)
-    if not valid_url(item.url) or not published:
+    if not valid_url(item.url) or not published or is_source_error_page(title):
         return None
     if published > now + timedelta(minutes=30) or now - published > MAX_AGE:
         return None
@@ -110,6 +124,9 @@ def build(current, collected, now):
     fresh = 0
     for row in current:
         if not isinstance(row, dict) or not valid_url(row.get("url")):
+            continue
+        if is_source_error_page(row.get("title")):
+            fresh += 1  # Repair already-published error-page placeholders.
             continue
         published = parse_date(row.get("published_at") or row.get("published_at_site"))
         if not published or published > now + timedelta(minutes=30) or now - published > ARCHIVE_AGE:
