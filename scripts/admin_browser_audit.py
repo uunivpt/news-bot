@@ -240,10 +240,10 @@ def run(output):
             page.wait_for_selector('#system.active')
             assert page.locator('#systemChecks .metric').count()==4
             with page.expect_download() as event:page.locator('#downloadDiagnostics').click()
-            event.value.save_as(output/'diagnostics.json')
-            data=json.loads((output/'diagnostics.json').read_text())
-            assert data['mode']=='live'
-            assert 'csrf_token' not in str(data) and 'audit_owner' not in str(data)
+            event.value.save_as(output/'diagnostics.pdf')
+            data=(output/'diagnostics.pdf').read_bytes()
+            assert data.startswith(b'%PDF-') and len(data)>2000
+            assert b'csrf_token' not in data and b'password_hash' not in data
         check('keyboard navigation and sanitized diagnostic download',palette)
         def responsive():
             for width in (320,390,768,1440):
@@ -287,6 +287,52 @@ def run(output):
             assert page.request.get(base+'/api/admin/workspace').status==401
             assert page.evaluate("visibleRows.length === 0 && rows.length === 0 && document.body.style.overflow === ''")
         check('logout clears authenticated workspace access',signout)
+        def owner_hiring():
+            database=api.db()
+            try:
+                database.conn.execute("INSERT INTO admin_users(username,password_hash,role,created_at) VALUES (?,?,?,?)",('pushkarthawari',generate_password_hash(password),'owner','2026-11-02T00:00:00Z'))
+                database.conn.commit()
+            finally: database.close()
+            page.locator('#username').fill('pushkarthawari');page.locator('#password').fill(password)
+            page.locator('#loginForm [type="submit"]').click()
+            page.wait_for_function("() => document.querySelector('#userName').textContent==='pushkarthawari'")
+            nav('team');page.wait_for_selector('#hireRole option[value="viewer"]',state='attached')
+            page.locator('#hireUsername').fill('browser_staff');page.locator('#hireRole').select_option('viewer')
+            assert 'Read newsroom' in page.locator('#hirePowers').inner_text()
+            page.locator('#hireSubmit').click();page.wait_for_selector('#staffCredentials[open]')
+            generated=page.locator('#staffPassword').input_value();assert len(generated)>=20
+            page.locator('#staffCredentialsClose').click();assert page.locator('#staffPassword').input_value()==''
+            staff_context=browser.new_context(service_workers='block')
+            staff_context.route('**/*',lambda route:route.continue_() if route.request.url.startswith(base+'/') else route.abort())
+            staff_page=staff_context.new_page()
+            def staff_get(path):
+                return staff_page.evaluate("async path => { const r=await fetch(path,{credentials:'same-origin'}); return {status:r.status,body:await r.json()}; }",path)
+            try:
+                staff_page.goto(base+'/admin/')
+                staff_page.locator('#username').fill('browser_staff');staff_page.locator('#password').fill(generated)
+                staff_page.locator('#loginForm [type=submit]').click();staff_page.wait_for_selector('#overviewMetrics .metric')
+                assert staff_get('/api/admin/users')['status']==403
+                assert staff_page.locator('.nav [data-view=team]').is_hidden()
+                staff_page.locator('.nav [data-view=news]').click()
+                staff_page.wait_for_selector('#newsList .story')
+                assert staff_page.locator('#manualComposer').is_hidden()
+                assert staff_page.locator('[data-bulk=approve]').is_disabled()
+                assert staff_get('/api/admin/workspace')['body']['capabilities']['publish'] is False
+                page.locator('[data-staff-role="browser_staff"]').select_option('publisher')
+                page.locator('[data-staff="role"][data-user="browser_staff"]').click()
+                page.wait_for_function("() => document.querySelector('#notice').textContent==='Staff access updated'")
+                assert staff_get('/api/admin/workspace')['body']['capabilities']['publish'] is True
+                with page.expect_response(lambda response:response.url.endswith('/api/admin/users/browser_staff') and response.request.method=='POST') as disabled_response:
+                    page.locator('[data-staff="disable"][data-user="browser_staff"]').click()
+                assert disabled_response.value.status==200
+                page.wait_for_function("() => document.querySelector('[data-staff=disable][data-user=browser_staff]').disabled")
+                assert staff_get('/api/admin/workspace')['status']==401
+            finally: staff_context.close()
+            assert page.locator('#teamMembers').inner_text().count('Protected owner')==1
+            page.screenshot(path=str(output/'team-owner.png'))
+            if page.locator('#menuToggle').is_visible():page.locator('#menuToggle').click()
+            page.locator('#logout').click();page.wait_for_selector('#login:not(.hidden)')
+        check('main owner hires staff, assigns powers and revokes live access',owner_hiring)
         verifier=generate_password_hash(password)
         with patch.dict(os.environ,{'ADMIN_USERS_JSON':json.dumps({'audit_owner':verifier})}),patch.object(api,'db',side_effect=DatabaseUnavailable('Synthetic quota outage')):
             def outage_login():

@@ -3,7 +3,7 @@
 const $ = id => document.getElementById(id);
 const arr = value => Array.isArray(value) ? value : [];
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
-const views = {overview:'Overview',news:'Newsroom',sources:'Source coverage',operations:'Agent operations',upgrade:'Intelligence & QA',activity:'Activity',system:'System status',settings:'Settings'};
+const views = {overview:'Overview',news:'Newsroom',sources:'Source coverage',operations:'Agent operations',upgrade:'Intelligence & QA',activity:'Activity',system:'System status',settings:'Settings',team:'Team & roles'};
 let csrf = '', settings = {}, workspace = null, rows = [], currentView = 'overview';
 let pageNumber = 1, pageTotal = 0, queue = 'all', selected = new Set(), visibleRows = [];
 let deliveryController = null;
@@ -18,6 +18,8 @@ function notice(message, type = 'ok') {
   noticeTimer = setTimeout(() => $('notice').classList.add('hidden'), 5500);
 }
 function showLogin(message = '') {
+  clearStaffCredentials();
+  $('teamMembers').replaceChildren();
   sessionVersion++;
   closeMenu();
   clearInterval(liveTimer); liveTimer = null;
@@ -108,7 +110,7 @@ function closeMenu(returnFocus = false) {
   if (wasOpen && returnFocus) $('menuToggle').focus();
 }
 function go(view, updateHash = true) {
-  if (!views[view]) view = 'overview';
+  if (!views[view] || (workspace && !canView(view))) view = 'overview';
   currentView = view;
   document.querySelectorAll('.view').forEach(node => node.classList.toggle('active', node.id === view));
   document.querySelectorAll('.nav button').forEach(node => { node.classList.toggle('active',node.dataset.view === view); if (node.dataset.view === view) node.setAttribute('aria-current','page'); else node.removeAttribute('aria-current'); });
@@ -123,11 +125,71 @@ function go(view, updateHash = true) {
   if (view === 'activity') loadActivity();
   if (view === 'system') renderSystem();
   if (view === 'settings') loadSettings();
+  if (view === 'team') loadTeam();
   window.scrollTo({top:0,behavior:'instant'});
 }
+function powerLabel(permission) {
+  return ({'news.read':'Read newsroom','news.create':'Create drafts','news.edit':'Edit stories','news.process':'Process source material','news.publish':'Verify and publish','news.reject':'Reject stories','reports.read':'Download diagnosis reports','operations.read':'View operations and quality','settings.manage':'Manage publishing settings','training.manage':'Record operating guidance','activity.read':'Read audit history','users.manage':'Manage staff and roles'})[permission] || permission;
+}
+function can(permission) {
+  if (!workspace || workspace.access.read_only) return false;
+  const powers = workspace.access.permissions;
+  return Array.isArray(powers) ? powers.includes(permission) : true;
+}
+function canView(view) {
+  if (workspace?.access.read_only) return view !== 'team';
+  return !({team:'users.manage',settings:'settings.manage',activity:'activity.read',operations:'operations.read',upgrade:'operations.read'}[view]) || can({team:'users.manage',settings:'settings.manage',activity:'activity.read',operations:'operations.read',upgrade:'operations.read'}[view]);
+}
+function controlPermission(node) {
+  if (node.dataset.permission) return node.dataset.permission;
+  if (node.dataset.bulk) return node.dataset.bulk === 'reject' ? 'news.reject' : 'news.publish';
+  if (['factBtn'].includes(node.id)) return 'news.publish';
+  if (['websiteEnabled','saveSettings','siteToggle'].includes(node.id)) return 'settings.manage';
+  if (['trainAgent','trainNotes','trainBtn'].includes(node.id)) return 'training.manage';
+  if (node.id === 'manualComposer') return 'news.create';
+  return 'news.read';
+}
+function clearStaffCredentials() {
+  $('staffLogin').value = ''; $('staffPassword').value = '';
+  if ($('staffCredentials').open) $('staffCredentials').close();
+}
+function showStaffCredentials(data) {
+  $('staffLogin').value = data.username; $('staffPassword').value = data.password;
+  $('staffCredentials').showModal();
+}
+let teamRoles = [];
+async function loadTeam() {
+  if (!can('users.manage')) return;
+  try {
+    const data = await api('/api/admin/users');
+    teamRoles = data.roles;
+    $('hireRole').innerHTML = '<option value="">Select a role…</option>' + teamRoles.map(role => `<option value="${esc(role.id)}">${esc(role.name)}</option>`).join('');
+    $('hirePowers').textContent = 'Choose a job to see exactly which actions it permits.';
+    $('teamMembers').innerHTML = '<table class="table"><thead><tr><th>Username</th><th>Role / powers</th><th>Actions</th></tr></thead><tbody>' + data.users.map(user => `<tr><td>${esc(user.username)}</td><td>${user.protected ? '<b>Main owner · all permissions</b>' : `<select class="field" data-staff-role="${esc(user.username)}">${!user.enabled ? '<option value="">Disabled · select a role to restore</option>' : ''}${teamRoles.map(role => `<option value="${esc(role.id)}" ${user.role === role.id ? 'selected' : ''}>${esc(role.name)}</option>`).join('')}</select>`}<small>${esc(user.permissions.map(powerLabel).join(', ') || 'No access')}</small></td><td>${user.protected ? 'Protected owner' : `<button class="btn small" data-staff="role" data-user="${esc(user.username)}">Save role</button> <button class="btn small" data-staff="reset_password" data-user="${esc(user.username)}">Generate new password</button> <button class="btn small danger" data-staff="disable" data-user="${esc(user.username)}" ${!user.enabled ? 'disabled' : ''}>Disable access</button>`}</td></tr>`).join('') + '</tbody></table>';
+  } catch (error) { notice(error.message,'err'); }
+}
+async function downloadDiagnosis() {
+  if (!can('reports.read')) return;
+  const button = $('downloadDiagnostics'), version = sessionVersion;
+  button.disabled = true; button.textContent = 'Preparing live diagnosis…';
+  try {
+    const response = await fetch('/api/admin/diagnostics.pdf?days=' + encodeURIComponent($('diagnosisPeriod').value),{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(30000)});
+    if (!response.ok) { const error = await response.json().catch(() => ({})); throw new Error(error.error || 'Diagnosis download failed'); }
+    if (!(response.headers.get('Content-Type') || '').startsWith('application/pdf')) throw new Error('The diagnosis service did not return a PDF.');
+    const blob = await response.blob();
+    if (version !== sessionVersion) return;
+    download('politicshub-diagnosis-' + new Date().toISOString().slice(0,10) + '.pdf',blob,'application/pdf');
+    notice('Fresh diagnosis downloaded. Full database totals and source inventory; recent history is scoped in the PDF.');
+  } catch (error) { notice(error.message,'err'); }
+  finally { button.textContent = '↓ Download diagnosis PDF'; button.disabled = !can('reports.read'); }
+}
+
 function applyCapabilities() {
   const writable = !!workspace && !workspace.access.read_only;
-  document.querySelectorAll('[data-write]').forEach(node => { node.disabled = !writable || mutationBusy; node.title = writable ? '' : workspace?.data_origin === 'termux_github' ? 'Edits run on the Termux phone, not on the public website' : 'Requires a live database and owner session'; });
+  document.querySelectorAll('[data-write]').forEach(node => { node.disabled = !writable || !can(controlPermission(node)) || mutationBusy; node.title = writable ? '' : workspace?.data_origin === 'termux_github' ? 'Edits run on the Termux phone, not on the public website' : 'Requires a live database and owner session'; });
+  document.querySelectorAll('[data-view]').forEach(node => { node.hidden = !canView(node.dataset.view); });
+  $('downloadDiagnostics').disabled = !can('reports.read');
+  $('saveManual').closest('.panel').hidden = !can('news.create');
   $('status').disabled = !writable; $('review').disabled = !writable;
   $('settingsState').textContent = writable ? '' : workspace?.data_origin === 'termux_github' ? 'Read-only website. Review and approve stories using the local Termux workflow.' : 'Read-only. Publishing controls require a live database owner session.';
 }
@@ -138,7 +200,7 @@ function renderWorkspace() {
   settings = data.settings || {};
   $('userName').textContent = data.access.username;
   $('avatar').textContent = data.access.username.slice(0,1).toUpperCase();
-  $('sessionRole').textContent = data.access.scope === 'recovery' ? 'Recovery · read-only' : data.access.read_only ? (githubOnly ? 'Owner · GitHub feed view' : 'Owner · database unavailable') : 'Owner session';
+  $('sessionRole').textContent = data.access.scope === 'recovery' ? 'Recovery · read-only' : data.access.read_only ? (githubOnly ? 'Owner · GitHub feed view' : 'Owner · database unavailable') : (data.access.role || 'Administrator') + ' session';
   $('connectionBadge').className = 'pill ' + (data.mode === 'live' || (githubOnly && sample) ? 'green' : 'amber');
   $('connectionBadge').textContent = data.mode === 'live' ? 'Live database' : githubOnly ? 'GitHub news feed' : 'Snapshot mode';
   $('workspaceBanner').classList.toggle('hidden',!data.notice);
@@ -153,7 +215,7 @@ function renderWorkspace() {
   $('recentStories').innerHTML = rows.slice(0,5).map((row,index) => `<article class="recent-story"><span class="story-index">${String(index+1).padStart(2,'0')}</span><div><button data-inspect="${Number(row.id)}">${esc(row.title)}</button><div class="meta">${esc(row.source_name || 'Unknown source')} · ${esc(row.category || 'General')}</div></div></article>`).join('') || empty('No reports available','No saved public stories were found.');
   $('deskChart').innerHTML = barChart(data.coverage.categories,sample,6);
   $('coverageScope').textContent = `Based on ${sample} loaded stories. Distribution is not a count of the full archive.`;
-  $('health').innerHTML = `<div class="health-row"><div><b>${githubOnly ? 'News storage' : 'Database'}</b><small>${githubOnly ? 'PostgreSQL is local to Termux; phone health is not checked here' : health.database === 'connected' ? 'Connection available' : 'Persistent services are paused'}</small></div><span class="pill ${health.database === 'connected' ? 'green' : 'amber'}">${githubOnly ? 'Termux' : esc(health.database)}</span></div><div class="health-row"><div><b>Story delivery</b><small>Newest report: ${esc(date(health.latest_published_at))}</small></div><span class="pill ${health.latest_age_seconds != null && health.latest_age_seconds < 86400 ? 'green' : 'amber'}">${esc(age(health.latest_age_seconds))}</span></div><div class="health-row"><div><b>Editorial permissions</b><small>${data.access.read_only ? 'Changes are disabled server-side' : 'Authenticated owner access'}</small></div><span class="pill ${data.access.read_only ? 'amber' : 'green'}">${data.access.read_only ? 'Read-only' : 'Owner'}</span></div>`;
+  $('health').innerHTML = `<div class="health-row"><div><b>${githubOnly ? 'News storage' : 'Database'}</b><small>${githubOnly ? 'PostgreSQL is local to Termux; phone health is not checked here' : health.database === 'connected' ? 'Connection available' : 'Persistent services are paused'}</small></div><span class="pill ${health.database === 'connected' ? 'green' : 'amber'}">${githubOnly ? 'Termux' : esc(health.database)}</span></div><div class="health-row"><div><b>Story delivery</b><small>Newest report: ${esc(date(health.latest_published_at))}</small></div><span class="pill ${health.latest_age_seconds != null && health.latest_age_seconds < 86400 ? 'green' : 'amber'}">${esc(age(health.latest_age_seconds))}</span></div><div class="health-row"><div><b>Editorial permissions</b><small>${data.access.read_only ? 'Changes are disabled server-side' : 'Permissions follow your assigned role'}</small></div><span class="pill ${data.access.read_only ? 'amber' : 'green'}">${data.access.read_only ? 'Read-only' : esc(data.access.role || 'Administrator')}</span></div>`;
   $('attentionList').innerHTML = data.coverage.quality.slice(0,4).map(item => `<div class="attention-row"><span>${esc(item.name)}</span><b>${number(item.count)} stories</b></div>`).join('') || '<p class="muted">No completeness flags in the loaded sample.</p>';
   const synced = new Date(data.generated_at).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit'});
   $('footerSync').textContent = `Updated ${synced} IST · Refreshes every 60s on overview`;
@@ -161,6 +223,7 @@ function renderWorkspace() {
   fillOptions('category',data.coverage.categories,'All desks');
   fillOptions('source',sourceOptions(),'All sources');
   applyCapabilities();
+  if (!canView(currentView)) go('overview');
   if (currentView === 'sources') renderSources();
   if (currentView === 'system') renderSystem();
 }
@@ -210,7 +273,7 @@ function filteredSnapshot() {
 function storyActions(row) {
   if (workspace?.access.read_only) return `<button class="btn" data-inspect="${Number(row.id)}">Inspect ↗</button>`;
   const id = Number(row.id);
-  return `<button class="btn" data-inspect="${id}">Inspect</button>` + (!row.article_available ? `<button class="btn" data-news="process" data-id="${id}" data-write>Process</button>` : '') + (row.status === 'pending' ? `<button class="btn" data-news="approve" data-id="${id}" data-write>Verify &amp; publish</button>` : '') + (row.status !== 'rejected' ? `<button class="btn danger" data-news="reject" data-id="${id}" data-write>Reject</button>` : '');
+  return `<button class="btn" data-inspect="${id}">Inspect</button>` + (!row.article_available ? `<button class="btn" data-permission="news.process" data-news="process" data-id="${id}" data-write>Process</button>` : '') + (row.status === 'pending' ? `<button class="btn" data-permission="news.publish" data-news="approve" data-id="${id}" data-write>Verify &amp; publish</button>` : '') + (row.status !== 'rejected' ? `<button class="btn danger" data-permission="news.reject" data-news="reject" data-id="${id}" data-write>Reject</button>` : '');
 }
 function renderNews(list, total) {
   visibleRows = list; pageTotal = total;
@@ -387,7 +450,7 @@ async function inspectStory(id) {
     catch (error) { if (sequence === inspectorSequence && $('inspector').open) { $('inspectorArticle').textContent = error.message; $('loadArticle').disabled = false; } }
   };
   $('copySource').onclick = async () => { try { await navigator.clipboard.writeText(url); notice('Source link copied'); } catch { notice('Clipboard unavailable. Open the original source link.','err'); } };
-  if (!workspace.access.read_only) {
+  if (can('news.edit')) {
     const editor = document.createElement('details'); editor.className = 'story-editor';
     editor.innerHTML = `<summary>Edit headline &amp; summary</summary><form id="editStoryForm"><label class="label" for="editTitle">Headline</label><textarea id="editTitle" class="field" maxlength="500" required rows="3">${esc(row.title)}</textarea><label class="label" for="editCategory">Editorial desk</label><select id="editCategory" class="field">${['general','india','world','politics','business','technology','sports','entertainment','science','health','hindi','maharashtra'].map(category => `<option ${category === row.category ? 'selected' : ''}>${category}</option>`).join('')}</select><label class="label" for="editSummary">Summary</label><textarea id="editSummary" class="field" maxlength="6000" rows="5">${esc(row.summary)}</textarea><p class="panel-foot">Changes are saved to the database and recorded in the audit trail. Source links stay attached to the story.</p><button class="btn primary" type="submit">Save story</button></form>`;
     $('inspectorBody').append(editor);
@@ -488,12 +551,12 @@ function renderSystem() {
   const githubOnly = workspace.data_origin === 'termux_github' && workspace.mode !== 'live';
   $('systemChecks').innerHTML = (githubOnly ? metric('Primary storage','Termux PostgreSQL','Private phone database; not remotely checked') + metric('Public delivery','GitHub feed','Approved phone exports plus attributed public sources') : metric('Database',health.database === 'connected' ? 'Connected' : 'Unavailable',health.database === 'connected' ? 'Connection verified' : 'Persistent writes are paused') + metric('Data mode',workspace.mode === 'live' ? 'Live' : 'Snapshot',workspace.mode === 'live' ? 'Database-backed newsroom' : 'Saved public reports')) + metric('Latest report age',age(health.latest_age_seconds),date(health.latest_published_at)) + metric('Workspace response',health.response_ms + ' ms','Server processing time, not browser latency');
   $('lastSync').textContent = 'Checked ' + date(workspace.generated_at);
-  $('sessionDetails').innerHTML = detail('Signed in as',access.username) + detail('Access scope',access.scope === 'recovery' ? 'Recovery · read-only' : access.read_only ? 'Owner · writes unavailable' : 'Owner') + detail('Session expires',access.expires_at ? date(access.expires_at*1000) : 'Legacy session') + detail(githubOnly ? 'Public website edits' : 'Database writes',githubOnly ? 'Disabled — manage locally in Termux' : access.read_only ? 'Blocked' : 'Allowed with CSRF protection') + detail('Private data storage','Session cookie only; no admin records in local storage') + detail('Coverage limit',workspace.limits.stories + ' loaded stories; charts describe this sample');
+  $('sessionDetails').innerHTML = detail('Signed in as',access.username) + detail('Assigned role',access.role || 'Administrator') + detail('Allowed actions',arr(access.permissions).map(powerLabel).join(', ') || 'Read-only / unavailable') + detail('Access scope',access.scope === 'recovery' ? 'Recovery · read-only' : access.read_only ? 'Writes unavailable' : (access.role || 'Administrator')) + detail('Session expires',access.expires_at ? date(access.expires_at*1000) : 'Legacy session') + detail(githubOnly ? 'Public website edits' : 'Database writes',githubOnly ? 'Disabled — manage locally in Termux' : access.read_only ? 'Blocked' : 'Limited to assigned role; CSRF protection required') + detail('Private data storage','Session cookie only; no admin records in local storage') + detail('Coverage limit',workspace.limits.stories + ' loaded stories; charts describe this sample');
 }
 function fillSettings(value) { settings = value || {}; $('websiteEnabled').checked = settings.website_enabled !== 'false'; }
 async function loadSettings() {
   $('trainAgent').innerHTML = ['trend','manager','research','factcheck','writer','reviewer','hr','automation','publisher','reporting'].map(agent => `<option>${agent}</option>`).join('');
-  if (workspace?.access.read_only) { $('websiteEnabled').checked = false; applyCapabilities(); return; }
+  if (!can('settings.manage')) { $('websiteEnabled').checked = false; applyCapabilities(); return; }
   $('saveSettings').disabled = true; $('siteToggle').disabled = true;
   try { fillSettings(await api('/api/admin/settings')); applyCapabilities(); }
   catch (error) { notice(error.message,'err'); }
@@ -606,7 +669,26 @@ $('clearSelection').onclick = () => { selected.clear(); renderNews(visibleRows,p
 $('prevPage').onclick = () => { pageNumber--; loadNews(); };
 $('nextPage').onclick = () => { pageNumber++; loadNews(); };
 $('exportNews').onclick = exportNews;
-$('downloadDiagnostics').onclick = () => { if (workspace) download('politicshub-diagnostics.json',JSON.stringify({generated_at:workspace.generated_at,mode:workspace.mode,health:workspace.health,capabilities:workspace.capabilities,limits:workspace.limits},null,2),'application/json'); };
+$('hireRole').onchange = () => { const role = teamRoles.find(item => item.id === $('hireRole').value); $('hirePowers').textContent = role ? 'Allowed actions: ' + role.permissions.map(powerLabel).join(', ') : 'Select a role.'; };
+$('hireForm').onsubmit = async event => {
+  event.preventDefault(); if (!can('users.manage')) return;
+  $('hireSubmit').disabled = true;
+  try { const data = await action('/api/admin/users',{username:$('hireUsername').value.trim(),role:$('hireRole').value}); $('hireForm').reset(); await loadTeam(); showStaffCredentials(data); }
+  catch (error) { notice(error.message,'err'); }
+  finally { $('hireSubmit').disabled = false; }
+};
+$('teamMembers').onclick = async event => {
+  const button = event.target.closest('[data-staff]'); if (!button || !can('users.manage')) return;
+  const username = button.dataset.user, operation = button.dataset.staff;
+  const select = [...document.querySelectorAll('[data-staff-role]')].find(node => node.dataset.staffRole === username);
+  button.disabled = true;
+  try { const data = await action('/api/admin/users/' + encodeURIComponent(username),{operation,role:select?.value}); await loadTeam(); if (data.password) showStaffCredentials(data); else notice('Staff access updated'); }
+  catch (error) { notice(error.message,'err'); }
+  finally { button.disabled = false; }
+};
+$('staffCredentialsClose').onclick = clearStaffCredentials;
+$('staffCredentials').addEventListener('close',() => { $('staffLogin').value = ''; $('staffPassword').value = ''; });
+$('downloadDiagnostics').onclick = downloadDiagnosis;
 $('saveSettings').onclick = saveSettings;
 $('siteToggle').onclick = async () => { if (!await confirmAction('Change website publishing?', 'This updates the persistent publication setting.')) return; try { const data = await action('/api/admin/settings',{website_enabled:settings.website_enabled === 'false'}); fillSettings(data.settings); notice('Publishing controls saved'); } catch (error) { notice(error.message,'err'); } };
 $('trainBtn').onclick = async () => { const notes = $('trainNotes').value.trim(); if (!notes) return notice('Enter a reviewed operating instruction.','err'); $('trainBtn').disabled = true; try { await action('/api/admin/training',{agent_id:$('trainAgent').value,event_type:'knowledge_update',notes}); $('trainNotes').value = ''; notice('Knowledge event recorded'); } catch (error) { notice(error.message,'err'); } finally { applyCapabilities(); } };

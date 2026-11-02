@@ -23,7 +23,7 @@ class RemoteAdminBridgeTests(unittest.TestCase):
         for p in ("/api/admin/login", "/api/admin/me", "/api/admin/workspace",
                   "/api/admin/story/455", "/api/admin/story/455/article",
                   "/api/admin/dashboard", "/api/admin/health",
-                  "/api/admin/operations.pdf", "/api/news/455/approve",
+                  "/api/admin/operations.pdf", "/api/admin/diagnostics.pdf", "/api/admin/users", "/api/admin/users/new_staff", "/api/news/455/approve",
                   "/api/news/455/edit", "/api/fact-check"):
             self.assertTrue(is_private_endpoint(p), p)
         for p in ("/api/admin/setup", "/api/admin/nonexistent",
@@ -171,6 +171,9 @@ class RemoteAdminBridgeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.mimetype, 'application/pdf')
         self.assertEqual(response.data, pdf)
+        response, _ = self.proxy(path='/api/admin/diagnostics.pdf', content=pdf, content_type='application/pdf')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers['Content-Disposition'], 'attachment; filename="politicshub-diagnosis.pdf"')
         for path, content in (('/api/admin/me', pdf),
                               ('/api/admin/operations.pdf', b'<html>gateway challenge</html>')):
             response, _ = self.proxy(path=path, content=content, content_type='application/pdf')

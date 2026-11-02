@@ -9,7 +9,8 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from email.utils import parsedate_to_datetime
 from urllib.parse import quote, urlsplit
-from flask import Flask, jsonify, request, session, send_from_directory, redirect, Response, render_template
+from flask import Flask, jsonify, request, session, g, send_from_directory, redirect, Response, render_template
+from app.admin_roles import effective_role, permissions as role_permissions, required_permission, verifier_tag
 from werkzeug.security import check_password_hash, generate_password_hash
 from psycopg import Error as PostgresError
 from app.article_fetcher import enrich_source_text
@@ -87,11 +88,12 @@ def enforce_admin_session_scope():
    return jsonify({'error':'Recovery access is read-only. Restore the database and sign in again to make changes.','code':'recovery_read_only'}),403
 
 
-def _signed_in(username, role, scope='owner'):
+def _signed_in(username, role, scope='owner', verifier=None):
  session.clear()
  session.update(admin_user=username,admin_role=role,admin_scope=scope,
   admin_expires_at=int(time.time())+(3600 if scope=='recovery' else 28800),
   csrf_token=secrets.token_urlsafe(32))
+ if verifier:session['admin_verifier_tag']=verifier_tag(verifier)
  return jsonify({'ok':True,'username':username,'role':role,'scope':scope,
   'read_only':scope=='recovery','csrf_token':session['csrf_token'],
   'expires_at':session['admin_expires_at']})
@@ -423,14 +425,67 @@ def admin_ok():
  if session.get("admin_user"):return True
  token=os.getenv("ADMIN_TOKEN",""); supplied=request.headers.get("X-Admin-Token",""); return bool(token and supplied and secrets.compare_digest(supplied,token))
 
+def resolve_admin_identity():
+ if not hasattr(g,'admin_permissions'):
+  username=session.get('admin_user')
+  stored_role=session.get('admin_role','owner')
+  if session.get('admin_verifier_tag'):
+   database=db()
+   try:
+    ph='%s' if database._postgres else '?'
+    row=database.conn.execute('SELECT role,password_hash FROM admin_users WHERE username='+ph,(username,)).fetchone()
+   finally:database.close()
+   if not row or row['role']=='disabled' or not secrets.compare_digest(verifier_tag(row['password_hash']),session['admin_verifier_tag']):
+    session.clear();return jsonify({'error':'Your account or password changed. Please sign in again.'}),401
+   stored_role=row['role']
+  # Legacy signed sessions retain operating access until expiry, but cannot
+  # hire or manage staff until a fresh database-authenticated login.
+  g.admin_permissions=role_permissions(username,stored_role)
+  if not session.get('admin_verifier_tag') and 'users.manage' in g.admin_permissions:g.admin_permissions.remove('users.manage')
+  g.admin_role=effective_role(username,stored_role)
+  session['admin_role']=g.admin_role
+ return None
+
+@app.before_request
+def revalidate_staff_session():
+ if request.path.startswith('/api/') and session.get('admin_verifier_tag') and not recovery_session() and request.path not in {'/api/admin/login','/api/admin/logout'}:
+  return resolve_admin_identity()
+
+
 def require_admin():
  if recovery_session():
   if request.path=='/api/admin/workspace':return None
   return jsonify({'error':'This section needs a live database owner session. Recovery access is read-only.','code':'recovery_read_only'}),403
- return None if admin_ok() else (jsonify({"error":"admin authentication required"}),401)
+ if not admin_ok():return jsonify({"error":"admin authentication required"}),401
+ err=resolve_admin_identity()
+ if err:return err
+ permission=required_permission(request.path,request.method)
+ if permission not in g.admin_permissions:return jsonify({'error':'Your role does not permit this action.','permission':permission}),403
+ return None
 def require_csrf():
  if not session.get("admin_user"):return None
  token=request.headers.get("X-CSRF-Token",""); expected=session.get("csrf_token",""); return None if token and expected and secrets.compare_digest(token,expected) else (jsonify({"error":"invalid CSRF token"}),403)
+
+from app.admin_team import register_team_routes
+register_team_routes(app,lambda:db(),require_admin,require_csrf)
+
+@app.get('/api/admin/diagnostics')
+@app.get('/api/admin/diagnostics.pdf')
+def admin_diagnosis():
+ err=require_admin()
+ if err:return err
+ if not _public_rate_allowed(4,60):return jsonify({'error':'Please wait before generating another diagnosis.'}),429
+ try:days=None if request.args.get('days','all')=='all' else max(1,min(int(request.args['days']),90))
+ except ValueError:return jsonify({'error':'Select all history or a period from 1 to 90 days.'}),400
+ from app.diagnostics import diagnosis,diagnosis_pdf
+ database=db()
+ try:payload=diagnosis(database,days,session.get('admin_user') or 'API administrator')
+ finally:database.close()
+ if request.path.endswith('.pdf'):
+  return Response(diagnosis_pdf(payload),mimetype='application/pdf',headers={
+   'Content-Disposition':'attachment; filename="politicshub-diagnosis-'+datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')+'.pdf"',
+   'Cache-Control':'private, no-store','X-Report-Generated-At':payload['generated_at']})
+ return jsonify(payload)
 
 def _strip_promo_nav(value):
  r=str(value or "")
@@ -834,7 +889,7 @@ def login():
   ph="%s" if database._postgres else "?"
   row=database.conn.execute("SELECT username,password_hash,role FROM admin_users WHERE username = "+ph,(username,)).fetchone()
   try:
-   valid=bool(row and check_password_hash(row["password_hash"] if database._postgres else row[1],password))
+   valid=bool(row and row['role']!='disabled' and check_password_hash(row["password_hash"] if database._postgres else row[1],password))
   except (ValueError,TypeError):
    valid=False
   role=(row["role"] if database._postgres else row[2]) if row else None
@@ -844,7 +899,7 @@ def login():
    return jsonify({"error":"invalid username or password"}),401
   _auth_clear(database,attempt_key)
   _auth_clear(database,ip_attempt_key)
-  return _signed_in(username,role or 'owner')
+  return _signed_in(username,effective_role(username,role or 'owner'),verifier=row['password_hash'])
  except (DatabaseUnavailable,PostgresError):
   if verify_recovery_owner(username,password):return _signed_in(username,'recovery','recovery')
   return jsonify({'error':'invalid username or password'}),401
@@ -1127,7 +1182,11 @@ def logout():
  session.clear(); return jsonify({"ok":True})
 
 @app.get("/api/admin/me")
-def me():return jsonify({"authenticated":bool(session.get("admin_user")),"username":session.get("admin_user"),"role":session.get("admin_role"),"scope":session.get('admin_scope','owner'),"read_only":recovery_session(),"expires_at":session.get('admin_expires_at'),"csrf_token":session.get("csrf_token") if session.get("admin_user") else None})
+def me():
+ if session.get('admin_user') and not recovery_session():
+  err=require_admin()
+  if err:return err
+ return jsonify({"authenticated":bool(session.get("admin_user")),"username":session.get("admin_user"),"role":session.get("admin_role"),"permissions":getattr(g,'admin_permissions',[]),"scope":session.get('admin_scope','owner'),"read_only":recovery_session(),"expires_at":session.get('admin_expires_at'),"csrf_token":session.get("csrf_token") if session.get("admin_user") else None})
 
 
 @app.get('/api/admin/workspace')
@@ -1146,7 +1205,7 @@ def admin_workspace():
    stats={key:int(counts[key]) for key in ('total','published','pending','review_needed')}
    latest_collected=counts['latest_collected_at']; latest_published=counts['latest_published_at']
    settings=database.get_settings()
-   activity=[dict(row) for row in database.recent_activity(8)]
+   activity=[dict(row) for row in database.recent_activity(8)] if 'activity.read' in getattr(g,'admin_permissions',[]) else []
    rows=admin_project_rows(raw)
    inventory=source_inventory(database)
  except (DatabaseUnavailable,PostgresError):
@@ -1164,8 +1223,8 @@ def admin_workspace():
  writable=connected and not recovery_session()
  return jsonify({'version':2,'generated_at':now.isoformat(),'mode':'snapshot' if snapshot else 'live',
    'data_origin':'termux_database' if writable and os.getenv('POLITICSHUB_LOCAL_ADMIN')=='1' else 'termux_github' if os.getenv("VERCEL")=="1" or os.getenv("POLITICSHUB_GITHUB_FEED_ONLY")=="1" else 'local_database',
-  'access':{'username':session.get('admin_user') or 'API token','scope':'recovery' if recovery_session() else 'owner','read_only':not writable,'expires_at':session.get('admin_expires_at')},
-  'capabilities':{'publish':writable,'settings':writable,'telemetry':writable,'export':True},
+  'access':{'username':session.get('admin_user') or 'API token','role':getattr(g,'admin_role','recovery'),'permissions':getattr(g,'admin_permissions',[]),'scope':'recovery' if recovery_session() else 'owner','read_only':not writable,'expires_at':session.get('admin_expires_at')},
+  'capabilities':{'publish':writable and 'news.publish' in getattr(g,'admin_permissions',[]),'settings':writable and 'settings.manage' in getattr(g,'admin_permissions',[]),'telemetry':writable and 'operations.read' in getattr(g,'admin_permissions',[]),'export':True},
   'health':{'database':'connected' if connected else 'unavailable','snapshot_available':bool(rows) if snapshot else None,
    'latest_published_at':datetime.fromtimestamp(latest,timezone.utc).isoformat() if latest else None,
    'latest_age_seconds':max(0,int(now.timestamp()-latest)) if latest else None,
