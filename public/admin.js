@@ -159,7 +159,7 @@ function renderWorkspace() {
   $('footerSync').textContent = `Updated ${synced} IST · Refreshes every 60s on overview`;
   $('todayLabel').textContent = new Date().toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata',weekday:'short',day:'numeric',month:'long',year:'numeric'});
   fillOptions('category',data.coverage.categories,'All desks');
-  fillOptions('source',data.coverage.sources,'All sources');
+  fillOptions('source',sourceOptions(),'All sources');
   applyCapabilities();
   if (currentView === 'sources') renderSources();
   if (currentView === 'system') renderSystem();
@@ -168,6 +168,10 @@ function fillOptions(id, items, label) {
   const value = $(id).value;
   $(id).innerHTML = `<option value="all">${label}</option>` + arr(items).map(item => `<option value="${esc(item.name)}">${esc(item.name)}</option>`).join('');
   if ([...$(id).options].some(option => option.value === value)) $(id).value = value;
+}
+function sourceOptions() {
+  const items = [...arr(workspace?.source_inventory?.items),...arr(workspace?.coverage?.sources)];
+  return [...new Map(items.map(item => [item.name,item])).values()].sort((a,b) => a.name.localeCompare(b.name));
 }
 async function loadOverview(silent = false, {fresh = false} = {}) {
   if (workspacePromise && !fresh) return workspacePromise;
@@ -413,12 +417,51 @@ async function inspectStory(id) {
 }
 function renderSources() {
   if (!workspace) return;
-  const data = workspace.coverage, total = data.sample_size, lead = data.sources[0];
-  $('sourceMetrics').innerHTML = metric('Sources represented',data.sources.length,'In the loaded sample') + metric('Desks represented',data.categories.length,'In the loaded sample') + metric('Largest source share',lead ? pct(Math.round(lead.count/Math.max(1,total)*100)) : '—',lead?.name || 'No records') + metric('Reports sampled',number(total),workspace.mode === 'snapshot' ? 'Saved public snapshot' : 'Latest database records');
-  $('sourceChart').innerHTML = barChart(data.sources,total,12);
-  $('qualityChart').innerHTML = barChart(data.quality,total,10);
-  $('sourceScope').textContent = total + ' loaded stories';
-  $('sourceTable').innerHTML = '<table class="table"><thead><tr><th>Publisher</th><th>Stories</th><th>Share</th><th>Latest report</th><th></th></tr></thead><tbody>' + data.sources.map(source => {const matching = rows.filter(row => (row.source_name || 'Unknown') === source.name); const latest = Math.max(...matching.map(row => row.timestamp || 0)); return `<tr><td>${esc(source.name)}</td><td>${source.count}</td><td>${Math.round(source.count/Math.max(1,total)*100)}%</td><td>${esc(latest ? date(latest*1000) : 'Not recorded')}</td><td><button class="text-btn" data-source-filter="${esc(source.name)}">View stories ↗</button></td></tr>`;}).join('') + '</tbody></table>';
+  const inventory = workspace.source_inventory;
+  const complete = !!inventory && Array.isArray(inventory.items);
+  const scope = complete ? inventory.scope : 'sample';
+  const database = scope === 'database', snapshot = scope === 'snapshot';
+  const countScope = database ? 'Entire database' : snapshot ? 'Saved public snapshot only' : scope === 'sample' ? 'Loaded sample only' : 'Database counts unavailable';
+  const items = complete ? inventory.items : arr(workspace.coverage.sources).map(source => ({name:source.name,story_count:source.count,collection_status:'unknown'}));
+  const total = complete ? inventory.total_stories : workspace.coverage.sample_size;
+  const represented = complete ? inventory.represented_count : items.length;
+  $('sourceMetrics').innerHTML = metric('Configured publishers',complete ? number(inventory.configured_count) : 'Unavailable','Full source configuration') + metric('Publishers with reports',number(represented),countScope) + metric('Stored reports',number(total),countScope) + metric('Desks represented',number(complete ? inventory.categories_count : workspace.coverage.categories.length),countScope);
+  const counted = items.filter(item => Number(item.story_count) > 0).sort((a,b) => b.story_count-a.story_count || a.name.localeCompare(b.name));
+  $('sourceChart').innerHTML = counted.length ? barChart(counted.map(item => ({name:item.name,count:item.story_count})),total,12) : empty('No stored reports in this scope',scope === 'unavailable' ? 'Database counts could not be loaded.' : 'Configured publishers remain listed in the directory below.');
+  $('sourceChartScope').textContent = countScope + ' · largest 12 publishers';
+  $('qualityChart').innerHTML = barChart(workspace.coverage.quality,workspace.coverage.sample_size,10);
+  $('qualityScope').textContent = `Completeness checks cover ${number(workspace.coverage.sample_size)} loaded stories. Source counts use ${database ? 'the entire database' : snapshot ? 'the saved public snapshot' : 'the scope shown above'}.`;
+  const warnings = complete ? arr(inventory.errors).map(error => typeof error === 'string' ? error : error.message || 'Source inventory could not be fully loaded.') : ['Full source inventory is unavailable from this phone version. Update the Termux service to load every configured publisher; the counts below describe only the loaded sample.'];
+  if (snapshot) warnings.unshift('Stored report counts cover the saved public snapshot. Private phone collection status is not checked here.');
+  $('sourceInventoryNotice').classList.toggle('hidden',!warnings.length);
+  $('sourceInventoryNotice').textContent = warnings.join(' ');
+  const query = $('sourceSearch').value.trim().toLocaleLowerCase();
+  const filtered = items.filter(item => [item.name,item.category,arr(item.categories).join(' '),item.kind,item.url,item.feed_url].join(' ').toLocaleLowerCase().includes(query));
+  $('sourceScope').textContent = `${number(filtered.length)} of ${number(items.length)} publishers · ${countScope}`;
+  $('sourceTable').innerHTML = filtered.length ? '<table class="table source-directory"><thead><tr><th>Publisher / desk</th><th>Stored reports</th><th>Collection status</th><th>Latest stored report</th><th></th></tr></thead><tbody>' + filtered.map(source => {
+    const url = source.url || source.feed_url ? safeUrl(source.url || source.feed_url) : '';
+    const categories = arr(source.categories).length ? source.categories.join(', ') : source.category || '';
+    const configured = source.configured === false ? 'Stored source · not in current configuration' : source.kind ? String(source.kind).replaceAll('_',' ') : '';
+    const status = sourceCollectionStatus(source,scope);
+    const latest = source.latest_collected_at || source.latest_published_at;
+    const count = source.story_count == null ? 'Unavailable' : number(source.story_count);
+    const canFilter = source.story_count != null && Number(source.story_count) > 0;
+    return `<tr><td><b>${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(source.name)} ↗</a>` : esc(source.name)}</b><small>${esc([categories,configured].filter(Boolean).join(' · '))}</small></td><td>${esc(count)}</td><td><span class="pill ${status.tone}">${esc(status.label)}</span>${status.detail ? `<small>${esc(status.detail)}</small>` : ''}</td><td>${esc(latest ? date(latest) : 'Not recorded')}</td><td>${canFilter ? `<button class="text-btn" data-source-filter="${esc(source.name)}">${database ? 'View stories' : 'View saved stories'} ↗</button>` : `<span class="muted">${source.story_count == null ? 'Counts unavailable' : 'No stored stories'}</span>`}</td></tr>`;
+  }).join('') + '</tbody></table>' : empty('No matching publishers','Try another publisher name, language or desk.');
+}
+function sourceCollectionStatus(source,scope) {
+  if (source.configured === false) return {label:'Stored source',tone:'',detail:'Not in current configuration'};
+  if (source.enabled === false) return {label:'Disabled',tone:'',detail:'Not enabled for collection'};
+  const status = source.collection_status;
+  if (status === 'external_pipeline') return {label:'Separate pipeline',tone:'',detail:'Collected by the GitHub pipeline'};
+  if (scope === 'snapshot' || scope === 'sample') return {label:'Not checked',tone:'',detail:'Phone collection status unavailable'};
+  if (status === 'failed') return {label:'Collection failed',tone:'red',detail:String(source.last_error || 'Latest collection attempt failed').slice(0,300)};
+  if (status === 'stale') return {label:'Collection overdue',tone:'amber',detail:source.last_success_at ? 'Last successful fetch: ' + date(source.last_success_at) : 'No recent successful fetch recorded'};
+  if (status === 'healthy' || status === 'ok') return {label:'Fetch succeeded',tone:'green',detail:source.last_success_at ? date(source.last_success_at) : 'Successful collection recorded'};
+  if (status === 'checking') return {label:'Collection in progress',tone:'amber',detail:source.last_attempt_at ? 'Started: ' + date(source.last_attempt_at) : 'Feed check started'};
+  if (status === 'awaiting_collection' || status === 'pending' || status === 'never_attempted') return {label:'Awaiting first collection',tone:'amber',detail:'Configured; no collection attempt recorded'};
+  if (status === 'not_configured') return {label:'Not configured',tone:'amber',detail:'Collector configuration is incomplete'};
+  return {label:'Not recorded',tone:'',detail:source.last_attempt_at ? 'Last attempt: ' + date(source.last_attempt_at) : 'No collection telemetry recorded'};
 }
 function telemetryAvailable(kind) {
   const available = !!workspace?.capabilities.telemetry;
@@ -555,6 +598,7 @@ $('logout').onclick = async () => {
 $('refresh').onclick = async () => { const view = currentView; await loadOverview(false,{fresh:true}); if (workspace && currentView === view) go(view,false); };
 $('newsRefresh').onclick = async () => { await Promise.allSettled([loadOverview(false,{fresh:true}),loadNews()]); };
 $('search').oninput = () => { newsSequence++; newsController?.abort(); clearTimeout(newsTimer); newsTimer = setTimeout(() => loadNews(true),250); };
+$('sourceSearch').oninput = renderSources;
 for (const id of ['category','source','status','review','sort']) $(id).onchange = () => loadNews(true);
 $('resetFilters').onclick = () => { $('search').value = ''; for (const id of ['category','source','status','review']) $(id).value = 'all'; $('sort').value = 'newest'; queue = 'all'; document.querySelectorAll('[data-queue]').forEach(node => node.classList.toggle('active',node.dataset.queue === 'all')); loadNews(true); };
 $('selectAll').onchange = event => { for (const row of visibleRows) event.target.checked ? selected.add(Number(row.id)) : selected.delete(Number(row.id)); renderNews(visibleRows,pageTotal); };

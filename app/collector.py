@@ -13,6 +13,7 @@ from .website_monitor import collect_website
 from .x_source import collect_x
 from .phase_system import ensure_schema, run as agent_run, cluster_stories
 from .source_http import public_http_url
+from .source_collection import ROOT, ensure_collection_schema, record_collection
 
 logger = logging.getLogger(__name__)
 
@@ -47,11 +48,11 @@ COLLECTORS: dict[str, Callable[[dict[str, Any]], list]] = {
 }
 
 
-def load_sources(path: str = "config/sources.json") -> dict[str, Any]:
-    config_path = Path(path)
+def load_sources(path: str | Path | None = None) -> dict[str, Any]:
+    config_path = Path(path) if path is not None else ROOT / "config/sources.json"
     if not config_path.exists():
         raise FileNotFoundError(
-            f"Missing {path}. Copy config/sources.example.json to {path} and add your sources."
+            f"Missing {config_path}. Copy config/sources.example.json and add your sources."
         )
     with config_path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
@@ -59,6 +60,7 @@ def load_sources(path: str = "config/sources.json") -> dict[str, Any]:
 
 def collect_once(config: dict[str, Any], db: NewsDatabase) -> tuple[int, int]:
     ensure_schema(db)
+    ensure_collection_schema(db)
     added = skipped = 0
     healthy = 0
     failures = []
@@ -74,16 +76,20 @@ def collect_once(config: dict[str, Any], db: NewsDatabase) -> tuple[int, int]:
         for source in sources:
             if not source.get("enabled", True):
                 continue
-            if source_type == "x" and not os.getenv("X_API_BEARER_TOKEN", "").strip():
-                logger.warning("X source %s skipped: X_API_BEARER_TOKEN not configured", source.get("name", "unknown"))
+            key_name = {"x": "X_API_BEARER_TOKEN", "newsapi": "NEWSAPI_KEY",
+                        "newsdata": "NEWSDATA_API_KEY"}.get(source_type)
+            if key_name and not os.getenv(key_name, "").strip():
+                record_collection(db, source_type, source.get("name", "unknown"),
+                                  status="not_configured", error="MissingAPIKey")
+                logger.warning("%s source %s skipped: API key not configured", source_type, source.get("name", "unknown"))
                 continue
             try:
                 if not _source_due(db, source_type, source):
                     logger.info("%s/%s: skipped; check_every_minutes has not elapsed",source_type,source.get("name","unknown"))
                     continue
+                record_collection(db, source_type, source.get("name", "unknown"), status="checking")
                 with agent_run(db, "trend", "collect_source", metadata={"source": source.get("name","unknown"), "type": source_type}):
                     items = collector(source)
-                    healthy += 1
                     safe_items=[]
                     rejected_urls=0
                     for item in items:
@@ -94,6 +100,10 @@ def collect_once(config: dict[str, Any], db: NewsDatabase) -> tuple[int, int]:
                     if rejected_urls:
                         logger.warning("%s/%s: rejected %d item(s) with non-http(s) URLs",source_type,source.get("name","unknown"),rejected_urls)
                     source_added, source_skipped = db.insert_many(safe_items)
+                healthy += 1
+                record_collection(db, source_type, source.get("name", "unknown"),
+                                  status="healthy", item_count=len(safe_items),
+                                  added_count=source_added, duplicate_count=source_skipped)
                 added += source_added
                 skipped += source_skipped
                 db.set_settings({f"collector_last:{source_type}:{source.get('name','unknown')}":datetime.now(timezone.utc).isoformat()})
@@ -105,10 +115,11 @@ def collect_once(config: dict[str, Any], db: NewsDatabase) -> tuple[int, int]:
                     source_added,
                     source_skipped,
                 )
-            except Exception:
+            except Exception as error:
                 name = source.get("name", "unknown")
                 failures.append(name)
-                logger.exception("Collector failed for %s", name)
+                record_collection(db, source_type, name, status="failed", error=error)
+                logger.warning("Collector failed for %s: %s", name, type(error).__name__)
                 if os.getenv("GITHUB_ACTIONS"):
                     print("::warning::A news source failed; see the collection summary.")
     try:
