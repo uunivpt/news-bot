@@ -2,20 +2,29 @@ import unittest
 from app.editorial_gate import longform_review, word_count
 
 class LongformGateTests(unittest.TestCase):
-    def test_short_rss_summary_cannot_pass_even_if_reviewed(self):
-        result = longform_review({"bot_article": "News update. " * 30, "summary": "This is a full summary of a relevant report.", "fact_check_status": "reviewed"})
+    def test_short_excerpt_is_held_even_with_automated_screen(self):
+        result = longform_review({
+            "bot_article": "News update. " * 30,
+            "summary": "This is a sufficiently detailed summary of a report.",
+        }, verification={"passed": True})
         self.assertFalse(result["passed"])
         self.assertIn("insufficient_original_longform_material", result["errors"])
 
-    def test_eight_hundred_words_still_requires_editor_review(self):
+    def test_eight_hundred_words_with_no_evidence_screen_is_held(self):
         article = " ".join("detail%s" % i for i in range(820))
-        result = longform_review({"bot_article": article, "summary": "An independently reviewed report with verifiable factual detail.", "fact_check_status": "pending"})
+        result = longform_review({
+            "bot_article": article,
+            "summary": "An independently verified and relevant factual report.",
+        })
         self.assertFalse(result["passed"])
-        self.assertIn("editorial_review_required", result["errors"])
+        self.assertIn("automated_evidence_check_required", result["errors"])
 
-    def test_approved_substantive_report_passes_structural_gate(self):
+    def test_automatic_screened_substantive_report_passes_structural_gate(self):
         article = " ".join("detail%s" % i for i in range(820))
-        result = longform_review({"bot_article": article, "summary": "An independently reviewed report with verifiable factual detail.", "fact_check_status": "approved"})
+        result = longform_review({
+            "bot_article": article,
+            "summary": "An independently researched and sourced report about developments.",
+        }, verification={"passed": True})
         self.assertTrue(result["passed"])
         self.assertEqual(result["words"], 820)
 
