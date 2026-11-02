@@ -70,7 +70,7 @@ def check(fetch=read):
     if html_status != 200 or "Politics news" not in page:
         issues.append("Politics page is unavailable")
     elif politics:
-        match = re.search(r'href="/politics/">Politics<small>(\\d+)</small>', page)
+        match = re.search(r'href="/politics/">Politics<small>(\d+)</small>', page)
         if not match or int(match.group(1)) < 1:
             issues.append("Politics navigation counter does not represent published stories")
 
