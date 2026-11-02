@@ -23,7 +23,8 @@ STATIC_PAGES = (
     "/", "/archive/", "/library/", "/exams/", "/about.html", "/contact.html", "/editorial-policy.html",
     "/corrections.html", "/privacy.html", "/cookies.html", "/terms.html",
     "/disclaimer.html", "/newsletter.html", "/data-rights.html",
-    "/licenses.html", "/sources.html", "/maharashtra/", "/guides/election-results.html", "/guides/maharashtra-mlc.html"
+    "/licenses.html", "/sources.html", "/maharashtra/", "/india/", "/politics/", "/world/", "/hindi/",
+    "/guides/election-results.html", "/guides/maharashtra-mlc.html"
 )
 
 
@@ -123,6 +124,20 @@ def standalone_sitemap_url_xml():
     )
 
 
+def _news_language(row):
+    """Use actual article language for Google News; do not label Hindi as English."""
+    language = str(row.get("language") or "").strip().lower().replace("_", "-").split("-", 1)[0]
+    if language in {"en", "hi", "mr"}:
+        return language
+    if str(row.get("category") or "").lower() == "hindi":
+        return "hi"
+    title = str(row.get("title") or "")
+    source = str(row.get("source_name") or "").lower()
+    if re.search(r"[\u0900-\u097f]", title) and ("marathi" in source or "majha" in source or "माझा" in source):
+        return "mr"
+    return "en"
+
+
 def google_news_sitemap_xml(rows, now=None):
     """Google News extension. Only articles published in the previous 48 hours.
 
@@ -135,7 +150,7 @@ def google_news_sitemap_xml(rows, now=None):
     for row in eligible_articles(rows, now=current):
         published = _date(row.get("published_at_iso") or row.get("published_at_site") or row.get("published_at"))
         if published and start <= published <= current + timedelta(minutes=30):
-            candidates.append((SITE_ORIGIN + canonical_path(row), str(row["title"]), published, "en"))
+            candidates.append((SITE_ORIGIN + canonical_path(row), str(row["title"]), published, _news_language(row)))
     for story in STANDALONE_NEWS:
         published = _date(story["published_at"])
         if published and start <= published <= current + timedelta(minutes=30):
