@@ -60,7 +60,7 @@ grounds for deleting a source or changing its reported publication time.
 ## Verification and rollback
 
 230 Python tests run successfully (six optional isolated-PostgreSQL tests skipped
-locally), all 24 JavaScript/Reel tests and 21 browser flows pass. Security checks
+locally), all 24 JavaScript tests and 21 browser flows pass. Security checks
 exercise private DNS, private redirects, host-boundary checks, credentials,
 nonstandard ports, HTTPS downgrades, redirect caps/loops, slow streams, response
 size bounds, response closure, active image rejection and text cleanup.

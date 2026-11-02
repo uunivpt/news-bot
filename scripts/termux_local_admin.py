@@ -13,6 +13,7 @@ import getpass
 import os
 import re
 import secrets
+import signal
 import subprocess
 import sys
 import time
@@ -31,6 +32,26 @@ BASE = f"http://{HOST}:{PORT}"
 LOCAL_DSN = "postgresql://postgres@127.0.0.1:5432/politicshub?sslmode=disable"
 PID = HOME / ".local/share/politicshub/phone-admin.pid"
 LOG = HOME / ".local/share/politicshub/phone-admin.log"
+BRIDGE_SECRET_FILE = HOME / ".config/politicshub/admin-bridge-secret"
+
+
+def load_bridge_secret():
+    """Load only the configured private file; never shell-source an env file."""
+    value = os.getenv("POLITICSHUB_ADMIN_BRIDGE_SECRET", "").strip()
+    path = Path(os.getenv("POLITICSHUB_ADMIN_BRIDGE_SECRET_FILE") or str(BRIDGE_SECRET_FILE)).expanduser()
+    legacy = HOME / ".politicshub-admin-bridge.secret"
+    if not os.getenv("POLITICSHUB_ADMIN_BRIDGE_SECRET_FILE") and not path.exists() and legacy.exists():
+        path = legacy
+    if not value and path.exists():
+        if not path.is_file() or path.is_symlink() or path.stat().st_mode & 0o077:
+            raise ValueError("Bridge secret file must be a regular private file (0600)")
+        value = path.read_text().strip()
+    if value:
+        if len(value) < 32:
+            raise ValueError("Bridge shared secret must be at least 32 characters")
+        os.environ["POLITICSHUB_ADMIN_BRIDGE_SECRET"] = value
+        return True
+    return False
 
 
 def configure_private_app():
@@ -52,15 +73,20 @@ def configure_private_app():
         # In bridge mode EVERY request must carry a fresh signed gateway
         # assertion; a public tunnel URL alone never grants admin access.
         secret = os.getenv("POLITICSHUB_ADMIN_BRIDGE_SECRET", "")
-        hostname = (request.host or "").split(":", 1)[0].lower()
-        if request.remote_addr != HOST:
-            return jsonify({"error": "Phone-local admin only"}), 403
+        from urllib.parse import urlsplit
+        hostname = (urlsplit("//" + request.host).hostname or "").lower()
         if secret:
             from app.remote_admin_bridge import verify_phone_bridge
-            if not verify_phone_bridge(request, secret):
-                return jsonify({"error": "Secure phone gateway required"}), 403
-        elif hostname not in {HOST, "localhost"}:
-            return jsonify({"error": "Phone-local admin only"}), 403
+            # Reverse proxies may preserve the caller's address. The HMAC,
+            # including path/body/time/nonce, authenticates the gateway; an IP
+            # reported by that proxy does not. Check the signature first.
+            if verify_phone_bridge(request, secret):
+                return None
+        # Direct phone browser access remains possible even with a bridge
+        # configured, but requires BOTH a local peer and a local Host header.
+        if request.remote_addr == HOST and hostname in {HOST, "localhost"}:
+            return None
+        return jsonify({"error": "Secure phone gateway required" if secret else "Phone-local admin only"}), 403
 
     @app.after_request
     def local_http_headers(response):
@@ -119,6 +145,34 @@ def _listening():
         return False
 
 
+def stop_local_daemon():
+    """Stop only the exact daemon started by this launcher, never PostgreSQL."""
+    try:
+        pid = int(PID.read_text().strip())
+        if pid <= 1:
+            return False
+        command = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\x00")
+        allowed = {Path(__file__).resolve(), HOME / "politicshub-live-upload/scripts/termux_local_admin.py"}
+        releases = HOME / ".local/share/politicshub/releases"
+        scripts = [Path(os.fsdecode(arg)) for arg in command if arg.endswith(b"/termux_local_admin.py")]
+        recognized = any(path in allowed or (path.is_relative_to(releases) and path.name == "termux_local_admin.py") for path in scripts)
+        if not recognized or b"--serve" not in command:
+            return False
+        os.kill(pid, signal.SIGTERM)
+        for _ in range(40):
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                PID.unlink(missing_ok=True)
+                return True
+            time.sleep(0.1)
+        return False
+    except FileNotFoundError:
+        return not _listening()
+    except (OSError, ValueError):
+        return False
+
+
 def serve():
     # A fresh private secret per runtime; never reuse the Vercel session key.
     os.environ.pop("VERCEL", None)
@@ -134,8 +188,9 @@ def serve():
     make_server(HOST, PORT, app, threaded=True).serve_forever()
 
 
-def start(reset=False):
-    if _listening():
+def start(reset=False, restart=False):
+    listening = _listening()
+    if listening and not reset and not restart:
         print("PHONE ADMIN ALREADY LISTENING:", BASE + "/admin/")
         print("No other server was started; phone DB unchanged")
         return 0
@@ -189,6 +244,18 @@ def start(reset=False):
         print("STOP: local credential or database check failed:", type(exc).__name__)
         return 1
 
+    if listening and not restart:
+        # Resetting the persisted account is useful specifically when an
+        # existing server is running. Never start a second listener for it.
+        print("LOCAL OWNER PASSWORD UPDATED; existing phone server kept running")
+        print("LOGIN:", BASE + "/admin/", "as localowner")
+        return 0
+
+    if restart and not stop_local_daemon():
+        print("STOP: could not identify/stop the existing launcher-owned daemon")
+        print("No database or unrelated process was stopped")
+        return 1
+
     LOG.parent.mkdir(parents=True, exist_ok=True)
     LOG.touch(mode=0o600, exist_ok=True)
     LOG.chmod(0o600)
@@ -216,7 +283,7 @@ def start(reset=False):
             PID.chmod(0o600)
             print("WRITABLE PHONE ADMIN RUNNING:", BASE + "/admin/")
             print("LOGIN: localowner (your chosen password)")
-            print("Public politicshub.in/admin remains separate and read-only.")
+            print("Public website admin can use this phone through its configured signed bridge.")
             print("PostgreSQL only on the phone; no reboot needed.")
             return 0
         time.sleep(0.35)
@@ -230,11 +297,15 @@ def main():
     group.add_argument("--start", action="store_true")
     group.add_argument("--serve", action="store_true")
     group.add_argument("--reset-owner", action="store_true")
+    group.add_argument("--restart", action="store_true",
+                       help="Load updated code; keep PostgreSQL and existing owner password")
     args = parser.parse_args()
+    configured = load_bridge_secret()
+    print("SIGNED PHONE BRIDGE:", "configured" if configured else "not configured; direct phone access only")
     if args.serve:
         serve()
         return 0
-    return start(reset=args.reset_owner)
+    return start(reset=args.reset_owner, restart=args.restart)
 
 
 if __name__ == "__main__":

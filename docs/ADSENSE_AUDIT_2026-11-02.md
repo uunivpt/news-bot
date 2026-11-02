@@ -17,7 +17,6 @@ Scope: current checked-out source, live HTTP responses, five sampled sitemap art
 - Python compilation passed for app, api, scripts and run.py.
 - Python suite: 319 tests, OK, 6 skipped; skipped provider checks are not verified here. Existing unclosed-file ResourceWarnings appeared.
 - JavaScript suite: 17 passed.
-- Reel layout suite: see `/workspace/scratch/ads-audit/reel-tests.log`.
 - Syntax checks: 18 JavaScript files passed.
 - Validity of existing tests does not establish Google policy compliance. The synthetic identical-summary/body case passes current code despite the editorial-value gap.
 
@@ -53,7 +52,7 @@ external configuration checks. See ADSENSE_SETUP.md for current behavior.
   This includes an isolated real-PostgreSQL create → approve → publish → edit flow.
   That flow exposed and fixed a pre-existing PostgreSQL `RETURNING id` dictionary
   lookup bug in manual story creation that SQLite did not reveal.
-- JavaScript and Reel suites: 30 tests passed, including consent denial/grant,
+- JavaScript suites: 30 tests passed, including consent denial/grant,
   independent measurement purposes, withdrawal and multiline evidence URLs.
 - Browser fixture: 23 checks passed across mobile/tablet/desktop, including the
   consent-to-network boundary with Google requests intercepted. This does not

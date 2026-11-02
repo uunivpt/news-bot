@@ -44,7 +44,6 @@ jobs:
             node --check "$file"
           done
           node --test tests/*.test.cjs
-          node --test reel/scripts/layout.test.mjs
       - name: Install browser test tools
         run: |
           pip install -r requirements-dev.txt

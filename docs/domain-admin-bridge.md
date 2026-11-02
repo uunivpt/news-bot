@@ -1,8 +1,7 @@
 # Remote write access at politicshub.in/admin (phone-owned PostgreSQL)
 
-Status: code is prepared but **remote editing remains DISABLED** until a
-verified HTTPS tunnel and BOTH Vercel bridge environment variables are
-configured. Do not remove the existing public read-only fallback just
+Remote editing is enabled only when a verified HTTPS tunnel and BOTH Vercel
+bridge environment variables are configured. Do not remove the existing public read-only fallback just
 to reveal write buttons. Never expose PostgreSQL port 5432.
 
 ## Final network
@@ -45,8 +44,9 @@ Browser → https://www.politicshub.in/admin/ (Vercel UI)
    the phone (back up locally edited files first). Start the phone service
    with `POLITICSHUB_ADMIN_BRIDGE_SECRET` loaded from the private file.
    The phone now **rejects all unsigned requests** at the public tunnel;
-   local direct browser visits also require the bridge signature in this
-   hardened mode.
+   direct browser visits from a loopback peer using a localhost/127.0.0.1 Host
+   remain available. A valid signed gateway request is accepted even if the
+   tunnel preserves the browser's external address.
 6. Deploy Vercel production with the two env vars, and validate the
    following **without performing any unreviewed news publication**:
 
@@ -78,3 +78,13 @@ Browser → https://www.politicshub.in/admin/ (Vercel UI)
 * Phone sleep, Android force-stop, loss of internet or tunnel disruption
   makes remote editing temporarily unavailable. For 24/7 availability,
   use an always-on private server or reliable tunnel host.
+
+## Updating an already running phone
+
+Use the immutable-release updater described in `termux-full-admin.md`; a source
+update alone does not replace Python code already loaded in the running daemon.
+The updater backs up PostgreSQL, preserves local source edits and restarts only
+the launcher-owned service. Existing shared-secret files are loaded privately;
+if the phone starts without the same bridge secret as Vercel, remote login is
+expected to return 403 while direct phone login remains available. Never solve
+that by making the phone listener public or removing gateway authentication.

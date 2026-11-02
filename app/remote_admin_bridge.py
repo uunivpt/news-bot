@@ -9,8 +9,10 @@ or password verifier is moved into Vercel.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from http.cookies import SimpleCookie
 import hashlib
 import hmac
+import json
 import os
 import re
 import secrets
@@ -131,7 +133,14 @@ def proxy_public_admin():
         return jsonify({"error": "Admin request too large"}), 413
     path = request.full_path.rstrip("?")
     headers = bridge_headers(secret, request.method, path, payload)
-    for field in ("Cookie", "Content-Type", "X-CSRF-Token", "If-Match"):
+    # Public-site/recovery cookies are unrelated to the phone's session and
+    # should never be sent through the tunnel.
+    phone_cookie = request.cookies.get("politicshub_phone_admin")
+    if phone_cookie:
+        cookie = SimpleCookie()
+        cookie["politicshub_phone_admin"] = phone_cookie
+        headers["Cookie"] = cookie.output(header="").strip()
+    for field in ("Content-Type", "X-CSRF-Token", "If-Match"):
         value = request.headers.get(field)
         if value:
             headers[field] = value
@@ -139,6 +148,7 @@ def proxy_public_admin():
     if request.method == "POST":
         headers["Origin"] = "http://127.0.0.1:8765"
     headers["User-Agent"] = "PoliticsHub-Private-Admin-Gateway/1"
+    headers["Cache-Control"] = "no-store"
     url = base_url + path
     try:
         opener = build_opener(_NoRedirect)
@@ -150,18 +160,41 @@ def proxy_public_admin():
         return jsonify({"error": "Phone admin is offline or tunnel unavailable",
                         "code": "phone_admin_offline"}), 503
     try:
-        content = response.read(3 * 1024 * 1024 + 1)
+        try:
+            content = response.read(3 * 1024 * 1024 + 1)
+        except (URLError, TimeoutError, OSError):
+            return jsonify({"error": "Phone admin connection interrupted. Please retry.",
+                            "code": "phone_admin_offline"}), 503
         if len(content) > 3 * 1024 * 1024:
             return jsonify({"error": "Admin response too large"}), 502
+        # A tunnel can return its own login/challenge/error HTML with HTTP 200.
+        # Never report that as a successful JSON API login or relay a redirect.
+        try:
+            data = json.loads(content)
+        except (ValueError, UnicodeDecodeError):
+            data = None
+        pdf = (request.path == "/api/admin/operations.pdf" and response.status == 200
+               and response.headers.get("Content-Type", "").split(";", 1)[0].strip() == "application/pdf"
+               and content.startswith(b"%PDF-"))
+        if 300 <= response.status < 400 or (not pdf and not isinstance(data, (dict, list))):
+            return jsonify({"error": "Phone admin returned an unexpected response. Check that the tunnel points to the phone admin service.",
+                            "code": "phone_admin_invalid_response"}), 502
+        if response.status == 403 and isinstance(data, dict) and data.get("error") in {
+            "Phone-local admin only", "Secure phone gateway required"
+        }:
+            return jsonify({"error": "Phone admin rejected the secure gateway. Update and restart the Termux admin service, then retry.",
+                            "code": "phone_admin_gateway_rejected"}), 503
         result = Response(content, status=response.status)
-        result.headers["Content-Type"] = response.headers.get("Content-Type", "application/json")
+        result.headers["Content-Type"] = "application/pdf" if pdf else "application/json"
         for cookie in response.headers.get_all("Set-Cookie", []):
             # Forward only the phone admin session, never any unrelated token.
             if cookie.startswith("politicshub_phone_admin="):
                 # The local phone uses loopback HTTP, but its cookie must be
                 # HTTPS-only when relayed to the public admin origin.
                 raw = cookie.split(";", 1)[0]
-                result.headers.add("Set-Cookie", raw + "; Path=/; Secure; HttpOnly; SameSite=Strict")
+                deletion = not raw.partition("=")[2] or re.search(r";\s*max-age=0(?:;|$)", cookie, re.I)
+                expiry = "; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT" if deletion else ""
+                result.headers.add("Set-Cookie", raw + "; Path=/; Secure; HttpOnly; SameSite=Strict" + expiry)
         result.headers["Cache-Control"] = "private, no-store"
         result.headers["Vary"] = "Cookie"
         result.headers["X-Content-Type-Options"] = "nosniff"

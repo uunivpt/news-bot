@@ -104,6 +104,10 @@ def review_eligibility(row, now=None):
         problems.append("Summary too short for public feed")
     if len(article) < 600:
         problems.append("Full draft is too short for editorial approval")
+    else:
+        from app.monetization import has_distinct_body
+        if not has_distinct_body(row):
+            problems.append("A repeated source summary is not a complete article with added value")
     published = parse_published(row.get("published_at_site") or row.get("published_at"))
     if published is None:
         problems.append("Original publication date unavailable")
@@ -222,6 +226,7 @@ def approve_local(preview, sources, notes, password, admin_user="postgres", now=
     snapshot = (
         "status", "approved_at", "url", "title", "summary", "bot_summary",
         "bot_article", "published_at", "published_at_site", "public_source",
+        "fact_check_status", "category", "source_name", "image_url", "image_license", "image_credit",
     )
     record_id = int(preview["id"])
     # Never use the remote DB env variables or grant write privileges to the
@@ -245,10 +250,13 @@ def approve_local(preview, sources, notes, password, admin_user="postgres", now=
             # current breaking news in the public GitHub feed.
             stamp = str(current.get("published_at_site") or current.get("published_at"))
             event = now.isoformat()
+            from app.monetization import review_fingerprint
             note = (
                 f"Human editor reviewed at {event}. "
-                f"Independent sources: {'; '.join(evidence)}. "
-                f"Evidence/context: {notes.strip()}"
+                "Originality and added value confirmed. "
+                f"Content SHA256: {review_fingerprint(current)}. "
+                f"Evidence: {'; '.join(evidence)}. "
+                f"Notes: {notes.strip()}"
             )
             cur.execute(
                 """UPDATE news_items

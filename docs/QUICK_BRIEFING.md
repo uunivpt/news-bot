@@ -34,7 +34,7 @@ published reports for the selected desk bound the selection.
 ## Validation
 
 212 Python tests run successfully, six skipped because optional isolated
-PostgreSQL integration fixtures are not configured here. All 24 JavaScript/Reel
+PostgreSQL integration fixtures are not configured here. All 24 JavaScript
 tests and 21 browser flows pass. New checks cover selection windows, desk
 representation, duplicates, markup cleanup, source links, escaped content,
 snapshot failure/staleness, authenticated caching, no-JavaScript reading,

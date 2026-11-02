@@ -74,6 +74,14 @@ class AdminWorkspaceTests(unittest.TestCase):
             self.assertEqual(self.sign_in('wrong-fixture-password').status_code,401)
         self.assertFalse(self.client.get('/api/admin/me').json['authenticated'])
 
+    def test_malformed_stored_password_verifier_never_crashes_login(self):
+        self.database.conn.execute("UPDATE admin_users SET password_hash=? WHERE username=?",
+                                   ('pbkdf2:unsupported$fixture$malformed', 'fixture_owner'))
+        self.database.conn.commit()
+        with patch.object(api, 'db', return_value=self.database), patch.object(self.database, 'close'):
+            self.assertEqual(self.sign_in().status_code, 401)
+        self.assertFalse(self.client.get('/api/admin/me').json['authenticated'])
+
     def test_recovery_cannot_read_private_queues_or_mutate_any_api(self):
         data = self.recovery()
         with patch.object(api,'db',side_effect=AssertionError('Recovery request must not reach the database')):
