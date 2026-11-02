@@ -124,7 +124,7 @@ def run(output):
             assert 'Unavailable' in page.locator('#phase4Metrics').inner_text()
             assert page.locator('#phase4Trend tbody tr').count()==14
             assert 'Not recorded' in page.locator('#phase4Trend').inner_text()
-            assert 'Previously completed checks cannot be recreated' in page.locator('#phase4TrendNote').inner_text()
+            assert 'earlier results are not reconstructed' in page.locator('#phase4TrendNote').inner_text()
             page.screenshot(path=str(output/'phase4-source-alerts-desktop.png'))
             page.screenshot(path=str(output/'source-operations-desktop.png'))
             page.locator('#sourceSearch').fill('TV9')
