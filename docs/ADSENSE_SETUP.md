@@ -76,3 +76,8 @@ Official references:
 - https://support.google.com/publisherpolicies/answer/11190248?hl=en
 - https://support.google.com/adsense/answer/13554116
 - https://developers.google.com/funding-choices/fc-api-docs
+
+The Admin Room's Verify & publish shortcut records an editor's publication
+decision in one click. It does not manufacture independent evidence, originality
+or image rights, and does not by itself enable advertising. See
+`ADMIN_VERIFY_PUBLISH_2026-11-02.md` for the current publication/delivery flow.

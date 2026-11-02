@@ -114,6 +114,13 @@ class PostgresDeliveryTests(unittest.TestCase):
         self.assertLessEqual(len(workspace.json['stories']), 200)
         self.assertLess(len(workspace.data), 500000)
         self.assertTrue(workspace.json['capabilities']['publish'])
+        self.assertEqual(workspace.json['source_inventory']['scope'], 'database')
+        self.assertEqual(workspace.json['source_inventory']['total_stories'], 100000)
+        inventory = {item['name']: item for item in workspace.json['source_inventory']['items']}
+        self.assertEqual(inventory['Audit source']['story_count'], 100000)
+        self.assertIn('TV9 Marathi - Maharashtra', inventory)
+        self.assertIn('ABP Majha - Maharashtra', inventory)
+        self.assertIn('The Hindu - India', inventory)
         self.assertEqual(first.status_code, 200)
         self.assertEqual(first.json['total'], 100000)
         self.assertEqual(len(first.json['stories']), 25)

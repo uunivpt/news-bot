@@ -67,10 +67,10 @@ class ImmediateApprovedFeedTests(unittest.TestCase):
         self.assertEqual(publish(self.root, now=NOW)["inserted"], 0)
         self.assertEqual(self.feed.read_bytes(), before)
 
-    def test_stale_approved_story_is_not_falsely_republished(self):
+    def test_historical_approved_story_keeps_its_original_date(self):
         self.mobile.write_text(json.dumps([reviewed(age_hours=24 * 8)]), encoding="utf-8")
-        self.assertEqual(publish(self.root, now=NOW)["inserted"], 0)
-        self.assertEqual(json.loads(self.feed.read_text()), [])
+        self.assertEqual(publish(self.root, now=NOW)["inserted"], 1)
+        self.assertEqual(json.loads(self.feed.read_text())[0]["published_at"], reviewed(age_hours=24 * 8)["published_at"])
 
     def test_approved_news_is_also_preserved_when_homepage_is_full(self):
         # Existing feed has 140 newer stories; their earlier public URLs do

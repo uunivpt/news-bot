@@ -47,7 +47,7 @@ def ensure_schema(db):
         if not getattr(db,"_postgres",False): db.conn.commit()
 
 def _words(text):
-    return set(re.findall(r"[a-z0-9]{3,}",str(text or "").lower()))
+    return set(re.findall(r"[\w\u0900-\u097f]{3,}",str(text or "").casefold()))
 
 def similarity(a,b):
     x,y=_words(a),_words(b)
@@ -97,6 +97,22 @@ def score_story(db,row,source_count=0,verification="UNVERIFIED",duplicate_risk=0
       (int(val(row,"id")),score,freshness,coverage,importance,duplicate_risk,verify,breaking,reason,now()))
     if not getattr(db,"_postgres",False): db.conn.commit()
     return {"score":score,"breaking":bool(breaking),"freshness":freshness,"coverage":coverage,"importance":importance,"duplicate_risk":duplicate_risk,"verification":verify}
+
+def record_editorial_publication(db, row):
+    """Record a completed editor publication, never claim a source was fetched."""
+    from urllib.parse import urlsplit
+    source = str(val(row, "source_name", "") or "").strip()
+    try:
+        url = urlsplit(str(val(row, "url", "") or ""))
+        has_source = bool(source and url.scheme == "https" and url.hostname)
+    except ValueError:
+        has_source = False
+    score = score_story(db, row, source_count=1 if has_source else 0,
+                        verification="SINGLE SOURCE" if has_source else "UNVERIFIED")
+    event_id = attach_event(db, int(val(row, "id")), str(val(row, "title", "")),
+                            str(val(row, "category", "general")), source)
+    return {"score": score, "event_id": event_id, "basis": "editor_publication",
+            "independent_fact_check": False}
 
 def record_source(db,source_name,success=True,broken=False,correction=False,coverage=True):
     if not source_name:return
@@ -190,25 +206,78 @@ def is_published(db,item_id,channel="website"):
     row=q1(db,f"SELECT website_published FROM ph_publish_locks WHERE item_id={p}",(int(item_id),))
     return bool(val(row,"website_published",0))
 
-def capture_resources(db,root="."):
-    ensure_schema(db); root=Path(root); sizes={}
-    for name,path in (("db","data"),("media","data/media")):
-        p=root/path
-        if p.exists():
-            total=sum(x.stat().st_size for x in p.rglob("*") if x.is_file())
-            sizes[name]=total
-        else:sizes[name]=0
-    payload={"captured_at":now(),"local_bytes":sizes,"github_actions_minutes":None,"vercel_bytes":None,"note":"External provider usage requires its authenticated API/connector; local metrics are always available."}
-    p=ph(db); db.conn.execute(f"INSERT INTO ph_resource_snapshots(captured_at,payload) VALUES ({p},{p})",(now(),json.dumps(payload)))
-    if not getattr(db,"_postgres",False):db.conn.commit()
+def resource_usage(db, root=None):
+    """Read actual database allocation; absence/failure is never a zero-byte DB."""
+    root = Path(root) if root is not None else Path(__file__).resolve().parents[1]
+    engine = "postgresql" if getattr(db, "_postgres", False) else "sqlite"
+    database = {"engine": engine, "bytes": None, "status": "unavailable"}
+    try:
+        if engine == "postgresql":
+            row = db.conn.execute("SELECT pg_database_size(current_database()) AS bytes").fetchone()
+            size = val(row, "bytes")
+        else:
+            pages = db.conn.execute("PRAGMA page_count").fetchone()
+            page_size = db.conn.execute("PRAGMA page_size").fetchone()
+            size = int(pages[0]) * int(page_size[0])
+        if size is None or int(size) < 0:
+            raise ValueError("Database size unavailable")
+        database.update(bytes=int(size), status="available")
+    except Exception:
+        pass  # Driver errors can include connection details; do not expose them.
+    media = {"bytes": None, "status": "not_configured"}
+    media_path = root / "data" / "media"
+    if media_path.is_dir():
+        try:
+            media.update(bytes=sum(path.stat().st_size for path in media_path.rglob("*")
+                                   if path.is_file() and not path.is_symlink()), status="available")
+        except OSError:
+            media.update(bytes=None, status="unavailable")
+    return {"captured_at": now(), "database": database, "media": media,
+            "local_bytes": {"db": database["bytes"], "media": media["bytes"]},
+            "github_actions_minutes": None, "vercel_bytes": None,
+            "note": "Database allocation is measured from the connected database. Unavailable or unconfigured storage is not reported as zero."}
+
+
+def capture_resources(db, root=None):
+    """Explicit worker capture. Dashboard GETs call resource_usage instead."""
+    ensure_schema(db)
+    payload = resource_usage(db, root)
+    p = ph(db)
+    db.conn.execute(f"INSERT INTO ph_resource_snapshots(captured_at,payload) VALUES ({p},{p})", (now(), json.dumps(payload)))
+    if not getattr(db, "_postgres", False):
+        db.conn.commit()
     return payload
+
+
+def story_inventory(db):
+    """Current stored content, not fabricated processing history."""
+    result = {"status": "unavailable", "total": None, "pending": None,
+              "published": None, "with_article": None, "source_count": None,
+              "last_collected_at": None, "sources": [], "sources_available": False}
+    try:
+        row = db.conn.execute("""SELECT COUNT(*) AS total,
+            COALESCE(SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END),0) AS pending,
+            COALESCE(SUM(CASE WHEN status='published' THEN 1 ELSE 0 END),0) AS published,
+            COALESCE(SUM(CASE WHEN LENGTH(COALESCE(bot_article,''))>0 THEN 1 ELSE 0 END),0) AS with_article,
+            COUNT(DISTINCT NULLIF(source_name,'')) AS source_count, MAX(collected_at) AS last_collected_at
+            FROM news_items""").fetchone()
+        result.update({key: int(val(row, key, 0) or 0) for key in ("total", "pending", "published", "with_article", "source_count")})
+        result.update(status="available", last_collected_at=val(row, "last_collected_at"))
+        result["sources"] = [dict(row) for row in db.conn.execute("""SELECT source_name AS source,
+            COUNT(*) AS records, COALESCE(SUM(CASE WHEN status='published' THEN 1 ELSE 0 END),0) AS published,
+            MAX(collected_at) AS last_collected_at FROM news_items GROUP BY source_name
+            ORDER BY COUNT(*) DESC,source_name LIMIT 50""").fetchall()]
+        result["sources_available"] = True
+    except Exception:
+        pass
+    return result
 
 def historical_analytics(db,days=30):
     ensure_schema(db)
     days=max(1,min(int(days),365))
     since=datetime.now(timezone.utc)-timedelta(days=days)
     p=ph(db)
-    out={"days":days,"counts":{},"hour":{},"day":{},"week":{},"month":{}}
+    out={"days":days,"counts":{},"availability":{},"hour":{},"day":{},"week":{},"month":{}}
     sources=(
         ("scores","ph_news_scores","updated_at"),
         ("alerts","ph_alerts","created_at"),
@@ -219,8 +288,10 @@ def historical_analytics(db,days=30):
         try:
             row=q1(db,f"SELECT COUNT(*) AS c FROM {table} WHERE {col}>={p}",(since.isoformat(),))
             out["counts"][label]=int(val(row,"c",0) or 0)
+            out["availability"][label]=True
         except Exception:
-            out["counts"][label]=0
+            out["counts"][label]=None
+            out["availability"][label]=False
     for table,col in (
         ("ph_news_scores","updated_at"),
         ("ph_alerts","created_at"),
@@ -247,13 +318,34 @@ def historical_analytics(db,days=30):
     return out
 def admin_snapshot(db):
     ensure_schema(db)
-    p=ph(db)
-    alerts=[dict(r) for r in db.conn.execute("SELECT * FROM ph_alerts WHERE resolved=0 ORDER BY id DESC LIMIT 30").fetchall()]
-    failures=[dict(r) for r in db.conn.execute("SELECT * FROM ph_bot_failures ORDER BY id DESC LIMIT 30").fetchall()]
-    scores=[dict(r) for r in db.conn.execute("SELECT * FROM ph_news_scores ORDER BY updated_at DESC LIMIT 30").fetchall()]
-    events=[dict(r) for r in db.conn.execute("SELECT * FROM ph_events ORDER BY updated_at DESC LIMIT 30").fetchall()]
-    regression=[dict(r) for r in db.conn.execute("SELECT * FROM ph_regression_runs ORDER BY id DESC LIMIT 10").fetchall()]
-    return {"updated_at":now(),"alerts":alerts,"failures":failures,"scores":scores,"events":events,"regression":regression,"sources":source_reliability(db),"resources":capture_resources(db),"history":historical_analytics(db,30)}
+    queries = {
+        "alerts": ("ph_alerts", " WHERE resolved=0", "id", 30),
+        "failures": ("ph_bot_failures", "", "id", 30),
+        "scores": ("ph_news_scores", "", "updated_at", 30),
+        "events": ("ph_events", "", "updated_at", 30),
+        "regression": ("ph_regression_runs", "", "id", 10),
+    }
+    result = {"updated_at": now(), "counts": {}, "availability": {}}
+    for key, (table, where, order, limit) in queries.items():
+        try:
+            result[key] = [dict(row) for row in db.conn.execute(
+                f"SELECT * FROM {table}{where} ORDER BY {order} DESC LIMIT {limit}").fetchall()]
+            count = db.conn.execute(f"SELECT COUNT(*) AS count FROM {table}{where}").fetchone()
+            result["counts"][key] = int(val(count, "count", 0) or 0)
+            result["availability"][key] = True
+        except Exception:
+            result[key] = []
+            result["counts"][key] = None
+            result["availability"][key] = False
+    try:
+        result["sources"] = source_reliability(db)
+        result["availability"]["sources"] = True
+    except Exception:
+        result["sources"] = []
+        result["availability"]["sources"] = False
+    result.update(resources=resource_usage(db), history=historical_analytics(db, 30), inventory=story_inventory(db))
+    return result
+
 def regression_record(db,commit_ref,status,results):
     ensure_schema(db); p=ph(db)
     db.conn.execute(f"INSERT INTO ph_regression_runs(commit_ref,status,results,created_at) VALUES ({p},{p},{p},{p})",(commit_ref,status,json.dumps(results,ensure_ascii=False),now()))
