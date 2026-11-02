@@ -48,7 +48,7 @@ function newsCategory(category,title,summary){
 function norm(a,i){const id=a.id??a.slug??a._id??'n'+i;const img=a.image||a.image_url||a.imageUrl||a.urlToImage||a.thumbnail||a.img||'';
  return{...a,id:String(id),title:a.title||a.headline||'Untitled',summary:a.summary||a.description||a.excerpt||'',body:a.article||a.bot_article||a.content||a.body||a.text||'',image:typeof img==='string'?img:'',category:newsCategory(a.category||a.section||'General',a.title||a.headline,a.summary||a.description||a.excerpt),source:(a.source&&a.source.name)||a.source||a.publisher||'',date:a.published_at_iso||a.publishedAt||a.pubDate||a.date||a.published_at||a.created_at||'',url:a.url||a.link||'',author:a.author||a.author_name||'PoliticsHub Editorial Desk'}}
 const pick=j=>Array.isArray(j)?j:(j.articles||j.news||j.items||j.data||j.results||[]);
-async function get(u,options={}){const deadline=AbortSignal.timeout(10000);const signal=options.signal?AbortSignal.any([options.signal,deadline]):deadline;const r=await fetch(u,{signal,cache:'default',headers:{'Accept':'application/json'}});if(!r.ok)throw Error('News request failed');if(u===ENDPOINTS.api)S.apiMode=r.headers.get('X-News-Mode')||'live';const rows=pick(await r.json());if(!Array.isArray(rows))throw Error('Invalid news response');const normalizedRows=rows.filter(x=>x&&typeof x==='object'&&!Array.isArray(x)).map((x,i)=>{const img=x.image_url||x.image||x.imageUrl||x.urlToImage||x.thumbnail||x.img||'';const source=x.source_name||(x.source&&x.source.name)||x.source||x.publisher||'PoliticsHub';const date=x.published_at_iso||x.published_at_site||x.publishedAt||x.pubDate||x.date||x.published_at||x.created_at||'';const body=x.article||x.bot_article||x.content||x.body||x.text||'';const summary=x.summary||x.bot_summary||x.description||x.excerpt||'';return {...x,title:String(x.title||x.headline||'Untitled'),category:newsCategory(x.category||x.section||'india',x.title||x.headline,summary),id:String(x.id??x.slug??x._id??'n'+i),image:typeof img==='string'?img:'',source:String(source),date,body:String(body),summary:String(summary)};});const total=r.headers.get('X-Search-Total');if(total!==null&&Number.isFinite(Number(total)))normalizedRows.searchTotal=Number(total);return normalizedRows}
+async function get(u,options={}){const deadline=AbortSignal.timeout(10000);const signal=options.signal?AbortSignal.any([options.signal,deadline]):deadline;const r=await fetch(u,{signal,cache:u===ENDPOINTS.api?'no-store':'default',headers:{'Accept':'application/json'}});if(!r.ok)throw Error('News request failed');if(u===ENDPOINTS.api)S.apiMode=r.headers.get('X-News-Mode')||'live';const rows=pick(await r.json());if(!Array.isArray(rows))throw Error('Invalid news response');const normalizedRows=rows.filter(x=>x&&typeof x==='object'&&!Array.isArray(x)).map((x,i)=>{const img=x.image_url||x.image||x.imageUrl||x.urlToImage||x.thumbnail||x.img||'';const source=x.source_name||(x.source&&x.source.name)||x.source||x.publisher||'PoliticsHub';const date=x.published_at_iso||x.published_at_site||x.publishedAt||x.pubDate||x.date||x.published_at||x.created_at||'';const body=x.article||x.bot_article||x.content||x.body||x.text||'';const summary=x.summary||x.bot_summary||x.description||x.excerpt||'';return {...x,title:String(x.title||x.headline||'Untitled'),category:newsCategory(x.category||x.section||'india',x.title||x.headline,summary),id:String(x.id??x.slug??x._id??'n'+i),image:typeof img==='string'?img:'',source:String(source),date,body:String(body),summary:String(summary)};});const total=r.headers.get('X-Search-Total');if(total!==null&&Number.isFinite(Number(total)))normalizedRows.searchTotal=Number(total);return normalizedRows}
 const CACHE_KEY='ph-news-cache';
 const LEGACY_CACHE_KEYS=['ph-news-cache-v6','ph-news-cache-v5','ph-news-cache-v4'];
 function cacheSave(items){if(!preferencesAllowed())return;try{localStorage.setItem(CACHE_KEY,JSON.stringify({ts:Date.now(),items}));}catch(e){}}
@@ -283,7 +283,7 @@ function activeFeedCategory(){
  return hash[0]==='c'&&CATS.some(x=>x[0]===hash[1])?hash[1]:'all';
 }
 function feedSignature(items,category){
- return (items||[]).filter(i=>inCat(i,category)).slice(0,30).map(i=>String(i.id)+':'+String(i.date||'')+':'+String(i.title||'')+':'+String(i.summary||'').slice(0,80)).join('|');
+ return (items||[]).filter(i=>inCat(i,category)).slice(0,30).map(i=>String(i.id)+':'+String(i.date||'')+':'+String(i.title||'')+':'+String(i.summary||'').slice(0,80)+':'+!!i.editorial_featured+':'+String(i.editorial_featured_at||'')).join('|');
 }
 let pendingHomeRefresh=false;
 async function refreshLatest(force=false){
@@ -308,7 +308,16 @@ addEventListener('scroll',()=>{
   render(true);
  }
 },{passive:true});
+let publicVersion=null,versionBusy=false;
+async function checkPublicationVersion(){
+ if(document.hidden||versionBusy)return;versionBusy=true;
+ try{const r=await fetch('/api/news/version',{cache:'no-store',signal:AbortSignal.timeout(7000)});if(!r.ok)return;const value=(await r.json()).version;if(value && value!==publicVersion && !liveRefreshBusy){await refreshLatest(true);if(S.api==='ok'||S.api==='empty')publicVersion=value;}}
+ catch(_){}finally{versionBusy=false;}
+}
+setInterval(checkPublicationVersion,5000);
 setInterval(()=>{if(!document.hidden)refreshLatest()},90000);
+try{const publicationChannel=new BroadcastChannel('politicshub-public-news');publicationChannel.onmessage=()=>{publicVersion=null;checkPublicationVersion();};}catch(_){}
+
 addEventListener('online',()=>refreshLatest(true));
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshLatest(true)});
 addEventListener('focus',()=>refreshLatest());

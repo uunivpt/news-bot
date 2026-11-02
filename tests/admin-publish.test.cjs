@@ -67,7 +67,7 @@ test('legacy publish button uses the same one-step approval endpoint',async()=>{
 });
 
 test('publication reports website sync status without claiming a queued article is live',async()=>{
-  for (const [state,expected] of [['queued',/sync is queued automatically/],
+  for (const [state,expected] of [['queued',/Checking that the story is visible/],['verifying',/Checking that the story is visible/],
                                 ['not_configured',/sync is not configured/],
                                 ['failed',/sync failed; publication is saved/],
                                 ['synced',/published on the website/]]) {

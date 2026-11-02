@@ -44,7 +44,9 @@ def diagnosis(database, days=None, actor=''):
         ('Admin audit history','admin_activity','created_at','username,action,item_id,created_at'),
         ('Alerts','ph_alerts','created_at','severity,bot,step,item_id,resolved,created_at'),
         ('Failure history','ph_bot_failures','created_at','bot,item_id,step,attempt,action,resolved,created_at'),
-        ('Publication delivery','ph_public_delivery','updated_at','item_id,state,attempts,updated_at,public_url'),
+        ('Website visibility receipts','ph_live_receipts','checked_at','item_id,public_url,checked_at'),
+        ('Homepage editorial lead','ph_home_primary','featured_at','item_id,featured_at'),
+        ('Publication archive delivery','ph_public_delivery','updated_at','item_id,state,attempts,updated_at,public_url'),
         ('Editorial scores','ph_news_scores','updated_at','item_id,score,freshness,coverage,importance,verification,updated_at'),
         ('Event groups','ph_events','updated_at','event_id,canonical_title,category,status,updated_at'),
     ]

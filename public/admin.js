@@ -4,6 +4,7 @@ const $ = id => document.getElementById(id);
 const arr = value => Array.isArray(value) ? value : [];
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const views = {overview:'Overview',news:'Newsroom',sources:'Source coverage',operations:'Agent operations',upgrade:'Intelligence & QA',activity:'Activity',system:'System status',settings:'Settings',team:'Team & roles',events:'Events & sources',studio:'Marathi Studio',readiness:'AdSense readiness'};
+let manualRequestId='', manualBusy=false;
 let csrf = '', settings = {}, workspace = null, rows = [], currentView = 'overview';
 let pageNumber = 1, pageTotal = 0, queue = 'all', selected = new Set(), visibleRows = [];
 let deliveryController = null;
@@ -21,6 +22,7 @@ function showLogin(message = '') {
   window.Editorial?.reset();
   clearStaffCredentials();
   $('teamMembers').replaceChildren();
+  manualRequestId='';manualBusy=false;
   sessionVersion++;
   closeMenu();
   clearInterval(liveTimer); liveTimer = null;
@@ -191,6 +193,7 @@ function applyCapabilities() {
   document.querySelectorAll('[data-write]').forEach(node => { node.disabled = !writable || !can(controlPermission(node)) || mutationBusy; node.title = writable ? '' : workspace?.data_origin === 'termux_github' ? 'Edits run on the Termux phone, not on the public website' : 'Requires a live database and owner session'; });
   document.querySelectorAll('[data-view]').forEach(node => { node.hidden = !canView(node.dataset.view); });
   $('downloadDiagnostics').disabled = !can('reports.read');
+  $('publishManual').disabled = !can('news.create') || !can('news.publish') || mutationBusy;
   $('saveManual').closest('.panel').hidden = !can('news.create');
   $('status').disabled = !writable; $('review').disabled = !writable;
   $('settingsState').textContent = writable ? '' : workspace?.data_origin === 'termux_github' ? 'Read-only website. Review and approve stories using the local Termux workflow.' : 'Read-only. Publishing controls require a live database owner session.';
@@ -389,13 +392,13 @@ function publicationMessage(result) {
   const state = result.public_delivery?.state;
   if (state === 'synced') return 'Story published on the website.';
   if (result.public_delivery?.configured === false) return 'Story published on the phone. Website sync is not configured.';
-  if (state === 'queued') return 'Story published on the phone. Website sync is queued automatically.';
+  if (state === 'queued' || state === 'verifying') return 'Publication saved. Checking that the story is visible on the website…';
   if (state === 'not_configured') return 'Story published on the phone. Website sync is not configured.';
   if (state === 'failed') return 'Story published on the phone. Website sync failed; publication is saved.';
   return 'Story published.';
 }
 async function waitForPublicationDelivery(id, result, version) {
-  if (result.public_delivery?.state !== 'queued' || result.public_delivery.configured !== true) return result;
+  if (!['queued','verifying'].includes(result.public_delivery?.state) || result.public_delivery.configured !== true) return result;
   const controller = new AbortController(); deliveryController = controller;
   const signal = AbortSignal.any([controller.signal,AbortSignal.timeout(20000)]);
   const end = Date.now()+20000;
@@ -420,6 +423,7 @@ async function waitForPublicationDelivery(id, result, version) {
 function showPublicationNotice(message, result, type = 'ok') {
   notice(message,type);
   if (result.public_delivery?.state !== 'synced') return;
+  try { const channel=new BroadcastChannel('politicshub-public-news'); channel.postMessage({type:'published'});channel.close(); } catch {}
   const raw = result.public_delivery.public_url || result.public_url || result.url;
   if (!raw) return;
   let url;
@@ -682,18 +686,30 @@ $('previewManual').onclick = () => {
  $('manualPreview').append(title,summary,article);
  $('manualPreview').parentElement.open = true;
 };
+$('createArticleForm').addEventListener('input',()=>{if(!manualBusy)manualRequestId='';});
 $('createArticleForm').onsubmit = async event => {
  event.preventDefault();
+ if(manualBusy)return;
  if (workspace?.access.read_only) return notice('Remote write access is not connected yet. Open the authenticated phone admin or configure the secure bridge.','err');
- const button = $('saveManual'); button.disabled = true;
+ const publishNow=event.submitter?.id==='publishManual';
+ if(publishNow && !can('news.publish'))return notice('Your role cannot publish news.','err');
+ manualBusy=true;manualRequestId=manualRequestId || crypto.randomUUID();
+ const button = $('saveManual'); button.disabled = true; $('publishManual').disabled=true;
  try {
-  const result = await action('/api/admin/news/create',manualPayload());
-  $('createArticleForm').reset(); $('manualMessage').textContent = 'Draft #' + result.id + ' saved for human review.';
+  let result = await action('/api/admin/news/create',{...manualPayload(),publish_now:publishNow,request_id:manualRequestId});
+  if(publishNow){
+   if(result.status!=='published')throw new Error('Publication was not confirmed.');
+   result=await waitForPublicationDelivery(result.id,result,sessionVersion);
+   $('createArticleForm').reset();manualRequestId='';$('manualMessage').textContent='Article #'+result.id+' · '+publicationMessage(result);
+   showPublicationNotice(publicationMessage(result),result);
+   await refreshAfterMutation();return;
+  }
+  $('createArticleForm').reset();manualRequestId=''; $('manualMessage').textContent = 'Draft #' + result.id + ' saved for human review.';
   notice('New article draft #' + result.id + ' saved. Verify before publishing.');
   pageNumber = 1; selected.clear();
   if (!await refreshAfterMutation()) notice('Draft saved. Latest lists could not be refreshed; use Refresh.','warn');
  } catch(error) { $('manualMessage').textContent = error.message; notice(error.message,'err'); }
- finally { button.disabled = false; applyCapabilities(); }
+ finally { manualBusy=false;button.disabled = false; applyCapabilities(); }
 };
 $('loginForm').onsubmit = async event => {
   event.preventDefault(); if (loginBusy) return; loginBusy = true;

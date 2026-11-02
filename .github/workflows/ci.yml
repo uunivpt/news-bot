@@ -55,3 +55,6 @@ jobs:
 
       - name: Check events, Marathi studio, evidence, updates and staff scopes
         run: python scripts/editorial_browser_audit.py --output artifacts/editorial-browser
+
+      - name: Check immediate website publication through signed phone bridge
+        run: python scripts/instant_publish_browser_audit.py --output artifacts/instant-publish-browser
