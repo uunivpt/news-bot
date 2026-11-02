@@ -27,14 +27,18 @@ _SECRET_NAME = "POLITICSHUB_ADMIN_BRIDGE_SECRET"
 _URL_NAME = "POLITICSHUB_ADMIN_BRIDGE_URL"
 _NOUNCE = re.compile(r"^[A-Za-z0-9_-]{20,80}$")
 _STORY = re.compile(r"^/api/news/[0-9]+/(?:edit|process|approve|reject|publish)$")
-_REVIEW = re.compile(r"^/api/admin/(?:story/[0-9]+(?:/article)?|(?:me|login|logout|workspace|stories|activity|settings|training|dashboard|health|live|upgrade|history|report|operations(?:\.pdf)?))$")
+_REVIEW = re.compile(r"^/api/admin/(?:story/[0-9]+(?:/(?:article|delivery))?|(?:me|login|logout|workspace|stories|activity|settings|training|dashboard|health|live|upgrade|history|report|operations(?:\.pdf)?))$")
 _REPLAY_LOCK = threading.Lock()
 _REPLAY = {}
 _MAX_BODY = 1024 * 1024
 
 
 def is_private_endpoint(path: str) -> bool:
-    if path == "/api/admin/news/create":
+    if re.fullmatch(r'/api/admin/(?:editorial/(?:sources|events|events/[a-f0-9]{24}/sources|readiness(?:/probe)?|story/[0-9]+/(?:assign|claims(?:/[0-9]+)?|updates(?:/[0-9]+/publish)?))|studio/[0-9]+(?:/(?:prepare|save|jobs/[a-f0-9]{24}))?)',path):
+        return True
+    if path in {'/api/admin/diagnostics','/api/admin/diagnostics.pdf','/api/admin/users'} or re.fullmatch(r'/api/admin/users/[A-Za-z0-9._-]{3,40}',path):
+        return True
+    if path in {"/api/admin/news/create", "/api/admin/archive/restore", "/api/admin/archive/search"}:
         return True
     if path.startswith("/api/admin/"):
         return bool(_REVIEW.fullmatch(path))
@@ -153,7 +157,7 @@ def proxy_public_admin():
     try:
         opener = build_opener(_NoRedirect)
         response = opener.open(Request(url, data=payload if request.method == "POST" else None,
-                                       method=request.method, headers=headers), timeout=12)
+                                       method=request.method, headers=headers), timeout=20)
     except HTTPError as exc:
         response = exc
     except (URLError, TimeoutError, OSError):
@@ -173,7 +177,7 @@ def proxy_public_admin():
             data = json.loads(content)
         except (ValueError, UnicodeDecodeError):
             data = None
-        pdf = (request.path == "/api/admin/operations.pdf" and response.status == 200
+        pdf = (request.path in {"/api/admin/operations.pdf","/api/admin/diagnostics.pdf"} and response.status == 200
                and response.headers.get("Content-Type", "").split(";", 1)[0].strip() == "application/pdf"
                and content.startswith(b"%PDF-"))
         if 300 <= response.status < 400 or (not pdf and not isinstance(data, (dict, list))):
@@ -186,6 +190,11 @@ def proxy_public_admin():
                             "code": "phone_admin_gateway_rejected"}), 503
         result = Response(content, status=response.status)
         result.headers["Content-Type"] = "application/pdf" if pdf else "application/json"
+        if pdf:
+            filename = 'politicshub-diagnosis.pdf' if request.path.endswith('/diagnostics.pdf') else 'politicshub-operations-report.pdf'
+            result.headers['Content-Disposition'] = 'attachment; filename="' + filename + '"'
+            if response.headers.get('X-Report-Generated-At'):
+                result.headers['X-Report-Generated-At'] = response.headers['X-Report-Generated-At']
         for cookie in response.headers.get_all("Set-Cookie", []):
             # Forward only the phone admin session, never any unrelated token.
             if cookie.startswith("politicshub_phone_admin="):

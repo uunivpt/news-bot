@@ -13,7 +13,7 @@ Browser → https://www.politicshub.in/admin/ (Vercel UI)
 → PostgreSQL on 127.0.0.1:5432.
 
 * Browser credentials are verified by the private phone, not Vercel.
-* The phone keeps all data and its existing `localowner` account.
+* The phone keeps all data and its existing phone owner account.
 * Public news continues to load from GitHub, not from a public phone API.
 * If the phone is offline, admin editing returns 503. Public news remains live.
 * Review/approval remains individually verified; no anonymous editing or
@@ -51,7 +51,7 @@ Browser → https://www.politicshub.in/admin/ (Vercel UI)
    following **without performing any unreviewed news publication**:
 
    - Open `https://www.politicshub.in/admin/`.
-   - Sign in using the existing `localowner` credentials. NEVER reuse
+   - Sign in using the existing phone owner credentials. NEVER reuse
      the PostgreSQL superuser password as a web login.
    - Inspect the workspace: it must report a **live** local DB and owner
      access, not `recovery`/snapshot.

@@ -23,13 +23,13 @@ class RemoteAdminBridgeTests(unittest.TestCase):
         for p in ("/api/admin/login", "/api/admin/me", "/api/admin/workspace",
                   "/api/admin/story/455", "/api/admin/story/455/article",
                   "/api/admin/dashboard", "/api/admin/health",
-                  "/api/admin/operations.pdf", "/api/news/455/approve",
+                  "/api/admin/editorial/events", "/api/admin/editorial/sources", "/api/admin/editorial/readiness/probe", "/api/admin/studio/455", "/api/admin/studio/455/save", "/api/admin/editorial/story/455/claims/4", "/api/admin/editorial/story/455/updates/3/publish", "/api/admin/operations.pdf", "/api/admin/diagnostics.pdf", "/api/admin/users", "/api/admin/users/new_staff", "/api/news/455/approve",
                   "/api/news/455/edit", "/api/fact-check"):
             self.assertTrue(is_private_endpoint(p), p)
         for p in ("/api/admin/setup", "/api/admin/nonexistent",
                   "/api/news/455", "/api/news",
                   "/api/health", "/api/newsletter/daily",
-                  "/api/admin/story/../../etc/passwd"):
+                  "/api/admin/story/../../etc/passwd", "/api/admin/studio/2/unknown", "/api/admin/editorial/story/1/updates/2/delete", "/api/admin/editorial/events/not-a-valid-id/sources"):
             self.assertFalse(is_private_endpoint(p), p)
 
     def test_private_admin_preview_disallows_unrelated_public_api(self):
@@ -171,6 +171,9 @@ class RemoteAdminBridgeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.mimetype, 'application/pdf')
         self.assertEqual(response.data, pdf)
+        response, _ = self.proxy(path='/api/admin/diagnostics.pdf', content=pdf, content_type='application/pdf')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers['Content-Disposition'], 'attachment; filename="politicshub-diagnosis.pdf"')
         for path, content in (('/api/admin/me', pdf),
                               ('/api/admin/operations.pdf', b'<html>gateway challenge</html>')):
             response, _ = self.proxy(path=path, content=content, content_type='application/pdf')

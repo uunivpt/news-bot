@@ -85,7 +85,7 @@ def run(output):
         def bulk_limit():
             page.locator('#selectAll').check()
             assert '25 selected' in page.locator('#selectedCount').inner_text()
-            page.locator('[data-bulk="publish"]').click()
+            page.locator('[data-bulk="approve"]').click()
             assert 'at most 10' in page.locator('#notice').inner_text()
             assert not page.locator('#confirmDialog').is_visible()
             page.locator('#clearSelection').click()
@@ -107,11 +107,20 @@ def run(output):
         def sources():
             nav('sources')
             assert page.locator('#sourceTable tbody tr').count()>0
+            directory=page.locator('#sourceTable').inner_text()
+            assert 'TV9' in directory and 'ABP' in directory and 'The Hindu' in directory
+            assert 'Entire database' in page.locator('#sourceScope').inner_text()
+            page.locator('#sourceSearch').fill('TV9')
+            assert page.locator('#sourceTable tbody tr').count()>=1
+            assert all('TV9' in text for text in page.locator('#sourceTable tbody tr').all_inner_texts())
+            page.locator('#sourceSearch').fill('ABP')
+            assert 'ABP' in page.locator('#sourceTable').inner_text()
+            page.locator('#sourceSearch').fill('')
             page.locator('[data-source-filter]').first.click()
             page.wait_for_selector('#news.active')
             page.wait_for_function("() => document.querySelector('#source').value !== 'all' && !document.querySelector('#newsList').hasAttribute('aria-busy')")
             page.locator('#resetFilters').click()
-        check('source coverage drill-down filters the newsroom',sources)
+        check('complete publisher inventory search and full-database drill-down',sources)
         def editing():
             page.wait_for_function("() => !document.querySelector('#newsList').hasAttribute('aria-busy')")
             page.locator('#newsList [data-inspect]').first.click()
@@ -121,6 +130,101 @@ def run(output):
             page.locator('#editStoryForm [type="submit"]').click()
             page.wait_for_function("() => !document.querySelector('#inspector').open && document.querySelector('#newsList').textContent.includes('Local fixture editorial headline')")
         check('headline and summary edits persist through the server',editing)
+        def stale_refresh():
+            before=page.locator('#newsList .story').count()
+            page.route('**/api/admin/workspace', lambda route:route.fulfill(
+                status=503,content_type='application/json',body='{"error":"Synthetic temporary phone interruption"}'))
+            page.locator('#refresh').click()
+            page.wait_for_function("() => document.querySelector('#connectionBadge').textContent==='Refresh failed' && !document.querySelector('#refresh').disabled")
+            assert page.locator('#newsList .story').count()==before
+            assert 'out of date' in page.locator('#workspaceBanner').inner_text()
+            page.unroute('**/api/admin/workspace')
+            page.locator('#newsRefresh').click()
+            page.wait_for_function("() => document.querySelector('#connectionBadge').textContent==='Live database' && !document.querySelector('#newsList').hasAttribute('aria-busy')")
+        check('temporary refresh failure retains readable data and recovers',stale_refresh)
+        def verify_and_publish():
+            from app.models import NewsItem
+            database=api.db()
+            try:
+                url='https://example.org/single-action-publication-fixture'
+                database.insert(NewsItem(source_name='Fixture News',source_type='rss',
+                    title='Local review fixture explains new district water supply arrangements',
+                    url=url,category='india',published_at=NewsItem.now_iso(),public_source=True,
+                    summary='The district notice explains its updated water supply arrangements and the official support channels for residents.'))
+                row=database.conn.execute('SELECT id FROM news_items WHERE url=?',(url,)).fetchone()
+                sid=row['id']
+                database.update(sid,status='pending',bot_article='The district notice explains revised public water arrangements and identifies the published timetable. '*8)
+            finally:
+                database.close()
+            page.locator('#resetFilters').click()
+            page.locator('#status').select_option('pending')
+            button=page.locator(f'[data-news="approve"][data-id="{sid}"]')
+            button.wait_for(state='visible')
+            assert button.inner_text()=='Verify & publish'
+            dialogs=[]
+            def reject_dialog(dialog):
+                dialogs.append(dialog.type)
+                dialog.dismiss()
+            page.on('dialog',reject_dialog)
+            requests=[]
+            def record_request(request):
+                if request.method=='POST' and request.url.endswith('/'+str(sid)+'/approve'):
+                    requests.append(request)
+            page.on('request',record_request)
+            button.click()
+            page.wait_for_function("() => !mutationBusy && document.querySelector('#notice').textContent.toLowerCase().includes('publish')")
+            assert not dialogs,dialogs
+            assert len(requests)==1
+            assert not page.locator('#confirmDialog').is_visible()
+            database=api.db()
+            try:
+                saved=database.get_by_id(sid)
+                assert saved['status']=='published'
+                assert saved['approved_at']
+            finally:
+                database.close()
+            page.remove_listener('dialog',reject_dialog)
+            page.remove_listener('request',record_request)
+            page.locator('#resetFilters').click()
+            page.wait_for_function("() => document.querySelectorAll('#newsList .story').length===25 && !document.querySelector('#newsList').hasAttribute('aria-busy')")
+        check('one Verify click publishes and persists without any question',verify_and_publish)
+        def bulk_verify_and_publish():
+            from app.models import NewsItem
+            database=api.db()
+            ids=[]
+            try:
+                for index in range(2):
+                    url='https://example.org/bulk-publication-fixture-'+str(index)
+                    database.insert(NewsItem(source_name='Fixture News',source_type='rss',
+                        title='Selected review fixture explains district transport notice number '+str(index),
+                        url=url,category='india',published_at=NewsItem.now_iso(),public_source=True,
+                        summary='The district transport notice identifies the affected routes and explains where residents can read the published schedules.'))
+                    sid=database.conn.execute('SELECT id FROM news_items WHERE url=?',(url,)).fetchone()['id']
+                    database.update(sid,status='pending',bot_article='The district transport notice identifies updated routes and schedules for residents. '*10)
+                    ids.append(sid)
+            finally:
+                database.close()
+            page.locator('#status').select_option('pending')
+            for sid in ids:
+                page.locator(f'[data-select="{sid}"]').wait_for(state='visible')
+                page.locator(f'[data-select="{sid}"]').check()
+            dialogs=[]
+            def reject_dialog(dialog):
+                dialogs.append(dialog.type)
+                dialog.dismiss()
+            page.on('dialog',reject_dialog)
+            page.locator('[data-bulk="approve"]').click()
+            page.wait_for_function("() => !mutationBusy && document.querySelector('#notice').textContent.includes('2 stories published')")
+            assert not dialogs,dialogs
+            database=api.db()
+            try:
+                assert all(database.get_by_id(sid)['status']=='published' for sid in ids)
+            finally:
+                database.close()
+            page.remove_listener('dialog',reject_dialog)
+            page.locator('#resetFilters').click()
+            page.wait_for_function("() => document.querySelectorAll('#newsList .story').length===25 && !document.querySelector('#newsList').hasAttribute('aria-busy')")
+        check('explicit selected Verify publishes each story without more questions',bulk_verify_and_publish)
         def telemetry():
             nav('operations')
             page.wait_for_selector('#opsTotals .metric')
@@ -136,10 +240,10 @@ def run(output):
             page.wait_for_selector('#system.active')
             assert page.locator('#systemChecks .metric').count()==4
             with page.expect_download() as event:page.locator('#downloadDiagnostics').click()
-            event.value.save_as(output/'diagnostics.json')
-            data=json.loads((output/'diagnostics.json').read_text())
-            assert data['mode']=='live'
-            assert 'csrf_token' not in str(data) and 'audit_owner' not in str(data)
+            event.value.save_as(output/'diagnostics.pdf')
+            data=(output/'diagnostics.pdf').read_bytes()
+            assert data.startswith(b'%PDF-') and len(data)>2000
+            assert b'csrf_token' not in data and b'password_hash' not in data
         check('keyboard navigation and sanitized diagnostic download',palette)
         def responsive():
             for width in (320,390,768,1440):
@@ -148,7 +252,11 @@ def run(output):
                 page.wait_for_selector('#newsList .story')
                 assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'),width
                 if width==390:page.screenshot(path=str(output/'newsroom-mobile.png'))
+                nav('sources')
+                assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'),width
+                if width==390:page.screenshot(path=str(output/'sources-mobile.png'))
             page.set_viewport_size({'width':390,'height':844})
+            nav('news')
             page.locator('#menuToggle').click()
             page.keyboard.press('Escape')
             assert page.locator('#menuToggle').get_attribute('aria-expanded')=='false'
@@ -179,6 +287,52 @@ def run(output):
             assert page.request.get(base+'/api/admin/workspace').status==401
             assert page.evaluate("visibleRows.length === 0 && rows.length === 0 && document.body.style.overflow === ''")
         check('logout clears authenticated workspace access',signout)
+        def owner_hiring():
+            database=api.db()
+            try:
+                database.conn.execute("INSERT INTO admin_users(username,password_hash,role,created_at) VALUES (?,?,?,?)",('pushkarthawari',generate_password_hash(password),'owner','2026-11-02T00:00:00Z'))
+                database.conn.commit()
+            finally: database.close()
+            page.locator('#username').fill('pushkarthawari');page.locator('#password').fill(password)
+            page.locator('#loginForm [type="submit"]').click()
+            page.wait_for_function("() => document.querySelector('#userName').textContent==='pushkarthawari'")
+            nav('team');page.wait_for_selector('#hireRole option[value="viewer"]',state='attached')
+            page.locator('#hireUsername').fill('browser_staff');page.locator('#hireRole').select_option('viewer')
+            assert 'Read newsroom' in page.locator('#hirePowers').inner_text()
+            page.locator('#hireSubmit').click();page.wait_for_selector('#staffCredentials[open]')
+            generated=page.locator('#staffPassword').input_value();assert len(generated)>=20
+            page.locator('#staffCredentialsClose').click();assert page.locator('#staffPassword').input_value()==''
+            staff_context=browser.new_context(service_workers='block')
+            staff_context.route('**/*',lambda route:route.continue_() if route.request.url.startswith(base+'/') else route.abort())
+            staff_page=staff_context.new_page()
+            def staff_get(path):
+                return staff_page.evaluate("async path => { const r=await fetch(path,{credentials:'same-origin'}); return {status:r.status,body:await r.json()}; }",path)
+            try:
+                staff_page.goto(base+'/admin/')
+                staff_page.locator('#username').fill('browser_staff');staff_page.locator('#password').fill(generated)
+                staff_page.locator('#loginForm [type=submit]').click();staff_page.wait_for_selector('#overviewMetrics .metric')
+                assert staff_get('/api/admin/users')['status']==403
+                assert staff_page.locator('.nav [data-view=team]').is_hidden()
+                staff_page.locator('.nav [data-view=news]').click()
+                staff_page.wait_for_selector('#newsList .story')
+                assert staff_page.locator('#manualComposer').is_hidden()
+                assert staff_page.locator('[data-bulk=approve]').is_disabled()
+                assert staff_get('/api/admin/workspace')['body']['capabilities']['publish'] is False
+                page.locator('[data-staff-role="browser_staff"]').select_option('publisher')
+                page.locator('[data-staff="role"][data-user="browser_staff"]').click()
+                page.wait_for_function("() => document.querySelector('#notice').textContent==='Staff access updated'")
+                assert staff_get('/api/admin/workspace')['body']['capabilities']['publish'] is True
+                with page.expect_response(lambda response:response.url.endswith('/api/admin/users/browser_staff') and response.request.method=='POST') as disabled_response:
+                    page.locator('[data-staff="disable"][data-user="browser_staff"]').click()
+                assert disabled_response.value.status==200
+                page.wait_for_function("() => document.querySelector('[data-staff=disable][data-user=browser_staff]').disabled")
+                assert staff_get('/api/admin/workspace')['status']==401
+            finally: staff_context.close()
+            assert page.locator('#teamMembers').inner_text().count('Protected owner')==1
+            page.screenshot(path=str(output/'team-owner.png'))
+            if page.locator('#menuToggle').is_visible():page.locator('#menuToggle').click()
+            page.locator('#logout').click();page.wait_for_selector('#login:not(.hidden)')
+        check('main owner hires staff, assigns powers and revokes live access',owner_hiring)
         verifier=generate_password_hash(password)
         with patch.dict(os.environ,{'ADMIN_USERS_JSON':json.dumps({'audit_owner':verifier})}),patch.object(api,'db',side_effect=DatabaseUnavailable('Synthetic quota outage')):
             def outage_login():

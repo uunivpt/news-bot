@@ -44,7 +44,7 @@ class AuditRegressions(unittest.TestCase):
    response=self.client.get('/api/news')
    self.assertEqual(response.status_code,200)
    self.assertEqual(response.headers['X-News-Mode'],'snapshot')
-   self.assertIn('s-maxage=60',response.headers['Cache-Control'])
+   self.assertIn('s-maxage=10',response.headers['Cache-Control'])
    health=self.client.get('/api/health')
    self.assertEqual(health.status_code,503)
    self.assertFalse(health.json['ok'])

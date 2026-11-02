@@ -62,7 +62,7 @@ class LocalAdminAccessTests(unittest.TestCase):
             run.return_value.returncode = 0
             connect.return_value.__enter__.return_value = conn
             self.assertEqual(termux_local_admin.start(reset=True), 0)
-        create.assert_called_once_with(conn, 'new owner password', reset=True)
+        create.assert_called_once_with(conn, 'new owner password', reset=True, username='pushkarthawari')
         spawn.assert_not_called()
 
     def test_loopback_port_and_local_postgres_only(self):
@@ -73,7 +73,7 @@ class LocalAdminAccessTests(unittest.TestCase):
 
     def test_local_owner_requires_strong_password(self):
         connection = MagicMock()
-        with self.assertRaisesRegex(ValueError, "12"):
+        with self.assertRaisesRegex(ValueError, "10"):
             termux_local_admin.create_local_owner(connection, "short")
         connection.execute.assert_not_called()
 
@@ -89,11 +89,38 @@ class LocalAdminAccessTests(unittest.TestCase):
         password = "my strong private password"
         self.assertTrue(termux_local_admin.create_local_owner(connection, password))
         sent = connection.execute.call_args.args[1]
-        self.assertEqual(sent[0], "localowner")
+        self.assertEqual(sent[0], "pushkarthawari")
         self.assertTrue(sent[1].startswith("scrypt:"))
         self.assertNotIn(password, sent[1])
 
-    def test_approve_requires_explicit_editor_confirmation(self):
+    def test_requested_username_accepts_eleven_character_password_as_hash_only(self):
+        from werkzeug.security import check_password_hash
+        connection = MagicMock()
+        connection.execute.return_value.fetchone.return_value = None
+        password = 'fixture1234'
+        self.assertEqual(len(password), 11)
+        self.assertTrue(termux_local_admin.create_local_owner(
+            connection, password, reset=True, username='pushkarthawari'))
+        sent = connection.execute.call_args.args[1]
+        self.assertEqual(sent[0], 'pushkarthawari')
+        self.assertTrue(check_password_hash(sent[1], password))
+        self.assertNotIn(password, sent[1])
+
+    def test_custom_owner_is_parameterized_and_does_not_delete_other_accounts(self):
+        connection = MagicMock()
+        connection.execute.return_value.fetchone.return_value = None
+        termux_local_admin.create_local_owner(connection, 'a fixture password',
+                                              reset=True, username='chosen_owner')
+        self.assertEqual(connection.execute.call_args.args[1][0], 'chosen_owner')
+        self.assertFalse(any('DELETE' in call.args[0].upper() for call in connection.execute.call_args_list))
+
+    def test_invalid_owner_stops_before_database_or_process_checks(self):
+        with patch.object(termux_local_admin, '_listening') as listening:
+            with self.assertRaisesRegex(ValueError, 'username'):
+                termux_local_admin.start(reset=True, username="not a valid username")
+        listening.assert_not_called()
+
+    def test_verify_still_requires_csrf_without_extra_editor_prompts(self):
         with patch.dict(os.environ, {"POLITICSHUB_LOCAL_ADMIN": "1"}):
             client = api.app.test_client()
             with client.session_transaction() as session:
@@ -101,12 +128,11 @@ class LocalAdminAccessTests(unittest.TestCase):
                                admin_scope="owner", csrf_token="securecsrf")
             with patch.object(api, "db") as db:
                 response = client.post("/api/news/455/approve",
-                    json={"notes": "I checked the facts.", "evidence_urls": []},
-                    headers={"X-CSRF-Token": "securecsrf"})
-                self.assertEqual(response.status_code, 400)
+                    json={})
+                self.assertEqual(response.status_code, 403)
                 db.assert_not_called()
 
-    def test_unapproved_story_cannot_be_published(self):
+    def test_unreadable_source_record_cannot_be_published(self):
         record = {
             "id": 455, "status": "pending", "approved_at": None,
             "fact_check_status": "pending", "source_type": "rss",

@@ -114,11 +114,79 @@ class PostgresDeliveryTests(unittest.TestCase):
         self.assertLessEqual(len(workspace.json['stories']), 200)
         self.assertLess(len(workspace.data), 500000)
         self.assertTrue(workspace.json['capabilities']['publish'])
+        self.assertEqual(workspace.json['source_inventory']['scope'], 'database')
+        self.assertEqual(workspace.json['source_inventory']['total_stories'], 100000)
+        inventory = {item['name']: item for item in workspace.json['source_inventory']['items']}
+        self.assertEqual(inventory['Audit source']['story_count'], 100000)
+        self.assertIn('TV9 Marathi - Maharashtra', inventory)
+        self.assertIn('ABP Majha - Maharashtra', inventory)
+        self.assertIn('The Hindu - India', inventory)
         self.assertEqual(first.status_code, 200)
         self.assertEqual(first.json['total'], 100000)
         self.assertEqual(len(first.json['stories']), 25)
         self.assertFalse({row['id'] for row in first.json['stories']} & {row['id'] for row in second.json['stories']})
         self.assertTrue(all('bot_article' not in row for row in first.json['stories']))
+
+    def test_staff_role_and_password_changes_persist_in_postgres(self):
+        from werkzeug.security import generate_password_hash
+        from app.diagnostics import diagnosis, diagnosis_pdf
+        api._PUBLIC_RATE.clear();api._ADMIN_LOGIN_RATE.clear()
+        database=self.database
+        with patch.object(api,'db',return_value=database),patch.object(database,'close'):
+            api._ensure_admin_users(database)
+            database.conn.execute("INSERT INTO admin_users(username,password_hash,role,created_at) VALUES (%s,%s,'owner','2026-11-02T00:00:00Z') ON CONFLICT(username) DO UPDATE SET password_hash=EXCLUDED.password_hash,role='owner'",('pushkarthawari',generate_password_hash('isolated-pg-owner-password')))
+            owner=api.app.test_client()
+            login=owner.post('/api/admin/login',json={'username':'pushkarthawari','password':'isolated-pg-owner-password'})
+            self.assertEqual(login.status_code,200)
+            headers={'X-CSRF-Token':login.json['csrf_token']}
+            created=owner.post('/api/admin/users',json={'username':'pg_fixture_staff','role':'publisher'},headers=headers)
+            self.assertEqual(created.status_code,201,created.data)
+            staff=api.app.test_client()
+            self.assertEqual(staff.post('/api/admin/login',json={'username':'pg_fixture_staff','password':created.json['password']}).status_code,200)
+            changed=owner.post('/api/admin/users/pg_fixture_staff',json={'operation':'role','role':'viewer'},headers=headers)
+            self.assertEqual(changed.status_code,200)
+            self.assertFalse(staff.get('/api/admin/workspace').json['capabilities']['publish'])
+            reset=owner.post('/api/admin/users/pg_fixture_staff',json={'operation':'reset_password'},headers=headers)
+            self.assertEqual(reset.status_code,200)
+            self.assertEqual(staff.get('/api/admin/workspace').status_code,401)
+            self.assertEqual(staff.post('/api/admin/login',json={'username':'pg_fixture_staff','password':reset.json['password']}).status_code,200)
+            report=diagnosis(database,actor='PostgreSQL integration fixture')
+            self.assertEqual(report['sources']['total_stories'],100000)
+            self.assertTrue(diagnosis_pdf(report).startswith(b'%PDF-'))
+            database.conn.execute("DELETE FROM admin_users WHERE username IN ('pushkarthawari','pg_fixture_staff')")
+
+    def test_editorial_studio_scopes_claims_and_public_updates_use_real_postgres(self):
+        from werkzeug.security import generate_password_hash
+        from app.models import NewsItem
+        database=self.database
+        api._PUBLIC_RATE.clear();api._ADMIN_LOGIN_RATE.clear()
+        with patch.object(api,'db',return_value=database),patch.object(database,'close'):
+            api._ensure_admin_users(database)
+            for name in ('pushkarthawari','pg_editorial_staff'):
+                database.conn.execute("INSERT INTO admin_users(username,password_hash,role,created_at) VALUES (%s,%s,'owner','2026-11-02T00:00:00Z') ON CONFLICT(username) DO UPDATE SET password_hash=EXCLUDED.password_hash",(name,generate_password_hash('isolated-editorial-pg-password')))
+            database.conn.execute("SELECT setval(pg_get_serial_sequence('news_items','id'),(SELECT MAX(id) FROM news_items))")
+            database.insert(NewsItem('PostgreSQL editorial fixture','rss','मराठी बातमी नवीन पाणी पुरवठ्याची अधिकृत माहिती','https://example.org/pg-editorial-fixture',summary='प्रशासनाने पाणी पुरवठ्याबाबत नवीन माहिती प्रसिद्ध केली आहे.',category='maharashtra',public_source=True))
+            sid=database.conn.execute("SELECT id FROM news_items WHERE url='https://example.org/pg-editorial-fixture'").fetchone()['id']
+            owner=api.app.test_client();login=owner.post('/api/admin/login',json={'username':'pushkarthawari','password':'isolated-editorial-pg-password'});headers={'X-CSRF-Token':login.json['csrf_token']}
+            def post(path,body):return owner.post(path,json=body,headers=headers)
+            group=post('/api/admin/editorial/events',{'title':'PostgreSQL event fixture','story_ids':[sid]});self.assertEqual(group.status_code,201,group.data)
+            studio=owner.get(f'/api/admin/studio/{sid}').json
+            saved=post(f'/api/admin/studio/{sid}/save',{'revision':studio['revision'],'title':'मराठी संपादकीय माहिती पाणी पुरवठ्याच्या वेळापत्रकाची नोंद','summary':'अधिकृत माहितीचा संदर्भ आणि पाणी पुरवठ्याची नोंद.','article':'स्रोतांनुसार उपलब्ध असलेली अधिकृत माहिती वाचकांसाठी येथे नोंदवली आहे. '*20,'category':'maharashtra'})
+            self.assertEqual(saved.status_code,200,saved.data)
+            claim=post(f'/api/admin/editorial/story/{sid}/claims',{'statement':'पाणी पुरवठ्याची माहिती उपलब्ध आहे.'});self.assertEqual(claim.status_code,201)
+            evidence=post(f'/api/admin/editorial/story/{sid}/claims/{claim.json["id"]}',{'source_url':'https://example.org/official','publisher':'Official fixture','excerpt':'पाणी पुरवठ्याची माहिती उपलब्ध आहे.','stance':'supports','assessment':'supported'});self.assertEqual(evidence.status_code,200,evidence.data)
+            self.assertEqual(post(f'/api/admin/editorial/story/{sid}/assign',{'username':'pg_editorial_staff'}).status_code,200)
+            self.assertEqual(post('/api/admin/users/pg_editorial_staff',{'operation':'policy','permissions':['news.read','news.edit'],'categories':['maharashtra'],'own_only':True}).status_code,200)
+            staff=api.app.test_client();staff.post('/api/admin/login',json={'username':'pg_editorial_staff','password':'isolated-editorial-pg-password'})
+            self.assertEqual(staff.get('/api/admin/workspace').json['stats']['total'],1)
+            self.assertEqual(staff.get('/api/admin/studio/99999').status_code,403)
+            self.assertEqual(post(f'/api/news/{sid}/approve',{}).status_code,200)
+            studio=owner.get(f'/api/admin/studio/{sid}').json
+            proposal=post(f'/api/admin/editorial/story/{sid}/updates',{'revision':studio['revision'],'label':'नवीन अधिकृत माहिती','body':'पाणी पुरवठ्याबाबत नवीन अधिकृत माहिती उपलब्ध झाली.','kind':'update','source_url':'https://example.org/new-official'});self.assertEqual(proposal.status_code,201)
+            published=post(f'/api/admin/editorial/story/{sid}/updates/{proposal.json["id"]}/publish',{});self.assertEqual(published.status_code,200,published.data)
+            self.assertIn('Update —',database.get_by_id(sid)['bot_article'])
+            database.conn.execute('DELETE FROM news_items WHERE id=%s',(sid,))
+            database.conn.execute("DELETE FROM admin_users WHERE username IN ('pushkarthawari','pg_editorial_staff')")
 
 
 if __name__ == '__main__':

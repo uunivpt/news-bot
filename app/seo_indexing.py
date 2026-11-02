@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
 from xml.sax.saxutils import escape
 
+from app.news_numbers import news_number
 from app.category_routing import normalize_category
 
 SITE_ORIGIN = "https://www.politicshub.in"
@@ -33,7 +34,7 @@ def slugify(value):
 def canonical_path(row):
     category = normalize_category(row.get("category"), row.get("title"), row.get("bot_summary") or row.get("summary"))
     category = CATEGORIES.get(category, "india")
-    return f"/{category}/{int(row['id'])}-{slugify(row.get('title'))}"
+    return f"/{category}/{news_number(row)}"
 
 
 def _date(value):
@@ -110,16 +111,9 @@ def static_sitemap_xml():
     return '<?xml version="1.0" encoding="UTF-8"?>' + '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + entries + "</urlset>"
 
 
-# Manually reviewed, independently sourced editorial page already published on-site.
-# Never add a new page without a real published HTML article and verified sources.
-STANDALONE_NEWS = (
-    {
-        "path": "/nana-patekar-tribute.html",
-        "title": "Nana Patekar dies at 75 in Goa, leaving a lasting cinema legacy",
-        "published_at": "2026-10-08T06:00:00+05:30",
-        "language": "en",
-    },
-)
+# Standalone articles need documented source verification before discovery.
+# Previously promoted static reports are withheld; their URLs show review notices.
+STANDALONE_NEWS = ()
 
 
 def standalone_sitemap_url_xml():

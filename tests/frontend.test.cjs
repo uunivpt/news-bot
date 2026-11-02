@@ -3,13 +3,6 @@ const assert=require('node:assert/strict');
 const vm=require('node:vm');
 const fs=require('node:fs');
 const source=fs.readFileSync('public/assets/site.js','utf8');
-test('editorial evidence input preserves URLs containing n and separates real newlines',()=>{
- const admin=fs.readFileSync('public/admin.js','utf8');
- const statement=admin.split('\n').find(line=>line.includes('const sources = evidence.split'));
- const context=vm.createContext({evidence:'https://news.example.net/report\nhttps://independent.example.org/notice'});
- vm.runInContext(statement+'\nglobalThis.parsedSources=sources;',context);
- assert.deepEqual(Array.from(context.parsedSources),['https://news.example.net/report','https://independent.example.org/notice']);
-});
 // Execute the real data-loading functions without the browser UI bootstrap.
 const prefix=source.slice(0,source.indexOf('function setActive'));
 const feeds=source.slice(source.indexOf('function mergeFeeds'),source.indexOf('function home'));
@@ -69,14 +62,14 @@ test('service worker does not cache API, live snapshot or error responses',()=>{
 
 test('Nana Patekar and Indian obituaries are India news, not Entertainment',()=>{
  const ctx=harness({'/api/news?category=all&limit=120':[],'/news-data.json':[]});
- assert.equal(vm.runInContext('NANA_TRIBUTE.category',ctx),'india');
+ assert.equal(vm.runInContext('typeof NANA_TRIBUTE',ctx),'undefined');
  assert.equal(vm.runInContext("newsCategory('entertainment','Nana Patekar dies at 75','')",ctx),'india');
  assert.equal(vm.runInContext("newsCategory('entertainment','Indian actor dies at 82','Bollywood mourns')",ctx),'india');
  assert.equal(vm.runInContext("newsCategory('entertainment','New Bollywood movie announced','')",ctx),'india');
  assert.equal(vm.runInContext("newsCategory('entertainment','Hollywood awards show','')",ctx),'world');
  assert.equal(vm.runInContext("newsCategory('entertainment','Film actor joins election campaign','')",ctx),'politics');
- assert.equal(vm.runInContext("inCat(NANA_TRIBUTE,'india')",ctx),true);
- assert.equal(vm.runInContext("inCat(NANA_TRIBUTE,'entertainment')",ctx),false);
+ assert.equal(vm.runInContext("inCat({category:'india'},'india')",ctx),true);
+ assert.equal(vm.runInContext("inCat({category:'india'},'entertainment')",ctx),false);
 });
 
 test('source snapshot supersedes stale browser cache and stays source-fed',async()=>{
