@@ -399,16 +399,24 @@ def run(base, output,admin_fixture=False):
             page.route('**/api/maharashtra?*',feed)
             visit('/maharashtra/')
             page.wait_for_selector('.mh-lead')
+            require(page.locator('.mh-editorial-intro').is_visible(), 'Maharashtra editorial source context missing')
+            require('महाराष्ट्र बातम्या' in page.locator('#mhAboutTitle').inner_text(), 'Marathi editorial context missing')
+            require(page.locator('#mhSources a').count()==2, 'Publisher sources not visible')
             original=page.locator('.mh-card-actions a').first.get_attribute('href')
             page.locator('.mh-lang [data-language="en"]').click()
             page.wait_for_function("() => document.documentElement.lang==='en' && !document.querySelector('#mhTranslationNote').hidden")
             require(page.locator('.mh-card-actions a').first.get_attribute('href')==original,'Language changed the original publisher')
             require('original Marathi' in page.locator('#mhTranslationNote').inner_text(),'Unavailable translation was not disclosed')
+            require(page.locator('#mhAboutTitle').inner_text()=='Maharashtra news: sources and languages',
+                    'English switch did not translate the editorial context')
             failed[0]=True
             page.locator('#mhRefresh').click()
             page.wait_for_function("() => document.querySelector('#mhStatus').textContent.includes('previously loaded')")
             require(page.locator('.mh-lead').count()==1,'A failed refresh erased previously loaded headlines')
-            require(page.evaluate('document.documentElement.scrollWidth <= innerWidth'),'Maharashtra page overflows')
+            for width in (320,390,768,1440):
+                page.set_viewport_size({'width':width,'height':900})
+                require(page.evaluate('document.documentElement.scrollWidth <= innerWidth'),
+                        f'Maharashtra page overflow at {width}px')
         check('Maharashtra language, attribution and failed-refresh recovery',maharashtra)
 
         def revoke():
