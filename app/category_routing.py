@@ -48,13 +48,16 @@ EXPLICIT_POLITICS_TITLE_SIGNAL = re.compile(
 NANA = re.compile(r"\bNana\s+Patekar\b", re.IGNORECASE)
 
 
+def is_political_headline(title: str) -> bool:
+    """Classify a Politics topical view without rewriting an article's canonical desk."""
+    return bool(EXPLICIT_POLITICS_TITLE_SIGNAL.search(str(title or "")))
+
+
 def normalize_category(category: str | None, title: str = "", summary: str = "") -> str:
     name = str(category or "india").strip().lower()
     text = f"{title or ''} {summary or ''}"
     if NANA.search(text):
         return "india"
-    if name == "india" and EXPLICIT_POLITICS_TITLE_SIGNAL.search(str(title or "")):
-        return "politics"
     if name in RETIRED_DESKS:
         if POLITICS_SIGNAL.search(text):
             return "politics"
