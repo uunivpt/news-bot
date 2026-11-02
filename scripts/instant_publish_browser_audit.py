@@ -118,6 +118,15 @@ def run(output):
                     reader.wait_for_function('(title)=>document.querySelector(".ph14-lead h1")?.textContent===title',arg=second,timeout=15000)
                     assert not admin.locator('#confirmDialog').is_visible()
                 check('Verify and publish makes the draft the main website story without another question',draft_verify)
+                def promote_existing():
+                    admin.locator('#search').fill(first)
+                    admin.wait_for_function('(title)=>document.querySelectorAll("#newsList .story").length===1 && document.querySelector("#newsList .story h3")?.textContent===title',arg=first)
+                    admin.locator('#newsList [data-news=approve]').click()
+                    admin.wait_for_function('()=>document.querySelector("#notice").textContent.includes("Story published on the website")')
+                    reader.wait_for_function('(title)=>document.querySelector(".ph14-lead h1")?.textContent===title',arg=first,timeout=15000)
+                    data=admin.evaluate("async()=> (await fetch('/api/admin/workspace')).json()")
+                    assert sum(row['title']==first for row in data['stories'])==1
+                check('Already phone-published news can be made the main website story without a duplicate',promote_existing)
                 def reload_receipt():
                     data=admin.evaluate("async()=> (await fetch('/api/admin/workspace')).json()")
                     row=next(r for r in data['stories'] if r['title']==second)

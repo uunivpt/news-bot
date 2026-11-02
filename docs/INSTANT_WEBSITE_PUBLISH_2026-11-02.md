@@ -13,9 +13,9 @@ GitHub remains an optional archive/fallback path. Its missing or failed SSH key 
 Validation:
 
 - 427 Python tests with real PostgreSQL 18, including direct creation/publication, idempotent retry, signed public reads, receipts and role enforcement.
-- 61 JavaScript tests; Python compile and public JavaScript syntax checks.
+- 62 JavaScript tests; Python compile and public JavaScript syntax checks.
 - 23 reader, 22 admin and 10 editorial browser regression checks.
-- Four additional acceptance flows through two separate localhost processes and real HTTPS: browser login through the gateway; Publish now appearing immediately in an already-open homepage; Save draft then one-click Verify making it the main story; refreshed website receipts and private-field exclusion. These fixtures have no GitHub SSH key and never mutate production.
+- Five additional acceptance flows through two separate localhost processes and real HTTPS: browser login through the gateway; Publish now appearing immediately in an already-open homepage; Save draft then one-click Verify making it the main story; re-promoting an existing phone-published story without duplication; refreshed website receipts and private-field exclusion. These fixtures have no GitHub SSH key and never mutate production.
 - A real local bare-Git integration verifies that two phone articles sharing one evidence URL retain separate complete copies in the feed/archive.
 
 Deploy the web gateway/interface, then run the immutable phone updater and sign in again. Production news was not created or approved as a test.

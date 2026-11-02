@@ -70,7 +70,8 @@ window.Editorial = (() => {
       $('studioJobs').innerHTML=arr(data.jobs).map(job=>`<p class="muted">Draft job · ${esc(job.status)} · ${esc(date(job.updated_at))} <button class="text-btn" data-load-job="${esc(job.id)}" ${row.status==='published'?'disabled':''}>Check / load result</button></p>`).join('');
       const editable=can('news.edit') && row.status!=='published';
       $('studioForm').querySelectorAll('input,textarea,select').forEach(node=>node.disabled=!editable);
-      $('studioSave').disabled=!editable;$('studioVerify').disabled=!can('news.publish') || row.status==='published';
+      $('studioSave').disabled=!editable;$('studioVerify').disabled=!can('news.publish');
+      $('studioVerify').textContent=row.status==='published' ? 'Make main news / check website' : 'Verify & publish';
       $('studioOutline').disabled=!can('news.create') || row.status==='published';$('studioGenerate').disabled=!can('news.create') || !data.model_configured || row.status==='published';
       $('claimCreate').disabled=!can('news.edit');$('updateSave').disabled=!can('news.edit');$('studioAssignControls').hidden=!can('users.manage');
       $('studioAssignee').value=data.assigned_to || '';

@@ -98,6 +98,15 @@ test('all pending rows expose Verify and publish, including previously reviewed 
   assert.doesNotMatch(html,/data-news="publish"/);
 });
 
+test('phone-published stories can be promoted and checked again without a new article',()=>{
+  const context=vm.createContext({workspace:{access:{read_only:false}},Number});
+  vm.runInContext(source.slice(source.indexOf('function storyActions('),source.indexOf('function renderNews(')),context);
+  const html=vm.runInContext("storyActions({id:44,status:'published',article_available:true})",context);
+  assert.match(html,/Make main news \/ check website/);
+  assert.match(html,/data-news="approve" data-id="44"/);
+  assert.match(html,/data-permission="news.publish"/);
+});
+
 test('a fresh post-write workspace response cannot be replaced by an older refresh',async()=>{
   const deferred=[];
   const nodes={refresh:{disabled:false},shell:{classList:{contains:()=>false}},
