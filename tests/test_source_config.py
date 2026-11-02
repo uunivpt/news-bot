@@ -18,6 +18,16 @@ class SourceConfigTests(unittest.TestCase):
                 self.assertIn("name", source)
                 self.assertIn("enabled", source)
 
+    def test_pib_source_uses_official_current_directory_and_unverified_feed_is_disabled(self):
+        config = json.loads(Path("config/sources.json").read_text(encoding="utf-8"))
+        rows = {row["name"]:row for row in config["rss"]}
+        released = rows["PIB Press Releases"]
+        self.assertTrue(released["enabled"])
+        self.assertEqual(released["url"],"https://pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=3")
+        invitation = rows["PIB Media Invitations"]
+        self.assertFalse(invitation["enabled"])
+        self.assertIn("Re-enable only",invitation["note"])
+
     def test_news_api_sources_are_india_scoped_and_licensed_for_use(self):
         config = json.loads(Path("config/sources.json").read_text(encoding="utf-8"))
         newsapi = config["newsapi"]
