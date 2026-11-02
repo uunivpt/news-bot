@@ -17,7 +17,7 @@ class AutomatedVerificationTests(unittest.TestCase):
         r = research(self.source, self.source)
         r["sources"][1]["url"] = "https://publisher-one.example/b"
         checked = assess_automatic_publication("Government policy update", self.summary, self.article, r)
-        self.assertIn("two_distinct_publisher_domains_required", checked["errors"])
+        self.assertIn("two_substantive_publisher_sources_required", checked["errors"])
 
     def test_blocks_unsupported_numbers(self):
         r = research(self.source, self.source)
