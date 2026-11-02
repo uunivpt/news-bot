@@ -340,10 +340,14 @@ def _public_rows_for_section(category="all",limit=200):
   return _rank_public(_snapshot_rows(category))[:limit]
 
 def _section_html(category="all"):
- rows=_public_rows_for_section(category,40)
- # Counts must represent the main feed, not just this category's first 40
- # cards. Politics is a topical view of India records, not a new URL category.
- navigation_rows=_public_rows_for_section("all",200) if category!="all" else _public_rows_for_section("all",200)
+ # Count against the full main feed, not merely the active 40 cards.
+ # The Politics view overlaps India while keeping original article URLs.
+ if category=="all":
+  navigation_rows=_public_rows_for_section("all",200)
+  rows=navigation_rows[:40]
+ else:
+  rows=_public_rows_for_section(category,40)
+  navigation_rows=_public_rows_for_section("all",200)
  language="hi" if category=="hindi" else "en"
  label="Latest news" if category=="all" else str(category).title()+" news"
  canonical=SITE_ORIGIN+"/" if category=="all" else SITE_ORIGIN+"/"+category+"/"
