@@ -15,6 +15,7 @@ import os
 import sys
 import tempfile
 import threading
+from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -257,6 +258,58 @@ def run(base, output,admin_fixture=False):
             page.evaluate("location.hash='/c/hindi'")
             page.wait_for_function("() => document.documentElement.lang === 'hi'")
         check('Hindi desk sets document language', hindi)
+
+        if admin_fixture:
+            def devanagari_feed():
+                from api import index as api
+                now = datetime.now(timezone.utc)
+                titles = ['रेल सेवाओं में बदलाव के बारे में नई सूचना', 'विद्यालयों में प्रवेश की प्रक्रिया का विवरण']
+                rows = [{'id': 88001 + index, 'title': title, 'category': 'hindi',
+                         'summary': 'मूळ प्रकाशकाच्या वृत्ताचा संक्षिप्त संदर्भ.',
+                         'source_name': 'Browser RSS fixture', 'url': f'https://example.org/hindi/{index}',
+                         'published_at': (now - timedelta(minutes=index)).isoformat(),
+                         'status': 'published', 'public_source': True} for index, title in enumerate(titles)]
+                with patch.object(api, '_hindi_rows', return_value=rows):
+                    visit('/hindi/')
+                    page.wait_for_function("expected => document.querySelector('.ph14-lead h1')?.textContent === expected", arg=titles[0])
+                    require(page.locator('.ph14-lead h1').inner_text() == titles[0], 'Devanagari-only lead was dropped')
+                    require(titles[1] in page.locator('#app').inner_text(), 'Second Hindi report was dropped')
+                    result = page.evaluate("async () => (await fetch('/api/hindi-feed')).json()")
+                    require([row['id'] for row in result] == [88001, 88002], 'Hindi API discarded valid reports')
+                    require([row['url'] for row in result] == [row['url'] for row in rows], 'Original source links changed')
+                    page.screenshot(path=str(output / 'hindi-deva-mobile.png'), animations='disabled')
+                    visit(api.article_path(rows[0]))
+                    require(page.locator('html').get_attribute('lang') == 'hi', 'Canonical Hindi article declares English')
+                    require(page.locator('.art h1').inner_text() == titles[0], 'Hindi article title changed')
+                    require(page.get_by_role('link', name='Read the original report', exact=True).get_attribute('href') == rows[0]['url'], 'Hindi article source changed')
+                    visit('/#/article/88001')
+                    page.wait_for_function("expected => document.documentElement.lang === 'hi' && document.querySelector('.art h1')?.textContent === expected", arg=titles[0])
+                    english = page.evaluate("async () => (await (await fetch('/api/news?category=india&limit=1')).json())[0]")
+                    require(bool(english), 'English control story is missing')
+                    page.evaluate("id => location.hash='/article/'+id", english['id'])
+                    page.wait_for_function("expected => document.documentElement.lang === 'en' && document.querySelector('.art h1')?.textContent === expected", arg=english['title'])
+                    page.evaluate("location.hash='/article/88001'")
+                    page.wait_for_function("() => document.documentElement.lang === 'hi'")
+                    page.evaluate("location.hash='/settings'")
+                    page.wait_for_function("() => document.documentElement.lang === 'en' && document.querySelector('.set h1')?.textContent === 'Settings'")
+                    page.evaluate("location.hash='/article/88001'")
+                    page.wait_for_function("() => document.documentElement.lang === 'hi'")
+                    page.evaluate("location.hash='/article/999999999999999'")
+                    page.wait_for_function("() => document.documentElement.lang === 'en' && document.querySelector('.msg h3')?.textContent === \"We couldn't load this story\"")
+                    plain = browser.new_context(java_script_enabled=False, viewport={'width': 390, 'height': 844})
+                    plain.route('**/*', lambda route: route.continue_() if route.request.url.startswith(base + '/') else route.abort())
+                    try:
+                        plain_page = plain.new_page()
+                        plain_page.goto(base + '/hindi/', wait_until='domcontentloaded')
+                        require(plain_page.locator('.card').count() == 2, 'Server-rendered Hindi reports were dropped')
+                        require(plain_page.locator('html').get_attribute('lang') == 'hi', 'No-JavaScript Hindi desk declares English')
+                        plain_page.goto(base + api.article_path(rows[0]), wait_until='domcontentloaded')
+                        require(plain_page.locator('html').get_attribute('lang') == 'hi', 'No-JavaScript Hindi article declares English')
+                        metadata = json.loads(plain_page.locator('script[type="application/ld+json"]').inner_text())
+                        require(metadata['inLanguage'] == 'hi', 'Hindi article metadata declares a different language')
+                    finally:
+                        plain.close()
+            check('Devanagari headlines, Hindi reading language and English route transitions', devanagari_feed)
 
         def directory():
             visit('/sources.html')
