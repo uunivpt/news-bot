@@ -193,7 +193,11 @@ def main():
    pass
   with agent_run(db, "writer", "prepare_story", int(row["id"]), {"route":route}):
    # Never overwrite the author's already approved copy with source extraction.
-   if longform_mode_enabled() and str(row.get("fact_check_status") or "").lower() in {"reviewed","approved"} and row.get("bot_article"):
+   if longform_mode_enabled() and row.get("bot_article") and (
+    str(row.get("fact_check_status") or "").lower() in {"reviewed","approved"}
+    or longform_review(row)["words"] >= 800
+   ):
+    # Reuse an existing substantive draft while it awaits manual review.
     ready=True
    else:
     ready=prepare_content(db,row)
@@ -205,7 +209,7 @@ def main():
     audit_stage(db,int(row["id"]),"EDITORIAL_REVIEW","held",editorial)
     print(f"Website publish held for item {row['id']}: {editorial['errors']} ({editorial['words']} words)")
     continue
-  if duplicate and duplicate[0] >= 0.9 and str(duplicate[1].get("status") or "").lower()=="published":
+  if duplicate and duplicate[0] >= 0.96:
    held+=1
    audit_stage(db,int(row["id"]),"DUPLICATE_CHECK","held",{"existing_id":duplicate[1].get("id")})
    continue
