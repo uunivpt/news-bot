@@ -28,6 +28,7 @@ from app.seo_indexing import is_indexable, eligible_articles, news_sitemap_xml, 
 from app.models import NewsItem
 from app import public_archive
 from app.news_numbers import news_number
+from app.news_search import matching as matching_news, relevance as search_relevance
 from app.factcheck import run_cross_source_check
 from app.newsroom import process_news, story_score, is_breaking, dedupe_story_rows, quality_headline, is_telegram_image
 from app.phase_system import AGENTS, phase_analytics, cluster_stories, cluster_summary, train as train_agent
@@ -238,6 +239,12 @@ def _validated_hindi_rows(payload):
   str(row.get('category') or '').lower()=='hindi' and row.get('status','published')=='published' and _safe_source_url(row.get('url'))]
 
 
+def _official_exam_rows():
+ try:
+  payload=json.loads((Path(app.static_folder)/'exam-notices.json').read_text())
+  return [dict(r) for r in payload.get('items',[]) if r.get('status')=='published' and r.get('public_source') and r.get('source_type')=='official_exam']
+ except (OSError,ValueError,TypeError):return []
+
 def _snapshot_rows(category="all", search=None):
  path=Path(app.static_folder or "public") / "news-data.json"
  payload=read_json_rows(path)
@@ -261,8 +268,7 @@ def _snapshot_rows(category="all", search=None):
   row["category"]=normalize_category(row.get("category"), row.get("title"), row.get("bot_summary") or row.get("summary") or "")
  if category and category!="all":rows=[x for x in rows if str(x.get("category") or "general").lower()==category]
  if search:
-  q=str(search).strip().lower()
-  rows=[x for x in rows if q in str(x.get("title") or "").lower() or q in str(x.get("summary") or x.get("bot_summary") or "").lower() or q in str(x.get("source_name") or x.get("source") or "").lower()]
+  rows=matching_news(rows,search)
  return rows
 
 def _public_timestamp(row):
@@ -360,7 +366,7 @@ def _section_html(category="all"):
  if category in ("india","all"):
   body+='<section aria-label="Editorial guides" style="margin:20px 0"><h2>Understand the news</h2><p><a href="/guides/election-results.html">How to verify election results</a></p></section>'
  body+='<div class="sh"><h2>Latest stories</h2><span class="lbl">'+str(len(rows))+' stories</span></div><div class="grid">'+"".join(cards)+'</div>'
- return '<!doctype html><html lang="'+language+'" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta name="google-adsense-account" content="ca-pub-1752666987448533"><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/editorial.css?v=phui19"><link rel="stylesheet" href="/assets/polish.css?v=phui30"><script src="/assets/ui.js?v=phui30" defer></script></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/archive/">All News Archive</a></p><p><a href="/guides/maharashtra-mlc.html">Maharashtra Council explainer</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="/settings.html">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=phui30"></script><script src="/assets/editorial-home.js?v=phui30"></script></body></html>'
+ return '<!doctype html><html lang="'+language+'" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta name="google-adsense-account" content="ca-pub-1752666987448533"><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/editorial.css?v=phui19"><link rel="stylesheet" href="/assets/polish.css?v=phui30"><script src="/assets/ui.js?v=phui30" defer></script></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/archive/">All News Archive</a></p><p><a href="/guides/maharashtra-mlc.html">Maharashtra Council explainer</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="/settings.html">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=search32"></script><script src="/assets/editorial-home.js?v=phui30"></script></body></html>'
 
 
 def _enhance_section_seo(document, category):
@@ -536,7 +542,7 @@ def _publicize(row):
  public_fields={"id","title","url","source_name","source_type","summary","bot_summary","bot_article",
   "article","body","published_at","published_at_site","published_at_iso","category","status",
   "image_url","image_source","image_license","image_credit","image_source_url","public_source",
-  "view_count","last_viewed_at","editorial_value","source_count"}
+  "view_count","last_viewed_at","editorial_value","source_count","exam_region","exam_authority"}
  r={k:v for k,v in dict(row).items() if k in public_fields}
  if not admin_ok():
   # Public readers may see the originating source and its public article URL.
@@ -705,7 +711,7 @@ def _public_row_by_id(item_id):
    reviewed=reviewed_article(app.static_folder,item_id,revision)
    if reviewed:return _publicize(reviewed)
  # Stable, content-addressed IDs for the Hindi RSS desk live outside Neon.
- for item in _hindi_rows():
+ for item in _hindi_rows()+_official_exam_rows():
   if str(item.get("id"))==str(item_id):return _publicize(item)
  try:
   database=db()
@@ -1166,7 +1172,7 @@ def author_page(): return _editorial_page("PoliticsHub News Desk","The PoliticsH
 def _resolve_news_id(value):
  row=public_archive.by_id(value)
  if row:return int(row['id'])
- for row in _snapshot_rows('all')+_hindi_rows():
+ for row in _snapshot_rows('all')+_hindi_rows()+_official_exam_rows():
   if str(row.get('id'))==str(value) or news_number(row)==str(value):return int(row['id'])
  try:
   database=db()
@@ -1414,6 +1420,25 @@ def news():
   return response
  finally:database.close()
 
+@app.get('/api/library')
+def public_library_counts():
+ from app.library import counts
+ result=counts(public_archive.rows(),_snapshot_rows('all'),_hindi_rows(),_official_exam_rows(),_discovery_row)
+ result['checked_at']=datetime.now(timezone.utc).isoformat()
+ return jsonify(result),200,{'Cache-Control':'public,max-age=60,s-maxage=300'}
+
+@app.get('/library/')
+def public_library_page():return send_from_directory(app.static_folder,'library/index.html')
+
+@app.get('/exams/')
+def official_exams_page():return send_from_directory(app.static_folder,'exams/index.html')
+
+@app.get('/api/exams')
+def official_exams_api():
+ try:payload=json.loads((Path(app.static_folder)/'exam-notices.json').read_text())
+ except (OSError,ValueError):return jsonify({'items':[],'sources':[],'notice':'Official notice collection has not completed.'}),503
+ return jsonify(payload),200,{'Cache-Control':'public,max-age=60,s-maxage=300'}
+
 @app.get("/api/search")
 def public_search():
  if not _public_rate_allowed():return jsonify({"error":"rate limit exceeded"}),429
@@ -1439,6 +1464,7 @@ def public_search():
   rows=_snapshot_rows("all",q)+_archive_rows(search=q)
  finally:
   if database is not None:database.close()
+ rows+=matching_news(_hindi_rows()+_official_exam_rows(),q)
  # Deduplicate identities, not similar headlines across different news dates.
  unique=[]; ids=set(); urls=set()
  for row in rows:
@@ -1449,7 +1475,7 @@ def public_search():
   if source and str(row.get("source_name") or row.get("source") or "").casefold()!=source:continue
   if cutoff and _public_timestamp(row)<cutoff:continue
   unique.append(row)
- unique.sort(key=lambda row:(public_archive.timestamp(row),int(row["id"])),reverse=True)
+ unique.sort(key=lambda row:(search_relevance(row,q),public_archive.timestamp(row),int(row["id"])),reverse=True)
  payload=rows_json(unique[offset:offset+limit])
  if not admin_ok():
   for item in payload:
@@ -1508,7 +1534,7 @@ def article(item_id):
  item_id=_resolve_news_id(item_id)
  try:database=db()
  except RuntimeError:
-  snapshot=next((x for x in _snapshot_rows("all") if str(x.get("id"))==str(item_id)),None)
+  snapshot=next((x for x in _snapshot_rows("all")+_official_exam_rows() if str(x.get("id"))==str(item_id)),None)
   if snapshot:return jsonify(_publicize(snapshot))
   if os.getenv("VERCEL")=="1" or os.getenv("POLITICSHUB_GITHUB_FEED_ONLY")=="1":
    from app.reviewed_delivery import reviewed_article

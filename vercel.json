@@ -56,6 +56,14 @@
   ],
   "rewrites": [
     {
+      "source": "/library/",
+      "destination": "/library/index.html"
+    },
+    {
+      "source": "/exams/",
+      "destination": "/exams/index.html"
+    },
+    {
       "source": "/briefing",
       "destination": "/api/briefing"
     },
@@ -220,7 +228,7 @@
   ],
   "functions": {
     "api/index.py": {
-      "includeFiles": "{app/{data,fonts,templates}/**,config/sources.json}"
+      "includeFiles": "{app/{data,fonts,templates}/**,config/{sources,official-exam-sources}.json,public/exam-notices.json}"
     }
   },
   "redirects": [

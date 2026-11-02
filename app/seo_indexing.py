@@ -20,7 +20,7 @@ CATEGORIES = {
     "entertainment": "entertainment", "science": "science", "health": "health", "hindi": "hindi"
 }
 STATIC_PAGES = (
-    "/", "/archive/", "/about.html", "/contact.html", "/editorial-policy.html",
+    "/", "/archive/", "/library/", "/exams/", "/about.html", "/contact.html", "/editorial-policy.html",
     "/corrections.html", "/privacy.html", "/cookies.html", "/terms.html",
     "/disclaimer.html", "/newsletter.html", "/data-rights.html",
     "/licenses.html", "/sources.html", "/maharashtra/", "/guides/election-results.html", "/guides/maharashtra-mlc.html"

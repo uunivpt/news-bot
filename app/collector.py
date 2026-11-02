@@ -55,7 +55,11 @@ def load_sources(path: str | Path | None = None) -> dict[str, Any]:
             f"Missing {config_path}. Copy config/sources.example.json and add your sources."
         )
     with config_path.open("r", encoding="utf-8") as handle:
-        return json.load(handle)
+        config=json.load(handle)
+    if config_path.resolve()==(ROOT/'config/sources.json').resolve():
+        official=ROOT/'config/official-exam-sources.json'
+        if official.exists():config['official_exams']=json.loads(official.read_text())
+    return config
 
 
 def collect_once(config: dict[str, Any], db: NewsDatabase) -> tuple[int, int]:
@@ -65,9 +69,9 @@ def collect_once(config: dict[str, Any], db: NewsDatabase) -> tuple[int, int]:
     healthy = 0
     failures = []
     for source_type, sources in config.items():
-        # Hindi RSS is fetched by an independent hourly feed workflow.
-        # Do not consume the English newsroom publishing queue with it.
-        if source_type == "hindi_rss":
+        # Hindi feeds and official exam notices have dedicated collectors.
+        # Do not duplicate them into the English private publishing queue.
+        if source_type in {"hindi_rss","official_exams"}:
             continue
         collector = COLLECTORS.get(source_type)
         if collector is None:
