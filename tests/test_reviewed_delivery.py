@@ -57,3 +57,12 @@ class ReviewedDeliveryTests(unittest.TestCase):
         self.assertEqual(row['id'], 900)
         self.assertTrue(all('/'+revision+'/' in call.args[0] for call in get.call_args_list))
         self.assertTrue(get.call_args.args[0].endswith('/mobile-reviewed.json'))
+
+    def test_canonical_redirect_keeps_immutable_publication_revision(self):
+        revision = 'd' * 40
+        row = dict(id=900, title='Original public transport report', category='india')
+        with patch.object(api, '_public_row_by_id', return_value=row):
+            result = api.app.test_client().get('/india/900-old-title?v='+revision)
+        self.assertEqual(result.status_code, 301)
+        self.assertEqual(result.headers['Location'],
+                         api.SITE_ORIGIN+api.article_path(row)+'?v='+revision)

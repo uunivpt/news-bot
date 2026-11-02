@@ -76,7 +76,7 @@ up PostgreSQL and local edits before applying an immutable commit and restarting
 the known daemon. It preserves owner accounts. No real story was published as a
 test, and no credential was printed or added to source.
 
-Release verification: 366 Python tests passed with a real local PostgreSQL 18
+Release verification: 367 Python tests passed with a real local PostgreSQL 18
 fixture and none skipped; 46 JavaScript tests, 19 syntax checks, 23 reader
 browser checks and 21 Admin Room browser checks passed. Git integration tests
 used disposable local bare repositories, never production news publication.

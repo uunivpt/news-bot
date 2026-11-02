@@ -1113,7 +1113,10 @@ def seo_article(category,item_id,slug):
    return Response(message,status=503,mimetype="text/html",headers={"Retry-After":"300","Cache-Control":"no-store"})
   return jsonify({"error":"not found"}),404
  canonical_path=article_path(row); requested=f"/{category}/{item_id}-{slug}"
- if requested.rstrip("/")!=canonical_path.rstrip("/"):return redirect(SITE_ORIGIN+canonical_path,code=301)
+ if requested.rstrip("/")!=canonical_path.rstrip("/"):
+  target=SITE_ORIGIN+canonical_path
+  if re.fullmatch(r'[0-9a-f]{40}',revision):target+='?v='+revision
+  return redirect(target,code=301)
  return Response(_article_html(row),mimetype="text/html",headers={"Cache-Control":"public,max-age=60,s-maxage=180"})
 
 @app.post("/api/admin/logout")
