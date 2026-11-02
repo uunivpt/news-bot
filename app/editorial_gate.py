@@ -6,13 +6,24 @@ must attest independent reporting/added value before automatic publication.
 """
 from __future__ import annotations
 import os
-import re
+import unicodedata
 
-_WORD = re.compile(r"[^\W_]+(?:['’-][^\W_]+)*", re.UNICODE)
 _ALLOWED = {"reviewed", "approved"}
 
+def words(value: str) -> list[str]:
+    tokens, current = [], []
+    for char in str(value or ""):
+        if unicodedata.category(char)[:1] in {"L", "M", "N"}:
+            current.append(char)
+        elif current:
+            tokens.append("".join(current))
+            current = []
+    if current:
+        tokens.append("".join(current))
+    return tokens
+
 def word_count(text: str) -> int:
-    return len(_WORD.findall(str(text or "")))
+    return len(words(text))
 
 def longform_review(row: dict, *, minimum: int = 800) -> dict:
     article = str(row.get("bot_article") or "").strip()
@@ -27,7 +38,7 @@ def longform_review(row: dict, *, minimum: int = 800) -> dict:
     # verification. Do not infer editorial approval from source count or length.
     if status not in _ALLOWED:
         errors.append("editorial_review_required")
-    if len(set(_WORD.findall(article.casefold()))) < 120:
+    if len(set(words(article.casefold()))) < 120:
         errors.append("insufficient_distinct_information")
     return {"passed": not errors, "errors": errors, "words": word_count(article)}
 
