@@ -1638,6 +1638,11 @@ def _verify_and_publish(item_id):
      return jsonify({"error":"A public HTTPS source is required before publication.","code":"source_unavailable"}),409
     if not title or not plain_source_text(article):
      return jsonify({"error":"No readable story text is available. Process or edit this story first.","code":"content_unavailable"}),409
+    # Match the public export contract without inventing source copy. A
+    # missing excerpt uses existing article text; missing credit uses its host.
+    if len(title)>500:return jsonify({"error":"Headline must be at most 500 characters","code":"headline_too_long"}),409
+    summary=plain_source_text(summary or article)[:6000].strip()
+    source_name=str(current.get("source_name") or "").strip() or parsed.hostname
     from scripts.mobile_editorial_approve import parse_published
     original=None
     for value in (current.get("published_at"),current.get("published_at_site")):
@@ -1660,13 +1665,13 @@ def _verify_and_publish(item_id):
     approved=current.get("approved_at") if genuine_review else stamp.isoformat()
     published=(original.isoformat() if original else current.get("published_at_site") or stamp.isoformat())
     database.conn.execute(
-     f"UPDATE news_items SET status={ph},fact_check_status={ph},fact_check_notes={ph},approved_at={ph},published_at_site={ph},bot_summary={ph},bot_article={ph} WHERE id={ph}",
-     ("published","reviewed",notes,approved,published,summary,article,item_id))
+     f"UPDATE news_items SET status={ph},fact_check_status={ph},fact_check_notes={ph},approved_at={ph},published_at_site={ph},bot_summary={ph},bot_article={ph},source_name={ph} WHERE id={ph}",
+     ("published","reviewed",notes,approved,published,summary,article,source_name,item_id))
     database.conn.execute(
      "INSERT INTO admin_activity (username,action,item_id,details,created_at) VALUES ("+",".join([ph]*5)+")",
      (session.get("admin_user") or "API token","news.verify_publish",item_id,"Editor verified and published this story in one action",stamp.isoformat()))
     current.update(status="published",fact_check_status="reviewed",fact_check_notes=notes,
-      approved_at=approved,published_at_site=published,bot_summary=summary,bot_article=article)
+      approved_at=approved,published_at_site=published,bot_summary=summary,bot_article=article,source_name=source_name)
     changed=True
   telemetry_recorded=None
   if changed:

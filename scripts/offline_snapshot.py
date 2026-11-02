@@ -172,7 +172,7 @@ def mobile_reviewed_story(row, now):
     source = clean_text(row.get("source_name"))
     summary = clean_text(row.get("bot_summary") or row.get("summary"))
     published = parse_date(row.get("published_at") or row.get("published_at_site"))
-    if not (title and source and 20 <= len(title) <= 210 and 30 <= len(summary) <= 4200 and published):
+    if not (title and source and 1 <= len(title) <= 500 and 1 <= len(summary) <= 6000 and published):
         return None
     if published > now + timedelta(minutes=30):
         return None

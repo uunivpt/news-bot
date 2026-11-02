@@ -145,7 +145,8 @@ def validated(rows):
             or u.username
             or not str(row.get("title") or "").strip()
             or not str(row.get("source_name") or "").strip()
-            or len(str(row.get("summary") or "")) < 30
+            or not 1 <= len(str(row.get("bot_summary") or row.get("summary") or "").strip()) <= 6000
+            or len(str(row.get("title") or "")) > 500
         ):
             raise ValueError("Export contains an unapproved or incomplete story")
         sid = row.get("id")

@@ -73,6 +73,36 @@ class OneClickPublishTests(unittest.TestCase):
         self.assertEqual(before['published_at_site'], after['published_at_site'])
         self.assertEqual(self.database.conn.execute("SELECT COUNT(*) FROM admin_activity WHERE action='news.verify_publish'").fetchone()[0], 1)
 
+    def test_article_only_story_derives_excerpt_and_actual_source_host_for_export(self):
+        from app.phone_publication import public_export
+        from scripts.mobile_sync_upload import validated
+        from scripts.offline_snapshot import mobile_reviewed_story
+        body = 'The public notice explains the revised local transport timetable and its effective dates.'
+        self.database.conn.execute('UPDATE news_items SET summary=?,bot_summary=?,bot_article=?,source_name=? WHERE id=?',
+                                   ('', '', body, '', self.sid))
+        self.database.conn.commit()
+        response = self.post()
+        self.assertEqual(response.status_code, 200, response.data)
+        row = dict(self.database.get_by_id(self.sid))
+        self.assertEqual(row['source_name'], 'example.org')
+        self.assertEqual(row['bot_summary'], body)
+        export = public_export(row)
+        self.assertEqual(validated([export]), 1)
+        self.assertIsNotNone(mobile_reviewed_story(export, datetime.now(timezone.utc)))
+
+    def test_long_editor_headline_and_short_summary_do_not_fail_public_delivery(self):
+        from app.phone_publication import public_export
+        from scripts.mobile_sync_upload import validated
+        from scripts.offline_snapshot import mobile_reviewed_story
+        self.database.update(self.sid, title='A detailed public transport headline ' * 7,
+                             summary='Revised timetable.', bot_summary='Revised timetable.')
+        response = self.post()
+        self.assertEqual(response.status_code, 200, response.data)
+        row = public_export(dict(self.database.get_by_id(self.sid)))
+        self.assertGreater(len(row['title']), 210)
+        self.assertEqual(validated([row]), 1)
+        self.assertIsNotNone(mobile_reviewed_story(row, datetime.now(timezone.utc)))
+
     def test_stale_copy_revision_is_rejected_before_publication(self):
         revision = editorial_revision(dict(self.database.get_by_id(self.sid)))
         self.database.update(self.sid, title='A newer edited public transport timetable for local residents')
