@@ -28,6 +28,28 @@ def _bad_fragment(text):
  match=SHORT_FINAL_TOKEN_RE.search(value)
  return bool(match and match.group(0) not in KNOWN_SHORT_ENDINGS)
 
+def _related_source_evidence(db,row):
+ # Read a small, bounded set of already collected source excerpts.
+ # This does not scrape or republish other publishers' complete articles.
+ p="%s" if db._postgres else "?"
+ try:
+  records=db.conn.execute(
+   "SELECT n.source_name,n.url,n.title,n.summary,n.source_type "
+   "FROM ph_cluster_items c "
+   "JOIN ph_cluster_items peer ON peer.cluster_id=c.cluster_id "
+   "JOIN news_items n ON n.id=peer.news_item_id "
+   "WHERE c.news_item_id="+p+" ORDER BY n.id DESC LIMIT 6",
+   (int(row["id"]),)).fetchall()
+ except Exception:
+  return []
+ return [
+  Evidence(str(x["source_name"] or "Source"),str(x["url"] or ""),
+   (str(x["title"] or "")+". "+str(x["summary"] or ""))[:2500],
+   str(x["source_type"] or "").lower()=="government")
+  for x in records
+ ]
+
+
 def _process_content(db,row):
  try:
   source=enrich_source_text(row.get("title") or "",row.get("summary") or "",row.get("url") or "")
@@ -36,7 +58,8 @@ def _process_content(db,row):
    from app.phi4 import enabled as phi4_enabled, generate_longform_draft
    research=build_research_brief(row.get("title") or "", [
     Evidence(str(row.get("source_name") or "Source"), str(source.get("url") or row.get("url") or ""), material,
-             str(row.get("source_type") or "").lower()=="government")
+             str(row.get("source_type") or "").lower()=="government"),
+    *_related_source_evidence(db,row),
    ])
    audit_stage(db,int(row["id"]),"RESEARCH","completed",{
     "source_count":research["source_count"],"evidence_words":research["evidence_words"],
