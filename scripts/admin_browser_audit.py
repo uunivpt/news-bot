@@ -110,6 +110,15 @@ def run(output):
             directory=page.locator('#sourceTable').inner_text()
             assert 'TV9' in directory and 'ABP' in directory and 'The Hindu' in directory
             assert 'Entire database' in page.locator('#sourceScope').inner_text()
+            # Phase 3 metrics are sourced from actual phone DB rows; fixtures
+            # contain no collector attempts or delivery queue history.
+            assert page.locator('#sourceTriageMetrics .metric').count()==4
+            assert 'Awaiting first check' in page.locator('#sourceTriageMetrics').inner_text()
+            assert 'not verified' in page.locator('#sourceTriageNotice').inner_text()
+            assert 'No collection checks recorded' in page.locator('#sourceIncidents').inner_text()
+            assert 'Unavailable' in page.locator('#sourceOperationsMetrics').inner_text()
+            assert 'collection' in page.locator('#sourceOperationsNote').inner_text().lower()
+            page.screenshot(path=str(output/'source-operations-desktop.png'))
             page.locator('#sourceSearch').fill('TV9')
             assert page.locator('#sourceTable tbody tr').count()>=1
             assert all('TV9' in text for text in page.locator('#sourceTable tbody tr').all_inner_texts())
