@@ -89,6 +89,24 @@ def run(base, output,admin_fixture=False):
 
         check('homepage loads published stories', home)
         article_href = page.locator('.ph14-lead').get_attribute('href')
+        if admin_fixture:
+            # The homepage's newest report can come from an independent Hindi
+            # feed with an absolute canonical redirect to the production host.
+            # Reader controls must be exercised on a stable local article,
+            # without sending an isolated fixture browser to production.
+            catalog = page.request.get(base + '/api/news?category=india&limit=20')
+            require(catalog.status == 200, 'Fixture India feed unavailable')
+            canonical = None
+            for row in catalog.json():
+                number = row.get('news_number') or row.get('id')
+                if not number:
+                    continue
+                candidate = '/india/' + str(number)
+                if page.request.get(base + candidate, max_redirects=0).status == 200:
+                    canonical = candidate
+                    break
+            require(canonical is not None, 'No locally readable canonical news article for reader controls')
+            article_href = canonical
 
         def responsive():
             for width in (320, 360, 390, 768, 1440):

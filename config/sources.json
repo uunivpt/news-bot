@@ -30,11 +30,11 @@
       "url": "https://pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=3",
       "source_class": "government",
       "category": "india",
-      "enabled": true,
+      "enabled": false,
       "public_source": true,
       "timeout_seconds": 12,
       "max_items": 50,
-      "note": "Official PIB English RSS URL from its ViewRss directory (region Regid=3); honour provider unavailability without scraping or bypassing access restrictions."
+      "note": "Temporarily disabled for GitHub RSS collection after repeated HTTP errors on the official PIB URL (Regid=3). Other public publishers remain active; authorized PIB website collection on the phone is preserved. Re-enable only after verifying stable access from the production collector."
     },
     {
       "name": "PIB Media Invitations",

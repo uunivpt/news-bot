@@ -1601,6 +1601,9 @@ def article(item_id):
  try:database=db()
  except RuntimeError:
   snapshot=next((x for x in _snapshot_rows("all")+_official_exam_rows() if str(x.get("id"))==str(item_id)),None)
+  if not snapshot:
+   # Hindi headlines use a separately validated published feed independent of Neon.
+   snapshot=next((x for x in _hindi_rows() if str(x.get("id"))==str(item_id)),None)
   if snapshot:return jsonify(_publicize(snapshot))
   if os.getenv("VERCEL")=="1" or os.getenv("POLITICSHUB_GITHUB_FEED_ONLY")=="1":
    from app.reviewed_delivery import reviewed_article
@@ -1614,6 +1617,8 @@ def article(item_id):
   row=database.get_by_id(item_id,"all")
   if row and (row["status"]=="published" or admin_ok()):return jsonify(_publicize(row))
   if row is None:
+   hindi=next((x for x in _hindi_rows() if str(x.get("id"))==str(item_id)),None)
+   if hindi:return jsonify(_publicize(hindi))
    archived=_archive_row(item_id,database)
    if archived:return jsonify(_publicize(archived))
   return jsonify({"error":"not found"}),404
