@@ -27,23 +27,25 @@
   "rss": [
     {
       "name": "PIB Press Releases",
-      "url": "https://pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=1",
+      "url": "https://pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=3",
       "source_class": "government",
       "category": "india",
       "enabled": true,
       "public_source": true,
       "timeout_seconds": 12,
-      "max_items": 50
+      "max_items": 50,
+      "note": "Official PIB English RSS URL from its ViewRss directory (region Regid=3); honour provider unavailability without scraping or bypassing access restrictions."
     },
     {
       "name": "PIB Media Invitations",
-      "url": "https://pib.gov.in/RssMain.aspx?ModId=10&Lang=1&Regid=1",
+      "url": "https://pib.gov.in/RssMain.aspx?ModId=10&Lang=1&Regid=3",
       "source_class": "government",
       "category": "india",
-      "enabled": true,
+      "enabled": false,
       "public_source": true,
       "timeout_seconds": 12,
-      "max_items": 50
+      "max_items": 50,
+      "note": "Temporarily disabled: current PIB English RSS directory does not advertise this feed and repeated collector requests failed. Re-enable only after the provider endpoint is verified."
     },
     {
       "name": "GovInfo Presidential Documents",
