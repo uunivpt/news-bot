@@ -349,7 +349,7 @@ def _section_html(category="all"):
  if category in ("india","all"):
   body+='<section aria-label="Verified report" style="margin:20px 0"><h2>Verified India report</h2><p><a href="/nana-patekar-tribute.html">Nana Patekar dies at 75 in Goa: report and sources</a></p></section>'
  body+='<div class="sh"><h2>Latest stories</h2><span class="lbl">'+str(len(rows))+' stories</span></div><div class="grid">'+"".join(cards)+'</div>'
- return '<!doctype html><html lang="'+language+'" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta name="google-adsense-account" content="ca-pub-1752666987448533"><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1752666987448533" crossorigin="anonymous"></script><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/editorial.css?v=phui19"><link rel="stylesheet" href="/assets/polish.css?v=phui30"><script src="/assets/ui.js?v=phui30" defer></script></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/archive/">All News Archive</a></p><p><a href="/nana-patekar-tribute.html">Nana Patekar report</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="/settings.html">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=phui30"></script><script src="/assets/editorial-home.js?v=phui30"></script></body></html>'
+ return '<!doctype html><html lang="'+language+'" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta name="google-adsense-account" content="ca-pub-1752666987448533"><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/editorial.css?v=phui19"><link rel="stylesheet" href="/assets/polish.css?v=phui30"><script src="/assets/ui.js?v=phui30" defer></script></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/archive/">All News Archive</a></p><p><a href="/nana-patekar-tribute.html">Nana Patekar report</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="/settings.html">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=phui30"></script><script src="/assets/editorial-home.js?v=phui30"></script></body></html>'
 
 
 def _enhance_section_seo(document, category):
@@ -449,6 +449,8 @@ def _public_title(title,source_text=""):
  return raw or quality_headline(title,source_text)
 
 def _publicize(row):
+ from app.monetization import is_monetizable
+ ads_eligible=is_monetizable(dict(row))
  r={k:v for k,v in dict(row).items() if not k.startswith(("instagram_","reel_cloudinary_"))}
  if not admin_ok():
   # Public readers may see the originating source and its public article URL.
@@ -475,6 +477,7 @@ def _publicize(row):
   r.pop("editorial_context",None)
   if "editorial_value" in r: r["editorial_value"]=bool(r.get("editorial_value"))
   if "source_count" in r: r["source_count"]=int(r.get("source_count") or 0)
+ r["ads_eligible"]=ads_eligible
  r["category"]=normalize_category(r.get("category"), r.get("title"), r.get("summary") or r.get("bot_summary") or "")
  score=story_score(r.get("title",""),r.get("summary",""),r.get("category") or "general",r.get("source_name") or "")
  r["news_score"]=score; r["is_breaking"]=is_breaking(r.get("title",""),r.get("summary",""),score)
@@ -631,9 +634,11 @@ def _public_row_by_id(item_id):
 def _article_html(row):
  row=dict(row)
  indexable=is_indexable(row)
+ from app.monetization import is_monetizable
+ ads_eligible=(row["ads_eligible"] is True and indexable) if "ads_eligible" in row else is_monetizable(row)
  robots_meta = "" if indexable else '<meta name="robots" content="noindex,follow">'
- # Don't serve advertising scripts on pages containing only RSS headline excerpts.
- article_ad_code = ('<meta name="google-adsense-account" content="ca-pub-1752666987448533"><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1752666987448533" crossorigin="anonymous"></script>' if indexable else '')
+ # Search eligibility never substitutes for a recorded review of this copy.
+ article_ad_code = ('<meta name="google-adsense-account" content="ca-pub-1752666987448533"><script src="/assets/measurement.js?v=consent1" defer></script><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1752666987448533" crossorigin="anonymous"></script>' if ads_eligible else '')
  title=str(row.get("title") or "PoliticsHub.in"); category=str(row.get("category") or "India")
  canonical=SITE_ORIGIN+article_path(row)
  published=row.get("published_at_iso") or row.get("published_at_site") or row.get("published_at")
@@ -654,6 +659,8 @@ def _article_html(row):
   "mainEntityOfPage":{"@type":"WebPage","@id":canonical},"isAccessibleForFree":True
  }
  json_ld=json.dumps(data,ensure_ascii=False).replace("<", "\\u003c")
+ repeated_lead=re.sub(r"\s+"," ",body).strip()==re.sub(r"\s+"," ",summary).strip()
+ lead_html="" if repeated_lead else '<p class="dek">'+html.escape(summary)+'</p>'
  paras="".join(f"<p>{html.escape(p.strip())}</p>" for p in re.split(r"\n+",body) if p.strip())
  return f"""<!doctype html>
 <html lang="{language}"><head>
@@ -673,11 +680,11 @@ def _article_html(row):
 <link rel="stylesheet" href="/assets/polish.css?v=phui30"><script src="/assets/ui.js?v=phui30" defer></script><script src="/assets/share.js?v=phshare2" defer></script></head><body>
 <header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><div class="acts"><a class="ib" href="/" aria-label="Home">⌂</a><a class="ib" href="/about.html" aria-label="About">i</a></div></div></header>
 <main class="wrap"><article class="art" data-k="{html.escape(category.lower())}">
-<div class="ah"><span class="chip">{html.escape(category)}</span><h1>{html.escape(title)}</h1><p class="dek">{html.escape(summary)}</p>
-<div class="by"><span>By <a href="/author/politicshub-news-desk">{EDITORIAL_DESK}</a></span><time datetime="{html.escape(pub_iso,quote=True)}">{html.escape(str(published or ""))}</time><span>{html.escape(source)}</span></div></div>
+<div class="ah"><span class="chip">{html.escape(category)}</span><h1>{html.escape(title)}</h1>{lead_html}
+<div class="by"><span>{"Reviewed by" if ads_eligible else "Compiled by"} <a href="/author/politicshub-news-desk">{EDITORIAL_DESK}</a></span><time datetime="{html.escape(pub_iso,quote=True)}">{html.escape(str(published or ""))}</time><span>{html.escape(source)}</span></div></div>
 {"<div class='ahero'><img src='"+html.escape(str(_public_image_path(row)),quote=True)+"' alt='"+html.escape(title,quote=True)+"' loading='eager'></div>" if _public_image_path(row) else ""}
 <div class="body">{paras}</div>
-{"<div class='src'><strong>Publisher excerpt:</strong> This page is a source-linked summary, not an independently reported PoliticsHub article. The original source link below contains the complete report.</div>" if not indexable else ""}
+{"<div class='src'><strong>Publisher excerpt:</strong> This page is a source-linked summary, not an independently reported PoliticsHub article. The original source link below contains the complete report.</div>" if not ads_eligible else ""}
 <div class="src"><strong>Source transparency:</strong> This is a source-linked brief prepared from the originating report. When multiple independent sources are available, PoliticsHub compares their reported details; otherwise no independent reporting claim is made.</div>
 <div class="src">Source: {html.escape(source)}. {"<a href='"+html.escape(source_url,quote=True)+"' rel='nofollow noopener noreferrer' target='_blank'>Read the original report</a>" if source_url else ""}</div>
 <button type="button" class="article-share" data-share-title="{html.escape(title,quote=True)}" data-share-url="{html.escape(canonical,quote=True)}" aria-haspopup="dialog"><span>↗</span><b>Share this story</b></button>
@@ -737,7 +744,7 @@ def security_headers(response):
  response.headers["Referrer-Policy"]="strict-origin-when-cross-origin"
  response.headers["Permissions-Policy"]="camera=(), microphone=(), geolocation=(), payment=(), usb=()"
  response.headers["Strict-Transport-Security"]="max-age=63072000; includeSubDomains; preload"
- response.headers["Content-Security-Policy"]="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://pagead2.googlesyndication.com https://www.google.com https://www.googletagmanager.com https://www.googleadservices.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; media-src 'self' https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://pagead2.googlesyndication.com https://googleads.g.doubleclick.net https://www.google.com https://www.googleadservices.com https://www.google-analytics.com https://region1.google-analytics.com https://www.googletagmanager.com; frame-src 'self' https://googleads.g.doubleclick.net https://tpc.googlesyndication.com; worker-src 'self'; upgrade-insecure-requests"
+ response.headers["Content-Security-Policy"]="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://fundingchoicesmessages.google.com https://www.gstatic.com https://tpc.googlesyndication.com https://pagead2.googlesyndication.com https://www.google.com https://www.googletagmanager.com https://www.googleadservices.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; media-src 'self' https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://fundingchoicesmessages.google.com https://www.google.com https://pagead2.googlesyndication.com https://googleads.g.doubleclick.net https://www.google.com https://www.googleadservices.com https://www.google-analytics.com https://region1.google-analytics.com https://www.googletagmanager.com; frame-src 'self' https://fundingchoicesmessages.google.com https://www.google.com https://googleads.g.doubleclick.net https://tpc.googlesyndication.com; worker-src 'self'; upgrade-insecure-requests"
  response.headers["Cross-Origin-Opener-Policy"]="same-origin"
  response.headers["Cross-Origin-Resource-Policy"]="same-origin"
  response.headers["X-Permitted-Cross-Domain-Policies"]="none"
@@ -1556,6 +1563,8 @@ def change(item_id,status=None,**extra):
   existing=database.get_by_id(item_id)
   if not existing:return jsonify({'error':'story not found'}),404
   if status=="published":
+   if not existing["approved_at"] or str(existing["fact_check_status"] or "").lower()!="reviewed":
+    return jsonify({"error":"Verify and approve the full article before publishing"}),409
    if existing and existing["source_type"]=="x" and existing["fact_check_status"]!="reviewed":
     return jsonify({"error":"X post needs source and context review before publishing"}),409
    if os.getenv("POLITICSHUB_LOCAL_ADMIN")=="1":
@@ -1578,8 +1587,6 @@ def change(item_id,status=None,**extra):
 
 @app.post("/api/news/<int:item_id>/approve")
 def approve(item_id):
- if os.getenv("POLITICSHUB_LOCAL_ADMIN")!="1":
-  return change(item_id,fact_check_status="reviewed",approved_at=datetime.now(timezone.utc).isoformat())
  err=require_admin()
  if err:return err
  err=require_csrf()
@@ -1594,21 +1601,25 @@ def approve(item_id):
   return jsonify({"error":"Provide independent evidence URLs and substantive editorial notes"}),400
  database=db()
  try:
-  with database.conn.transaction():
-   row=database.conn.execute("SELECT * FROM news_items WHERE id=%s FOR UPDATE",(item_id,)).fetchone()
+  ph="%s" if database._postgres else "?"
+  with database.conn.transaction() if database._postgres else database.conn:
+   lock=" FOR UPDATE" if database._postgres else ""
+   row=database.conn.execute("SELECT * FROM news_items WHERE id="+ph+lock,(item_id,)).fetchone()
    if not row:return jsonify({"error":"Story not found"}),404
    current=dict(row)
    issues=review_eligibility(current)
    _,errors=check_evidence(current,links)
+   from app.monetization import has_distinct_body,review_fingerprint
+   if not has_distinct_body(current):issues.append("A repeated summary is not a complete article with added value")
    if issues or errors:return jsonify({"error":"Approval blocked: "+"; ".join(issues+errors)}),409
    stamp=datetime.now(timezone.utc).isoformat()
    result=database.conn.execute(
-    "UPDATE news_items SET fact_check_status=%s,fact_check_notes=%s,approved_at=%s WHERE id=%s AND status=%s AND approved_at IS NULL",
-    ("reviewed","Human verified at "+stamp+". Evidence: "+"; ".join(links)+". Notes: "+notes,stamp,item_id,"pending"))
+    f"UPDATE news_items SET fact_check_status={ph},fact_check_notes={ph},approved_at={ph} WHERE id={ph} AND status={ph} AND approved_at IS NULL",
+    ("reviewed","Human verified at "+stamp+". Originality and added value confirmed. Content SHA256: "+review_fingerprint(current)+". Evidence: "+"; ".join(links)+". Notes: "+notes,stamp,item_id,"pending"))
    if result.rowcount!=1:return jsonify({"error":"Approval conflict; reopen story"}),409
    database.conn.execute(
-    "INSERT INTO admin_activity (username,action,item_id,details,created_at) VALUES (%s,%s,%s,%s,%s)",
-    (session.get("admin_user"),"news.approve",item_id,"Verified source/context/originality on phone",stamp))
+    "INSERT INTO admin_activity (username,action,item_id,details,created_at) VALUES ("+",".join([ph]*5)+")",
+    (session.get("admin_user"),"news.approve",item_id,"Verified source/context/originality and added value",stamp))
   return jsonify({"ok":True,"id":item_id,"status":"pending","fact_check_status":"reviewed"})
  finally:database.close()
 @app.post("/api/news/<int:item_id>/reject")
@@ -1673,7 +1684,7 @@ def create_manual_story():
     result=database.conn.execute(
      "INSERT INTO news_items ("+",".join(keys)+") VALUES ("
      +",".join([ph]*len(keys))+") RETURNING id",params)
-    item_id=result.fetchone()[0]
+    item_id=result.fetchone()["id"]
    else:
     result=database.conn.execute(
      "INSERT INTO news_items ("+",".join(keys)+") VALUES ("
@@ -1705,6 +1716,8 @@ def edit_news(item_id):
  try:
   existing=database.get_by_id(item_id)
   if not existing:return jsonify({'error':'story not found'}),404
+  if existing["approved_at"]:
+   fields.update(fact_check_status="pending",fact_check_notes="",approved_at=None,status="pending")
   revision=request.headers.get('If-Match','').strip('"')
   if revision:
    current=dict(existing)
@@ -1804,7 +1817,8 @@ def process_item(item_id):
   if not row:return jsonify({"error":"not found"}),404
   source=enrich_source_text(row.get("title") or "",row.get("summary") or "",row.get("url") or ""); material=source.get("text") or row.get("summary") or row.get("title") or ""; packets=_editorial_source_packets(database,row); result=process_news(row["title"],material,row.get("category") or "general",source_materials=packets)
   if not result:return jsonify({"error":"bot could not produce complete content from available material"}),422
-  fields={"title":result["headline"],"summary":result["summary"],"bot_summary":result["summary"],"bot_article":result["article"],"editorial_context":result.get("editorial_context") or "", "editorial_value":1 if result.get("editorial_value") else 0, "source_count":int(result.get("source_count") or 0)}
+  fields={"fact_check_status":"pending","fact_check_notes":"","approved_at":None,"title":result["headline"],"summary":result["summary"],"bot_summary":result["summary"],"bot_article":result["article"],"editorial_context":result.get("editorial_context") or "", "editorial_value":1 if result.get("editorial_value") else 0, "source_count":int(result.get("source_count") or 0)}
+  if row.get("approved_at"):fields["status"]="pending"
   # Never persist Telegram CDN images as site assets. A branded OG image is generated server-side.
   if source.get("image_url") and not is_telegram_image(source.get("image_url")) and not row.get("image_url"):fields["image_url"]=source["image_url"]
   elif row.get("image_url") and is_telegram_image(row.get("image_url")):fields["image_url"]=None

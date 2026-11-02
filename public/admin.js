@@ -214,8 +214,8 @@ async function newsAction(kind, id) {
   if (kind === 'approve') {
     const evidence = prompt('Independently verified source URLs (one per line; conflict/Telegram news needs at least two different publishers):');
     if (evidence === null) return;
-    const sources = evidence.split(/[\\n,]+/).map(s => s.trim()).filter(Boolean);
-    const notes = prompt('Verification notes: which facts, dates, locations, context and originality did you personally check? (40+ characters)');
+    const sources = evidence.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+    const notes = prompt('Verification notes: which facts, dates, sources, republication rights and original added value did you personally check? (40+ characters)');
     if (notes === null) return;
     const confirmation = prompt(`After checking the FULL article, type APPROVE ${id} to confirm this exact story:`);
     if (confirmation !== `APPROVE ${id}`) return notice('Approval cancelled; no changes made.','err');

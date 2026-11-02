@@ -71,6 +71,10 @@ def is_indexable(row, now=None):
         return False
     if len(lead) < 80 or len(article) < 300 or len(article.split()) < 45:
         return False
+    if re.sub(r"\s+", " ", article).strip().casefold() == lead.casefold():
+        # A publisher excerpt repeated as its own article is a reading aid,
+        # not a separate full report for the search/news sitemap.
+        return False
     published = _date(row.get("published_at_site") or row.get("published_at_iso") or row.get("published_at"))
     if not published:
         return False

@@ -259,6 +259,33 @@ def run(base, output,admin_fixture=False):
             page.wait_for_function("() => document.documentElement.lang === 'hi'")
         check('Hindi desk sets document language', hindi)
 
+        def measurement_consent():
+            requests = []
+            page.on('request', lambda request: requests.append(request.url) if 'googletagmanager.com/gtag/js' in request.url else None)
+            page.route('https://www.googletagmanager.com/**', lambda route: route.fulfill(
+                status=200, content_type='application/javascript', body='/* intercepted measurement fixture */'))
+            visit('/nana-patekar-tribute.html')
+            page.wait_for_function('() => !!window.googlefc?.callbackQueue?.length')
+            require(not requests, 'Measurement requested before consent data')
+            page.evaluate("""() => {
+              const fc=window.googlefc;
+              fc.ConsentModePurposeStatusEnum={CONSENT_MODE_PURPOSE_STATUS_GRANTED:1,
+                CONSENT_MODE_PURPOSE_STATUS_DENIED:2,CONSENT_MODE_PURPOSE_STATUS_NOT_APPLICABLE:3};
+              window.auditConsent=2;
+              fc.getGoogleConsentModeValues=()=>({analyticsStoragePurposeConsentStatus:window.auditConsent,
+                adStoragePurposeConsentStatus:window.auditConsent,adUserDataPurposeConsentStatus:window.auditConsent,
+                adPersonalizationPurposeConsentStatus:window.auditConsent});
+              window.auditConsentCallback=fc.callbackQueue.find(x=>x.CONSENT_MODE_DATA_READY).CONSENT_MODE_DATA_READY;
+              window.auditConsentCallback();
+            }""")
+            require(not requests, 'Denied consent enabled measurement')
+            with page.expect_request('https://www.googletagmanager.com/**'):
+                page.evaluate('() => { window.auditConsent=1; window.auditConsentCallback(); }')
+            page.evaluate('() => { window.auditConsentCallback(); window.auditConsent=2; window.auditConsentCallback(); }')
+            require(len(requests)==1, 'Consent callbacks duplicated the measurement loader')
+            require(page.evaluate("window['ga-disable-G-2HVZQST08G']===true"), 'Consent withdrawal did not disable Analytics')
+        check('measurement waits for consent and handles grant, repeat callbacks and withdrawal', measurement_consent)
+
         if admin_fixture:
             def devanagari_feed():
                 from api import index as api
