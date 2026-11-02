@@ -341,6 +341,9 @@ def _public_rows_for_section(category="all",limit=200):
 
 def _section_html(category="all"):
  rows=_public_rows_for_section(category,40)
+ # Counts must represent the main feed, not just this category's first 40
+ # cards. Politics is a topical view of India records, not a new URL category.
+ navigation_rows=_public_rows_for_section("all",200) if category!="all" else _public_rows_for_section("all",200)
  language="hi" if category=="hindi" else "en"
  label="Latest news" if category=="all" else str(category).title()+" news"
  canonical=SITE_ORIGIN+"/" if category=="all" else SITE_ORIGIN+"/"+category+"/"
@@ -373,7 +376,12 @@ def _section_html(category="all"):
   first_media='<img src="'+html.escape(first_image,quote=True)+'" alt="" loading="eager" decoding="async">'
  jump=[]
  for cat in ("maharashtra","india","politics","world","hindi"):
-  jump.append('<a href="/'+cat+'/">'+cat.title()+'<small>'+str(sum(1 for r in rows if str(r.get("category") or "").lower()==cat))+'</small></a>')
+  # Maharashtra and Hindi are separate feeds. Do not falsely show zero from
+  # the English snapshot when their independent source was not counted here.
+  if cat=="maharashtra":count="—"
+  elif cat=="hindi":count=str(len(_hindi_rows())) if category=="hindi" else "—"
+  else:count=str(sum(1 for r in navigation_rows if _matches_public_desk(r,cat)))
+  jump.append('<a href="/'+cat+'/">'+cat.title()+'<small>'+count+'</small></a>')
  just_in=[]
  for row in rows[1:4]:
   try:
