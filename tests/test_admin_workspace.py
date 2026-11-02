@@ -49,6 +49,26 @@ class AdminWorkspaceTests(unittest.TestCase):
         self.assertEqual(response.json['scope'],'recovery')
         return response.json
 
+    def test_public_number_search_restores_archive_for_editing_without_claiming_review(self):
+        from app.news_numbers import news_number
+        row=dict(self.snapshot[0],id=998877,source_type='rss',public_source=True)
+        with patch.object(api,'db',return_value=self.database),patch.object(self.database,'close'),patch('app.public_archive.by_id',return_value=row):
+            login=self.sign_in().json
+            number=news_number(row)
+            found=self.client.get('/api/admin/stories?search='+number)
+            self.assertEqual(found.status_code,200)
+            self.assertTrue(found.json['stories'][0]['archived'])
+            denied=self.client.post('/api/admin/archive/restore',json={'number':number})
+            self.assertEqual(denied.status_code,403)
+            result=self.client.post('/api/admin/archive/restore',json={'number':number},headers={'X-CSRF-Token':login['csrf_token']})
+            self.assertEqual(result.status_code,200,result.json)
+            saved=dict(self.database.get_by_id(row['id']))
+            self.assertEqual(saved['bot_article'],row['bot_article'])
+            self.assertEqual(saved['fact_check_status'],'pending')
+            self.assertFalse(saved.get('approved_at'))
+            self.assertEqual(news_number(saved),number)
+            self.assertEqual(self.client.post('/api/admin/archive/restore',json={'number':number},headers={'X-CSRF-Token':login['csrf_token']}).status_code,409)
+
     def test_anonymous_workspace_is_private_and_requires_authentication(self):
         response = self.client.get('/api/admin/workspace')
         self.assertEqual(response.status_code,401)

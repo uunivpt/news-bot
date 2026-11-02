@@ -309,6 +309,9 @@ def main():
         log.info("No newly eligible stories or editorial changes; public snapshot unchanged")
         return
 
+    from app.news_numbers import news_number, number_index
+    number_index(result)
+    for row in result: row['news_number'] = news_number(row)
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(json.dumps(result, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
     log.info("Published %s new source-linked articles to emergency snapshot (%s retained)", fresh, len(result))

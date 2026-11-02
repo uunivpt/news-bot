@@ -93,7 +93,7 @@ function articleHref(item){
  const id=String(item?.id??'').trim();
  if(!/^[0-9]+$/.test(id))return '/#/article/'+encodeURIComponent(id);
  const category=ck(item);
- return '/'+(['all','maharashtra'].includes(category)?'india':category)+'/'+id+'-'+slugify(item?.title||'story');
+ return '/'+(['all','maharashtra'].includes(category)?'india':category)+'/'+String(item?.news_number||id);
 }
 function safeSourceUrl(value){try{const url=new URL(value,location.origin);return /^https?:$/.test(url.protocol)?url.href:'#'}catch(_){return '#'}}
 function img(item){

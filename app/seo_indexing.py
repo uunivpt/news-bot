@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
 from xml.sax.saxutils import escape
 
+from app.news_numbers import news_number
 from app.category_routing import normalize_category
 
 SITE_ORIGIN = "https://www.politicshub.in"
@@ -33,7 +34,7 @@ def slugify(value):
 def canonical_path(row):
     category = normalize_category(row.get("category"), row.get("title"), row.get("bot_summary") or row.get("summary"))
     category = CATEGORIES.get(category, "india")
-    return f"/{category}/{int(row['id'])}-{slugify(row.get('title'))}"
+    return f"/{category}/{news_number(row)}"
 
 
 def _date(value):
