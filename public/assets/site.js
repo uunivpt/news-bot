@@ -90,7 +90,7 @@ function inCat(item,cat){
  // The Politics page is a topical view of India stories. Never rewrite
  // item.category: the original /india/{number} article URL must stay valid.
  return cat==='politics'&&ck(item)==='india'&&
-  /\\b(?:elections?|by[- ]?polls?|polls?|repoll(?:ing)?|vot(?:e|es|ing)|ballot|voters?|parliament|lok sabha|rajya sabha|bjp|congress|ncp|nda|aap|ysrcp|shiv[ -]?sena|mlas?|chief minister|prime minister|opposition|coalition)\\b|निवडणूक|मतदान|भाजप|काँग्रेस|राष्ट्रवादी|शिवसेना|आमदार|विधानसभा|लोकसभा|राज्यसभा|मुख्यमंत्री|पंतप्रधान/i.test(String(item?.title||''));
+  /\b(?:elections?|by[- ]?polls?|polls?|repoll(?:ing)?|vot(?:e|es|ing)|ballot|voters?|parliament|lok sabha|rajya sabha|bjp|congress|ncp|nda|aap|ysrcp|shiv[ -]?sena|mlas?|chief minister|prime minister|opposition|coalition)\b|निवडणूक|मतदान|भाजप|काँग्रेस|राष्ट्रवादी|शिवसेना|आमदार|विधानसभा|लोकसभा|राज्यसभा|मुख्यमंत्री|पंतप्रधान/i.test(String(item?.title||''));
 }
 function hl(cat){return cat&&cat!=='all'?'/'+encodeURIComponent(cat)+'/':'/'}
 function articleHref(item){
