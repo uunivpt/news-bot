@@ -36,10 +36,10 @@ WORLD_SIGNAL = re.compile(
 # Politics desk. Use only headline-level signals: mentions of ministers or
 # governments in summaries alone are not sufficient to reclassify a story.
 EXPLICIT_POLITICS_TITLE_SIGNAL = re.compile(
-    r"\\b(?:elections?|by[- ]?polls?|polls?|repoll(?:ing)?|vot(?:e|es|ing)|"
+    r"\b(?:elections?|by[- ]?polls?|polls?|repoll(?:ing)?|vot(?:e|es|ing)|"
     r"ballot|voters?|parliament|lok sabha|rajya sabha|bjp|congress|ncp|nda|"
     r"aap|ysrcp|shiv[ -]?sena|mlas?|chief minister|prime minister|opposition|"
-    r"coalition)\\b"
+    r"coalition)\b"
     r"|निवडणूक|मतदान|भाजप|काँग्रेस|राष्ट्रवादी|शिवसेना|आमदार|"
     r"विधानसभा|लोकसभा|राज्यसभा|मुख्यमंत्री|पंतप्रधान",
     re.IGNORECASE,
