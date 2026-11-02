@@ -3,7 +3,8 @@ name: Public News Delivery Health (No Neon)
 on:
   workflow_dispatch:
   schedule:
-    - cron: "17 */6 * * *"
+    # Phase 4: public feed incident detection every two hours, independent of Termux.
+    - cron: "17 */2 * * *"
 
 permissions:
   contents: read
@@ -17,5 +18,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: "3.12"
+      # Failing this scheduled check records a GitHub Actions failure/notification.
+      # No public GitHub issue is created and no private phone credentials are used.
       - name: Check public feed, editorial privacy, Politics counters and article URLs
         run: PYTHONPATH=. python scripts/check_public_reliability.py
