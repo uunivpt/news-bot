@@ -8,6 +8,7 @@ from app.public_archive import retain_public_records
 from app.news_numbers import news_number,number_index
 
 OUTPUT=Path('public/exam-notices.json')
+PACKAGED_OUTPUT=Path('app/data/official-exams.json')
 
 def main():
     previous=json.loads(OUTPUT.read_text()) if OUTPUT.exists() else {}
@@ -34,7 +35,10 @@ def main():
     payload={'checked_at':stamp,'sources':[s for s,_ in results],'items':list(items.values()),
       'notice':'Only official source-linked notices. Collection time is not the publication date. This is not a complete census of every Indian examination.'}
     retain_public_records(payload['items'])
-    OUTPUT.write_text(json.dumps(payload,ensure_ascii=False,separators=(',',':'))+'\n')
+    serialized=json.dumps(payload,ensure_ascii=False,separators=(',',':'))+'\n'
+    OUTPUT.write_text(serialized)
+    PACKAGED_OUTPUT.parent.mkdir(parents=True,exist_ok=True)
+    PACKAGED_OUTPUT.write_text(serialized)
     for s in payload['sources']:print(s['name'],s['status'],s['notice_count'])
 
 if __name__=='__main__':main()

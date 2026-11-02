@@ -239,11 +239,20 @@ def _validated_hindi_rows(payload):
   str(row.get('category') or '').lower()=='hindi' and row.get('status','published')=='published' and _safe_source_url(row.get('url'))]
 
 
+def _official_exam_payload():
+ # Vercel serves public files from its CDN; package the same source data
+ # with the Python archive so API reads do not depend on static-file tracing.
+ paths=[Path(app.static_folder)/'exam-notices.json',public_archive.ARCHIVE_PATH.parent/'official-exams.json']
+ for path in paths:
+  try:
+   payload=json.loads(path.read_text())
+   if isinstance(payload,dict) and isinstance(payload.get('items'),list):return payload
+  except (OSError,ValueError,TypeError):pass
+ return None
+
 def _official_exam_rows():
- try:
-  payload=json.loads((Path(app.static_folder)/'exam-notices.json').read_text())
-  return [dict(r) for r in payload.get('items',[]) if r.get('status')=='published' and r.get('public_source') and r.get('source_type')=='official_exam']
- except (OSError,ValueError,TypeError):return []
+ payload=_official_exam_payload() or {}
+ return [dict(r) for r in payload.get('items',[]) if r.get('status')=='published' and r.get('public_source') and r.get('source_type')=='official_exam']
 
 def _snapshot_rows(category="all", search=None):
  path=Path(app.static_folder or "public") / "news-data.json"
@@ -1435,8 +1444,8 @@ def official_exams_page():return send_from_directory(app.static_folder,'exams/in
 
 @app.get('/api/exams')
 def official_exams_api():
- try:payload=json.loads((Path(app.static_folder)/'exam-notices.json').read_text())
- except (OSError,ValueError):return jsonify({'items':[],'sources':[],'notice':'Official notice collection has not completed.'}),503
+ payload=_official_exam_payload()
+ if payload is None:return jsonify({'items':[],'sources':[],'notice':'Official notice collection has not completed.'}),503
  return jsonify(payload),200,{'Cache-Control':'public,max-age=60,s-maxage=300'}
 
 @app.get("/api/search")
