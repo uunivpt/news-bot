@@ -417,6 +417,8 @@ def run(base, output,admin_fixture=False):
                 page.set_viewport_size({'width':width,'height':900})
                 require(page.evaluate('document.documentElement.scrollWidth <= innerWidth'),
                         f'Maharashtra page overflow at {width}px')
+            # Later admin acceptance steps expect a mobile viewport and visible menu.
+            page.set_viewport_size({'width':390,'height':844})
         check('Maharashtra language, attribution and failed-refresh recovery',maharashtra)
 
         def revoke():
