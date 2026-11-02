@@ -135,7 +135,7 @@ class SEOIndexingTests(unittest.TestCase):
                 continue  # Server-rendered dynamic archive, not a static HTML file.
             if path in {"/india/", "/politics/", "/world/", "/hindi/"}:
                 with patch.object(api, "_public_rows_for_section", return_value=[]):
-                    response=api.app.test_client().get("/api/seo-section"+path)
+                    response=api.app.test_client().get(path)
                 self.assertEqual(response.status_code, 200)
                 self.assertIn('<link rel="canonical" href="'+SITE_ORIGIN+path+'">', response.get_data(as_text=True))
                 continue
