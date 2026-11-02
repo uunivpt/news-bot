@@ -48,7 +48,8 @@ class ArchiveTests(unittest.TestCase):
             self.assertEqual(article.status_code,200)
             self.assertIn('Distinct archival phrase',article.json['article'])
             page=self.client.get('/india/991-parliament-public-services-report-number-991')
-            self.assertEqual(page.status_code,200)
+            self.assertIn(page.status_code,(200,301))
+            if page.status_code==301:page=self.client.get(page.headers['Location'])
             self.assertIn(b'Distinct archival phrase',page.data)
 
     def test_pagination_does_not_merge_similar_reports_on_different_dates(self):
@@ -97,7 +98,7 @@ class ArchiveTests(unittest.TestCase):
 
     def test_retention_preserves_old_dates_and_excludes_private_fields(self):
         path=Path(self.tmp.name)/'archive.json.gz'
-        old=dict(story(991),password_hash='secret',instagram_access_token='secret')
+        old=dict(story(991),password_hash='secret',internal_access_token='secret')
         archive.retain_public_records([old],path)
         archive.retain_public_records([story(992),dict(story(993),status='pending')],path)
         data=json.loads(gzip.decompress(path.read_bytes()))

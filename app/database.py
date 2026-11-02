@@ -288,8 +288,12 @@ class NewsDatabase:
   ph="%s" if self._postgres else "?"
   fields=",".join(self.PUBLIC_LIST_FIELDS)
   columns=("title","summary","bot_summary","bot_article","source_name")
-  where=" OR ".join(f"LOWER(COALESCE({column},'')) LIKE LOWER({ph})" for column in columns)
-  return self.conn.execute(f"SELECT {fields} FROM news_items WHERE status='published' AND ({where})",tuple(f"%{query}%" for _ in columns)).fetchall()
+  from .news_search import terms
+  tokens=terms(query)
+  if not tokens:return []
+  where=" OR ".join(f"LOWER(COALESCE({column},'')) LIKE LOWER({ph})" for token in tokens for column in columns)
+  return self.conn.execute(f"SELECT {fields} FROM news_items WHERE status='published' AND ({where})",tuple(f"%{token}%" for token in tokens for _ in columns)).fetchall()
+
  def archive_overrides(self,candidates=None):
   # Even an unpublished live record takes precedence over a saved public copy.
   if candidates is None:

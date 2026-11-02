@@ -30,6 +30,5 @@ AdSense approval is pending, as confirmed by the owner. Actual ad fill, revenue,
 
 Authenticated admin operations and real outbound newsletter delivery were not exercised. Private-page styling and public login rendering were checked. Article content and source claims were not independently fact-checked in this UI audit.
 
-Running `pytest` without a test directory also collects the existing manual `scripts/test_instagram_direct.py`, which imports a removed `build_html_reel` function. The supported `tests/` suite and the repository's unittest CI command pass; that unrelated manual Instagram script was not changed.
 
 Changes are prepared on a feature branch for review. This audit does not imply a production deployment.

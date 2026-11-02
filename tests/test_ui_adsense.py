@@ -3,6 +3,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from unittest.mock import patch
 from api.index import app, _article_html
+from app.monetization import review_fingerprint
 
 
 ADSENSE_URL = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1752666987448533'
@@ -37,13 +38,18 @@ class UIAdSenseTests(unittest.TestCase):
         self.assertEqual(attrs.get('crossorigin'), 'anonymous')
         self.assertNotIn('/assets/adsense.js', page)
 
-    def test_static_news_documents_include_one_async_adsense_script(self):
+    def test_withheld_static_reports_are_ad_free_review_notices(self):
         client = app.test_client()
         for path in ['/elon-musk-ambani-starlink.html', '/nana-patekar-tribute.html']:
             with self.subTest(path=path):
                 response = client.get(path)
                 self.assertEqual(response.status_code, 200)
-                self.assert_adsense_head(response.get_data(as_text=True))
+                page = response.get_data(as_text=True)
+                self.assertEqual(AdSenseScripts(page).scripts, [])
+                self.assertIn('noindex,follow', page)
+                self.assertIn('Report withheld pending verification', page)
+                self.assertNotIn('"@type":"NewsArticle"', page)
+                self.assertNotIn('/assets/measurement.js', page)
 
     def test_server_rendered_news_documents_include_one_async_adsense_script(self):
         row = {
@@ -54,15 +60,20 @@ class UIAdSenseTests(unittest.TestCase):
             'summary': 'Official sources report changes to public services after discussion in Parliament. ' * 2,
             'bot_article': 'Official sources described the parliamentary debate and changes to public services. ' * 8,
         }
+        row.update(fact_check_status="reviewed",approved_at="2026-10-16T08:00:00Z")
+        row["fact_check_notes"]="Originality and added value confirmed. Evidence: https://example.net/record. Notes: Reviewed official documents and added context. Content SHA256: "+review_fingerprint(row)+"."
         client = app.test_client()
         with patch('api.index._public_rows_for_section', return_value=[row]), \
              patch('api.index._public_row_by_id', return_value=row), \
              patch('api.index._published_sitemap_rows', return_value=[row]):
-            for path in ['/india/', '/india/44-india-parliament-passes-a-new-public-services-law']:
+            for path in ['/india/', '/india/'+__import__('app.news_numbers',fromlist=['news_number']).news_number(row)]:
                 with self.subTest(path=path):
                     response = client.get(path)
                     self.assertEqual(response.status_code, 200)
-                    self.assert_adsense_head(response.get_data(as_text=True))
+                    if path=="/india/":
+                        self.assertEqual(AdSenseScripts(response.get_data(as_text=True)).scripts, [])
+                    else:
+                        self.assert_adsense_head(response.get_data(as_text=True))
                     self.assertIn('https://pagead2.googlesyndication.com', response.headers['Content-Security-Policy'])
             # A collection/links-only archive must not be monetized like an article.
             archive = client.get('/archive/')
@@ -99,18 +110,18 @@ class UIAdSenseTests(unittest.TestCase):
         home = (root/'index.html').read_text()
         assert 'name="google-adsense-account" content="ca-pub-1752666987448533"' in home
         assert 'pub-1752666987448533' in (root/'ads.txt').read_text()
-        self.assert_adsense_head(home)
+        self.assertEqual(AdSenseScripts(home).scripts, [])
 
 
     def test_google_ads_page_view_conversion_setup(self):
-        code = (Path('public') / 'assets/ui.js').read_text()
-        self.assertIn("gtag/js?id=G-2HVZQST08G", code)
+        code = (Path('public') / 'assets/measurement.js').read_text()
+        self.assertIn("googletagmanager.com/gtag/js?id=", code)
         self.assertIn("'config', 'G-2HVZQST08G'", code)
         self.assertIn("'config', 'AW-18495731647'", code)
         self.assertIn("'send_to': 'AW-18495731647/4NrBCOKXz6UdEL_vufNE'", code)
         self.assertIn("path === '/' || path === '/index.html'", code)
         self.assertEqual(code.count("'event', 'conversion'"), 1)
-        self.assertIn("!path.startsWith('/admin')", code)
+        self.assertIn("CONSENT_MODE_DATA_READY", code)
         self.assertIn("google-analytics.com", (Path('api') / 'index.py').read_text())
 
     def test_article_summary_keeps_the_complete_sentence(self):
@@ -118,7 +129,8 @@ class UIAdSenseTests(unittest.TestCase):
         row = {'id':1, 'title':'Report', 'category':'india', 'summary':summary, 'article':summary, 'source_name':'Test', 'published_at':'2026-10-13T12:00:00Z'}
         with app.test_request_context('/'):
             page = _article_html(row)
-        self.assertIn('<p class="dek">'+summary+'</p>', page)
+        self.assertIn('<p>'+summary+'</p>', page)
+        self.assertNotIn('<p class="dek">', page)
 
     def test_admin_entrypoint_and_setup_scripts_load_under_csp(self):
         client = app.test_client()

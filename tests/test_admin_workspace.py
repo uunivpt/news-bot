@@ -49,6 +49,26 @@ class AdminWorkspaceTests(unittest.TestCase):
         self.assertEqual(response.json['scope'],'recovery')
         return response.json
 
+    def test_public_number_search_restores_archive_for_editing_without_claiming_review(self):
+        from app.news_numbers import news_number
+        row=dict(self.snapshot[0],id=998877,source_type='rss',public_source=True)
+        with patch.object(api,'db',return_value=self.database),patch.object(self.database,'close'),patch('app.public_archive.by_id',return_value=row):
+            login=self.sign_in().json
+            number=news_number(row)
+            found=self.client.get('/api/admin/stories?search='+number)
+            self.assertEqual(found.status_code,200)
+            self.assertTrue(found.json['stories'][0]['archived'])
+            denied=self.client.post('/api/admin/archive/restore',json={'number':number})
+            self.assertEqual(denied.status_code,403)
+            result=self.client.post('/api/admin/archive/restore',json={'number':number},headers={'X-CSRF-Token':login['csrf_token']})
+            self.assertEqual(result.status_code,200,result.json)
+            saved=dict(self.database.get_by_id(row['id']))
+            self.assertEqual(saved['bot_article'],row['bot_article'])
+            self.assertEqual(saved['fact_check_status'],'pending')
+            self.assertFalse(saved.get('approved_at'))
+            self.assertEqual(news_number(saved),number)
+            self.assertEqual(self.client.post('/api/admin/archive/restore',json={'number':number},headers={'X-CSRF-Token':login['csrf_token']}).status_code,409)
+
     def test_anonymous_workspace_is_private_and_requires_authentication(self):
         response = self.client.get('/api/admin/workspace')
         self.assertEqual(response.status_code,401)
@@ -72,6 +92,14 @@ class AdminWorkspaceTests(unittest.TestCase):
     def test_recovery_does_not_turn_wrong_credentials_into_a_success(self):
         with patch.object(api,'db',side_effect=DatabaseUnavailable('down')):
             self.assertEqual(self.sign_in('wrong-fixture-password').status_code,401)
+        self.assertFalse(self.client.get('/api/admin/me').json['authenticated'])
+
+    def test_malformed_stored_password_verifier_never_crashes_login(self):
+        self.database.conn.execute("UPDATE admin_users SET password_hash=? WHERE username=?",
+                                   ('pbkdf2:unsupported$fixture$malformed', 'fixture_owner'))
+        self.database.conn.commit()
+        with patch.object(api, 'db', return_value=self.database), patch.object(self.database, 'close'):
+            self.assertEqual(self.sign_in().status_code, 401)
         self.assertFalse(self.client.get('/api/admin/me').json['authenticated'])
 
     def test_recovery_cannot_read_private_queues_or_mutate_any_api(self):
@@ -149,6 +177,28 @@ class AdminWorkspaceTests(unittest.TestCase):
     def test_environment_can_disable_or_replace_the_packaged_identity(self):
         with patch.dict(os.environ,{'ADMIN_USERS_JSON':'{}'}):self.assertEqual(configured_users(),{})
         with patch.dict(os.environ,{'ADMIN_USERS_JSON':'invalid'}):self.assertEqual(configured_users(),{})
+
+    def test_source_inventory_covers_the_database_and_config_beyond_the_loaded_sample(self):
+        for index in range(205):
+            self.database.insert(NewsItem(source_name='The Hindu - India' if index < 3 else 'Recent source',
+                source_type='rss',title=f'Coverage report {index}',url=f'https://example.org/coverage/{index}',
+                summary='Source report',category='india'))
+        with patch.object(api,'db',return_value=self.database),patch.object(self.database,'close'):
+            self.sign_in()
+            response = self.client.get('/api/admin/workspace')
+        self.assertEqual(response.status_code, 200)
+        data = response.json
+        self.assertEqual(data['coverage']['sample_size'], 200)
+        self.assertNotIn('The Hindu - India', {row['source_name'] for row in data['stories']})
+        self.assertEqual(data['source_inventory']['scope'], 'database')
+        self.assertEqual(data['source_inventory']['total_stories'], 205)
+        inventory = {item['name']: item for item in data['source_inventory']['items']}
+        self.assertEqual(inventory['The Hindu - India']['story_count'], 3)
+        for name in ('TV9 Marathi - Maharashtra', 'ABP Majha - Maharashtra'):
+            self.assertIn(name, inventory)
+            self.assertTrue(inventory[name]['configured'])
+            self.assertEqual(inventory[name]['story_count'], 0)
+        self.assertIn('no-store', response.headers['Cache-Control'])
 
     def test_snapshot_projection_counts_real_flags_and_does_not_infer_verification(self):
         rows = project_rows(self.snapshot,snapshot=True,now=1793361600)

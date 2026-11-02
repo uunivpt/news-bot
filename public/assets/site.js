@@ -2,9 +2,7 @@
 const CATS=[['all','Home'],['maharashtra','Maharashtra'],['india','India'],['politics','Politics'],['world','World'],['hindi','Hindi']];
 const TABS=[['all','All'],['maharashtra','Maharashtra'],['politics','Politics'],['india','India'],['world','World'],['hindi','Hindi']];
 const ENDPOINTS={api:'/api/news?category=all&limit=120',item:'/api/news/',search:'/api/search',snap:'/news-data.json',hindi:'/api/hindi-feed'};
-// Editorially verified one-off story stays visible even during a DB quota outage.
-const MUSK_STARLINK={id:'202610090923',title:'Elon Musk targets Mukesh Ambani over Starlink India launch delay',category:'india',source:'PoliticsHub News Desk / Reuters',source_name:'PoliticsHub News Desk',date:'2026-10-09T23:23:00+05:30',published_at_site:'2026-10-09T23:23:00+05:30',summary:'In a sarcastic X post, Elon Musk called Mukesh Ambani “Prime Minister Ambani” and alleged obstacles to Starlink. India denies favouritism, citing mandatory security and spectrum approvals.',image:'',url:'https://www.reuters.com/business/media-telecom/india-rejects-monopoly-claim-after-musk-accuses-ambani-blocking-starlink-launch-2026-10-09/',editorial_pick:true};
-const NANA_TRIBUTE={id:'nana-tribute',title:'Nana Patekar dies at 75 in Goa, leaving a lasting cinema legacy',category:'india',source:'Reuters / AP',source_name:'Reuters',date:'2026-10-08T06:00:00+05:30',published_at_site:'2026-10-08T06:00:00+05:30',summary:'Veteran actor Nana Patekar died in Goa on 8 October 2026, aged 75. His celebrated films included Parinda, Krantiveer, Ab Tak Chhappan and Natsamrat.',image:'',url:'https://www.reuters.com/business/media-telecom/bollywood-actor-nana-patekar-dies-75-2026-10-08/',is_breaking:true};
+// Static reports under source review are not injected into the news feed.
 
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -25,7 +23,7 @@ function showConsentBanner(force=false){
  if(!force&&consentMode())return;
  document.querySelector('#privacyConsent')?.remove();
  const box=document.createElement('section');box.id='privacyConsent';box.className='privacy-consent';box.setAttribute('role','dialog');box.setAttribute('aria-label','Privacy choices');
- box.innerHTML='<div><strong>Privacy choices</strong><p>PoliticsHub.in uses essential storage for your privacy choice. Optional browser storage can remember theme and cache recent stories. Google AdSense is used on news pages. These buttons control site preferences; see the Cookie Policy for advertising choices.</p><a href="/cookies.html">Cookie Policy</a> · <a href="/privacy.html">Privacy Policy</a></div><div class="privacy-actions"><button type="button" class="btn secondary" data-consent-choice="essential">Essential only</button><button type="button" class="btn" data-consent-choice="preferences">Allow preferences</button></div>';
+ box.innerHTML='<div><strong>Privacy choices</strong><p>PoliticsHub.in uses essential storage for your privacy choice. Optional browser storage can remember theme and cache recent stories. Eligible article pages may use Google AdSense. These buttons control site preferences; see the Cookie Policy for advertising choices.</p><a href="/cookies.html">Cookie Policy</a> · <a href="/privacy.html">Privacy Policy</a></div><div class="privacy-actions"><button type="button" class="btn secondary" data-consent-choice="essential">Essential only</button><button type="button" class="btn" data-consent-choice="preferences">Allow preferences</button></div>';
  document.body.append(box);
 }
 document.addEventListener('click',e=>{const b=e.target.closest('[data-consent-choice]');if(b)setConsent(b.dataset.consentChoice);if(e.target.closest('[data-open-consent]')){e.preventDefault();showConsentBanner(true)}});
@@ -50,7 +48,7 @@ function newsCategory(category,title,summary){
 function norm(a,i){const id=a.id??a.slug??a._id??'n'+i;const img=a.image||a.image_url||a.imageUrl||a.urlToImage||a.thumbnail||a.img||'';
  return{...a,id:String(id),title:a.title||a.headline||'Untitled',summary:a.summary||a.description||a.excerpt||'',body:a.article||a.bot_article||a.content||a.body||a.text||'',image:typeof img==='string'?img:'',category:newsCategory(a.category||a.section||'General',a.title||a.headline,a.summary||a.description||a.excerpt),source:(a.source&&a.source.name)||a.source||a.publisher||'',date:a.published_at_iso||a.publishedAt||a.pubDate||a.date||a.published_at||a.created_at||'',url:a.url||a.link||'',author:a.author||a.author_name||'PoliticsHub Editorial Desk'}}
 const pick=j=>Array.isArray(j)?j:(j.articles||j.news||j.items||j.data||j.results||[]);
-async function get(u,options={}){const deadline=AbortSignal.timeout(10000);const signal=options.signal?AbortSignal.any([options.signal,deadline]):deadline;const r=await fetch(u,{signal,cache:'default',headers:{'Accept':'application/json'}});if(!r.ok)throw Error('News request failed');if(u===ENDPOINTS.api)S.apiMode=r.headers.get('X-News-Mode')||'live';const rows=pick(await r.json());if(!Array.isArray(rows))throw Error('Invalid news response');return rows.filter(x=>x&&typeof x==='object'&&!Array.isArray(x)).map((x,i)=>{const img=x.image_url||x.image||x.imageUrl||x.urlToImage||x.thumbnail||x.img||'';const source=x.source_name||(x.source&&x.source.name)||x.source||x.publisher||'PoliticsHub';const date=x.published_at_iso||x.published_at_site||x.publishedAt||x.pubDate||x.date||x.published_at||x.created_at||'';const body=x.article||x.bot_article||x.content||x.body||x.text||'';const summary=x.summary||x.bot_summary||x.description||x.excerpt||'';return {...x,title:String(x.title||x.headline||'Untitled'),category:newsCategory(x.category||x.section||'india',x.title||x.headline,summary),id:String(x.id??x.slug??x._id??'n'+i),image:typeof img==='string'?img:'',source:String(source),date,body:String(body),summary:String(summary)};})}
+async function get(u,options={}){const deadline=AbortSignal.timeout(10000);const signal=options.signal?AbortSignal.any([options.signal,deadline]):deadline;const r=await fetch(u,{signal,cache:u===ENDPOINTS.api?'no-store':'default',headers:{'Accept':'application/json'}});if(!r.ok)throw Error('News request failed');if(u===ENDPOINTS.api)S.apiMode=r.headers.get('X-News-Mode')||'live';const rows=pick(await r.json());if(!Array.isArray(rows))throw Error('Invalid news response');const normalizedRows=rows.filter(x=>x&&typeof x==='object'&&!Array.isArray(x)).map((x,i)=>{const img=x.image_url||x.image||x.imageUrl||x.urlToImage||x.thumbnail||x.img||'';const source=x.source_name||(x.source&&x.source.name)||x.source||x.publisher||'PoliticsHub';const date=x.published_at_iso||x.published_at_site||x.publishedAt||x.pubDate||x.date||x.published_at||x.created_at||'';const body=x.article||x.bot_article||x.content||x.body||x.text||'';const summary=x.summary||x.bot_summary||x.description||x.excerpt||'';return {...x,title:String(x.title||x.headline||'Untitled'),category:newsCategory(x.category||x.section||'india',x.title||x.headline,summary),id:String(x.id??x.slug??x._id??'n'+i),image:typeof img==='string'?img:'',source:String(source),date,body:String(body),summary:String(summary)};});const total=r.headers.get('X-Search-Total');if(total!==null&&Number.isFinite(Number(total)))normalizedRows.searchTotal=Number(total);return normalizedRows}
 const CACHE_KEY='ph-news-cache';
 const LEGACY_CACHE_KEYS=['ph-news-cache-v6','ph-news-cache-v5','ph-news-cache-v4'];
 function cacheSave(items){if(!preferencesAllowed())return;try{localStorage.setItem(CACHE_KEY,JSON.stringify({ts:Date.now(),items}));}catch(e){}}
@@ -87,7 +85,13 @@ function ck(item){
  if(key.includes('hindi'))return'hindi';
  return'all';
 }
-function inCat(item,cat){return cat==='all'||ck(item)===cat}
+function inCat(item,cat){
+ if(cat==='all'||ck(item)===cat)return true;
+ // The Politics page is a topical view of India stories. Never rewrite
+ // item.category: the original /india/{number} article URL must stay valid.
+ return cat==='politics'&&ck(item)==='india'&&
+  /\b(?:elections?|by[- ]?polls?|polls?|repoll(?:ing)?|vot(?:e|es|ing)|ballot|voters?|parliament|lok sabha|rajya sabha|bjp|congress|ncp|nda|aap|ysrcp|shiv[ -]?sena|mlas?|chief minister|prime minister|opposition|coalition)\b|निवडणूक|मतदान|भाजप|काँग्रेस|राष्ट्रवादी|शिवसेना|आमदार|विधानसभा|लोकसभा|राज्यसभा|मुख्यमंत्री|पंतप्रधान/i.test(String(item?.title||''));
+}
 function hl(cat){return cat&&cat!=='all'?'/'+encodeURIComponent(cat)+'/':'/'}
 function articleHref(item){
  if(String(item?.id??'')==='202610090923')return '/elon-musk-ambani-starlink.html';
@@ -95,7 +99,7 @@ function articleHref(item){
  const id=String(item?.id??'').trim();
  if(!/^[0-9]+$/.test(id))return '/#/article/'+encodeURIComponent(id);
  const category=ck(item);
- return '/'+(['all','maharashtra'].includes(category)?'india':category)+'/'+id+'-'+slugify(item?.title||'story');
+ return '/'+(['all','maharashtra'].includes(category)?'india':category)+'/'+String(item?.news_number||id);
 }
 function safeSourceUrl(value){try{const url=new URL(value,location.origin);return /^https?:$/.test(url.protocol)?url.href:'#'}catch(_){return '#'}}
 function img(item){
@@ -212,7 +216,7 @@ async function article(id){setActive('');
  document.title=it.title+' — PoliticsHub.in';document.body.dataset.k=ck(it);
  const paras=(it.body||'').split(/\n+/).filter(Boolean).map(p=>`<p>${esc(p)}</p>`).join('')||(it.summary?`<p>${esc(it.summary)}</p>`:'');
  const rel=S.items.filter(i=>i.id!==it.id&&i.category===it.category).concat(S.items.filter(i=>i.id!==it.id&&i.category!==it.category)).slice(0,3);
- $('#app').innerHTML=`<article class="art" data-k="${ck(it)}"><div class="ah"><a class="chip" href="${hl(CATS.find(c=>it.category.toLowerCase().includes(c[0]))?.[0]||'all')}">${esc(it.category)}</a><h1>${esc(it.title)}</h1>${it.summary&&it.body?`<p class="dek">${esc(it.summary)}</p>`:''}<div class="by"><span>By <a href="/author/politicshub-news-desk">PoliticsHub Editorial Desk</a></span><span>${fmt(it.date)}</span><span>${esc(it.source)}</span></div></div>${it.image?`<div class="ahero"><div class="im">${img(it)}</div></div>`:''}<div class="body">${paras}</div>${it.url?`<div class="src">Source: ${esc(it.source||'original report')}. <a href="${esc(safeSourceUrl(it.url))}" target="_blank" rel="noopener noreferrer">Read the original report</a></div>`:''}<button class="article-share" type="button" data-share-title="${esc(it.title)}" aria-haspopup="dialog" aria-label="Share this story"><span aria-hidden="true">↗</span><b>Share</b></button></article><section class="rel"><div class="sh"><h2>Related stories</h2></div><div class="grid">${rel.map(card).join('')}</div></section>`;fx();return it.id}
+ $('#app').innerHTML=`<article class="art" data-k="${ck(it)}"><div class="ah"><a class="chip" href="${hl(CATS.find(c=>it.category.toLowerCase().includes(c[0]))?.[0]||'all')}">${esc(it.category)}</a><h1>${esc(it.title)}</h1>${it.summary&&it.body&&it.summary.replace(/\s+/g," ").trim()!==it.body.replace(/\s+/g," ").trim()?`<p class="dek">${esc(it.summary)}</p>`:''}<div class="by"><span>Compiled by <a href="/author/politicshub-news-desk">PoliticsHub Editorial Desk</a></span><span>${fmt(it.date)}</span><span>${esc(it.source)}</span></div></div>${it.image?`<div class="ahero"><div class="im">${img(it)}</div></div>`:''}<div class="body">${paras}</div>${it.url?`<div class="src">Source: ${esc(it.source||'original report')}. <a href="${esc(safeSourceUrl(it.url))}" target="_blank" rel="noopener noreferrer">Read the original report</a></div>`:''}<button class="article-share" type="button" data-share-title="${esc(it.title)}" aria-haspopup="dialog" aria-label="Share this story"><span aria-hidden="true">↗</span><b>Share</b></button></article><section class="rel"><div class="sh"><h2>Related stories</h2></div><div class="grid">${rel.map(card).join('')}</div></section>`;fx();return it.id}
 function settings(sub){document.documentElement.lang='en';setActive('');document.title='Settings — PoliticsHub.in';const th=document.documentElement.dataset.theme;
  const st=(v,t)=>`<span class="${v}">${t}</span>`;const last=S.items.find(i=>i.date)?.date;
  const privacy=preferencesAllowed()?'Preferences allowed':'Essential only';
@@ -285,7 +289,7 @@ function activeFeedCategory(){
  return hash[0]==='c'&&CATS.some(x=>x[0]===hash[1])?hash[1]:'all';
 }
 function feedSignature(items,category){
- return (items||[]).filter(i=>inCat(i,category)).slice(0,30).map(i=>String(i.id)+':'+String(i.date||'')+':'+String(i.title||'')+':'+String(i.summary||'').slice(0,80)).join('|');
+ return (items||[]).filter(i=>inCat(i,category)).slice(0,30).map(i=>String(i.id)+':'+String(i.date||'')+':'+String(i.title||'')+':'+String(i.summary||'').slice(0,80)+':'+!!i.editorial_featured+':'+String(i.editorial_featured_at||'')).join('|');
 }
 let pendingHomeRefresh=false;
 async function refreshLatest(force=false){
@@ -310,7 +314,16 @@ addEventListener('scroll',()=>{
   render(true);
  }
 },{passive:true});
+let publicVersion=null,versionBusy=false;
+async function checkPublicationVersion(){
+ if(document.hidden||versionBusy)return;versionBusy=true;
+ try{const r=await fetch('/api/news/version',{cache:'no-store',signal:AbortSignal.timeout(7000)});if(!r.ok)return;const value=(await r.json()).version;if(value && value!==publicVersion && !liveRefreshBusy){await refreshLatest(true);if(S.api==='ok'||S.api==='empty')publicVersion=value;}}
+ catch(_){}finally{versionBusy=false;}
+}
+setInterval(checkPublicationVersion,5000);
 setInterval(()=>{if(!document.hidden)refreshLatest()},90000);
+try{const publicationChannel=new BroadcastChannel('politicshub-public-news');publicationChannel.onmessage=()=>{publicVersion=null;checkPublicationVersion();};}catch(_){}
+
 addEventListener('online',()=>refreshLatest(true));
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshLatest(true)});
 addEventListener('focus',()=>refreshLatest());
@@ -351,9 +364,10 @@ const __doS=doS; doS=async function(append=false){
  const offset=searchOffset;
  if(q.length<2){$('#sc').textContent='Enter at least 2 characters to search the archive';$('#sres').innerHTML='';return}
  $('#sc').textContent='Searching…';
- let r=[],localFallback=false;
+ let r=[],localFallback=false,totalMatches=null;
  try{
   r=await get(ENDPOINTS.search+'?q='+encodeURIComponent(q)+'&limit=50&offset='+offset+'&category='+encodeURIComponent(cat)+'&source='+encodeURIComponent(source)+'&period='+encodeURIComponent(period),{signal:searchController.signal});
+  if(Number.isFinite(r.searchTotal))totalMatches=r.searchTotal;
  }catch(e){
   if(requestId!==searchRequest||searchController.signal.aborted)return;
   localFallback=true;
@@ -361,11 +375,11 @@ const __doS=doS; doS=async function(append=false){
   r=S.items.filter(i=>(cat==='all'||inCat(i,cat))&&(!source||i.source===source)&&(!cutoff||ts(i.date)>=cutoff)&&[i.title,i.summary,i.source,i.category].join(' ').toLowerCase().includes(q.toLowerCase())).slice(offset,offset+50);
  }
  if(requestId!==searchRequest)return;
- const hasMore=r.length===50;searchOffset=offset+r.length;
+ const hasMore=totalMatches!==null?offset+r.length<totalMatches:r.length===50;searchOffset=offset+r.length;
  const seen=new Set(searchResults.map(i=>i.id));
  searchResults=searchResults.concat(r.map(norm).filter(i=>{if((cat!=='all'&&!inCat(i,cat))||seen.has(i.id))return false;seen.add(i.id);return true}));
  r=searchResults;
- $('#sc').textContent=(r.length?(r.length+' '+(r.length===1?'story':'stories')+' found'):'No stories match your search.')+(localFallback?' Archive unavailable; searching loaded stories only.':'');
+ $('#sc').textContent=(r.length?(r.length+(totalMatches!==null?' of '+totalMatches:'')+' '+(r.length===1?'story':'stories')+' found'):'No stories match your search.')+(localFallback?' Archive unavailable; searching loaded stories only.':'');
  $('#sres').innerHTML=r.map(i=>'<a class="sr" href="'+esc(articleHref(i))+'">'+(i.image?'<img src="'+esc(i.image)+'" alt="" loading="lazy">':'')+'<div><span class="lbl red">'+esc(i.category)+'</span><h3>'+esc(i.title)+'</h3><small>'+esc(i.source)+' '+ago(i.date)+'</small></div></a>').join('')+(hasMore?'<button type="button" class="btn" id="searchMore">Load more stories</button>':'');
  const more=$('#searchMore');if(more)more.onclick=()=>{more.disabled=true;doS(true)};
 };

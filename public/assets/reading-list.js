@@ -11,7 +11,7 @@
   try{
    const url=new URL(item.url,origin);
    if(url.origin!==origin||url.username||url.password)return null;
-   const article=/^\/(?:india|politics|world|hindi|maharashtra)\/\d+-[^/]+\/?$/.test(url.pathname);
+   const article=/^\/(?:india|politics|world|hindi|maharashtra)\/\d+(?:-[^/]+)?\/?$/.test(url.pathname);
    const legacy=url.pathname==='/'&&/^#\/article\/\d+$/.test(url.hash);
    const special=['/elon-musk-ambani-starlink.html','/nana-patekar-tribute.html'].includes(url.pathname);
    if(!article&&!legacy&&!special)return null;

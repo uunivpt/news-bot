@@ -9,7 +9,8 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from email.utils import parsedate_to_datetime
 from urllib.parse import quote, urlsplit
-from flask import Flask, jsonify, request, session, send_from_directory, redirect, Response, render_template
+from flask import Flask, jsonify, request, session, g, send_from_directory, redirect, Response, render_template
+from app.admin_roles import effective_role, permissions as role_permissions, required_permission, verifier_tag
 from werkzeug.security import check_password_hash, generate_password_hash
 from psycopg import Error as PostgresError
 from app.article_fetcher import enrich_source_text
@@ -21,10 +22,15 @@ from app.source_text import source_text as plain_source_text
 from app.source_http import fetch_source, public_http_url
 from app.admin_access import configured_users, verify_recovery_owner
 from app.admin_workspace import LIST_FIELDS as ADMIN_LIST_FIELDS, EDITORIAL_FIELDS, editorial_revision, project_rows as admin_project_rows, coverage as admin_coverage
-from app.category_routing import normalize_category
+from app.source_inventory import source_inventory
+from app.newsroom_operations import source_triage, publication_operations
+from app.newsroom_alerts import newsroom_alerts
+from app.category_routing import normalize_category, is_political_headline
 from app.seo_indexing import is_indexable, eligible_articles, news_sitemap_xml, google_news_sitemap_xml, standalone_sitemap_url_xml, STANDALONE_NEWS, SITE_ORIGIN as CANONICAL_ORIGIN
 from app.models import NewsItem
 from app import public_archive
+from app.news_numbers import news_number
+from app.news_search import matching as matching_news, relevance as search_relevance
 from app.factcheck import run_cross_source_check
 from app.newsroom import process_news, story_score, is_breaking, dedupe_story_rows, quality_headline, is_telegram_image
 from app.phase_system import AGENTS, phase_analytics, cluster_stories, cluster_summary, train as train_agent
@@ -81,16 +87,17 @@ def enforce_admin_session_scope():
    expected_origins.add('http://127.0.0.1:8765')
   if origin and origin.rstrip('/') not in expected_origins:
    return jsonify({'error':'Cross-origin admin requests are not allowed'}),403
- if recovery_session() and request.path.startswith('/api/'):
+ if recovery_session() and request.path.startswith('/api/') and request.path!='/api/admin/archive/search':
   if request.method not in {'GET','HEAD','OPTIONS'} and request.path not in {'/api/admin/logout','/api/admin/login'}:
    return jsonify({'error':'Recovery access is read-only. Restore the database and sign in again to make changes.','code':'recovery_read_only'}),403
 
 
-def _signed_in(username, role, scope='owner'):
+def _signed_in(username, role, scope='owner', verifier=None):
  session.clear()
  session.update(admin_user=username,admin_role=role,admin_scope=scope,
   admin_expires_at=int(time.time())+(3600 if scope=='recovery' else 28800),
   csrf_token=secrets.token_urlsafe(32))
+ if verifier:session['admin_verifier_tag']=verifier_tag(verifier)
  return jsonify({'ok':True,'username':username,'role':role,'scope':scope,
   'read_only':scope=='recovery','csrf_token':session['csrf_token'],
   'expires_at':session['admin_expires_at']})
@@ -113,18 +120,25 @@ def database_request_unavailable(error):
 
 
 def _ensure_admin_users(database):
- database.conn.execute("CREATE TABLE IF NOT EXISTS admin_users (username TEXT PRIMARY KEY,password_hash TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'owner',created_at TEXT NOT NULL)")
+ from app.schema_cache import schema_once
+ import hashlib
  configured=users()
- if configured:
-  row=database.conn.execute('SELECT COUNT(*) AS count FROM admin_users').fetchone()
-  if int(row['count'])==0:
-   ph='%s' if database._postgres else '?'
-   for username,password_hash in configured.items():
-    if not re.fullmatch(r'[A-Za-z0-9._-]{3,40}',str(username)):continue
-    if not isinstance(password_hash,str) or not password_hash.startswith(('scrypt:','pbkdf2:')) or password_hash.count('$')!=2 or not 60<=len(password_hash)<=1000:continue
-    database.conn.execute(f'INSERT INTO admin_users (username,password_hash,role,created_at) VALUES ({ph},{ph},{ph},{ph}) ON CONFLICT(username) DO NOTHING',
-     (username,password_hash,'owner',datetime.now(timezone.utc).isoformat()))
- if not database._postgres:database.conn.commit()
+ identity=hashlib.sha256(json.dumps(configured,sort_keys=True).encode()).hexdigest()
+ with schema_once(database,'admin-users:'+identity) as required:
+  if not required:return
+  database.conn.execute("CREATE TABLE IF NOT EXISTS admin_users (username TEXT PRIMARY KEY,password_hash TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'owner',created_at TEXT NOT NULL)")
+  from app.editorial_access import ensure_access_schema
+  ensure_access_schema(database)
+  if configured:
+   row=database.conn.execute('SELECT COUNT(*) AS count FROM admin_users').fetchone()
+   if int(row['count'])==0:
+    ph='%s' if database._postgres else '?'
+    for username,password_hash in configured.items():
+     if not re.fullmatch(r'[A-Za-z0-9._-]{3,40}',str(username)):continue
+     if not isinstance(password_hash,str) or not password_hash.startswith(('scrypt:','pbkdf2:')) or password_hash.count('$')!=2 or not 60<=len(password_hash)<=1000:continue
+     database.conn.execute(f'INSERT INTO admin_users (username,password_hash,role,created_at) VALUES ({ph},{ph},{ph},{ph}) ON CONFLICT(username) DO NOTHING',
+      (username,password_hash,'owner',datetime.now(timezone.utc).isoformat()))
+  if not database._postgres:database.conn.commit()
 
 def _bootstrap_news_snapshot(database):
  try:
@@ -227,12 +241,35 @@ def _validated_hindi_rows(payload):
   str(row.get('category') or '').lower()=='hindi' and row.get('status','published')=='published' and _safe_source_url(row.get('url'))]
 
 
+def _official_exam_payload():
+ # Vercel serves public files from its CDN; package the same source data
+ # with the Python archive so API reads do not depend on static-file tracing.
+ paths=[Path(app.static_folder)/'exam-notices.json',public_archive.ARCHIVE_PATH.parent/'official-exams.json']
+ for path in paths:
+  try:
+   payload=json.loads(path.read_text())
+   if isinstance(payload,dict) and isinstance(payload.get('items'),list):return payload
+  except (OSError,ValueError,TypeError):pass
+ return None
+
+def _official_exam_rows():
+ payload=_official_exam_payload() or {}
+ return [dict(r) for r in payload.get('items',[]) if r.get('status')=='published' and r.get('public_source') and r.get('source_type')=='official_exam']
+
+def _matches_public_desk(row, category):
+ # Politics is a topical view, not a recategorization of India articles.
+ # Keep original article IDs, categories, canonical URLs and archive history.
+ if not category or category=="all":return True
+ actual=str(row.get("category") or "").lower()
+ return actual==category or (category=="politics" and actual=="india"
+                            and is_political_headline(row.get("title")))
+
 def _snapshot_rows(category="all", search=None):
  path=Path(app.static_folder or "public") / "news-data.json"
  payload=read_json_rows(path)
  if os.getenv("VERCEL")=="1":
   payload=remote_rows(_snapshot_remote_cache,_snapshot_refresh_lock,payload,
-   (PUBLIC_FEED_URL,SITE_ORIGIN+"/news-data.json"),ttl=90,max_bytes=2_000_000)
+   (PUBLIC_FEED_URL,SITE_ORIGIN+"/news-data.json"),ttl=15,max_bytes=2_000_000)
  # Keep manually verified election reports independent of rotating news snapshots.
  # These time-stamped leads are NOT certified final election results.
  if not isinstance(payload,list):payload=[]
@@ -244,14 +281,20 @@ def _snapshot_rows(category="all", search=None):
    payload=[x for x in curated if isinstance(x,dict) and x.get("title") and str(x.get("id")) not in present] + payload
  except (OSError,ValueError):
   pass
+ from app.live_publication import read_feed
+ live=read_feed()
+ if live:
+  payload=[dict(row,editorial_featured=False,editorial_featured_at=None) for row in payload if isinstance(row,dict)]
+ ids={str(r["id"]) for r in live}
+ live_urls={r.get("url") for r in live if r.get("source_type")!="manual"}
+ payload=live+[row for row in payload if str(row.get("id")) not in ids and row.get("url") not in live_urls]
  rows=[dict(x) for x in payload if isinstance(x,dict) and x.get("title") and x.get("status","published")=="published"]
  for row in rows:
   row.setdefault("status","published")
   row["category"]=normalize_category(row.get("category"), row.get("title"), row.get("bot_summary") or row.get("summary") or "")
- if category and category!="all":rows=[x for x in rows if str(x.get("category") or "general").lower()==category]
+ if category and category!="all":rows=[x for x in rows if _matches_public_desk(x,category)]
  if search:
-  q=str(search).strip().lower()
-  rows=[x for x in rows if q in str(x.get("title") or "").lower() or q in str(x.get("summary") or x.get("bot_summary") or "").lower() or q in str(x.get("source_name") or x.get("source") or "").lower()]
+  rows=matching_news(rows,search)
  return rows
 
 def _public_timestamp(row):
@@ -284,22 +327,29 @@ def _rank_public(rows,threshold=0.82):
   item["category"]=normalize_category(item.get("category"),item.get("title"),item.get("bot_summary") or item.get("summary") or "")
   item["news_score"]=story_score(item.get("title",""),item.get("bot_summary") or item.get("summary") or "",item.get("category") or "general",item.get("source_name") or "")
   item["is_breaking"]=is_breaking(item.get("title",""),item.get("bot_summary") or item.get("summary") or "",item["news_score"])
- items.sort(key=lambda item:(_public_timestamp(item),int(item.get("id") or 0)),reverse=True)
+ items.sort(key=lambda item:(bool(item.get("editorial_featured")),str(item.get("editorial_featured_at") or ""),_public_timestamp(item),int(item.get("id") or 0)),reverse=True)
  return dedupe_story_rows(items,threshold=threshold)
 def _public_rows_for_section(category="all",limit=200):
  if category=="hindi":return _rank_public(_hindi_rows())[:limit]
  try:
   database=db()
   try:
-   rows=[dict(x) for x in database.latest_public(max(limit*3,limit),"all" if category in ("india","entertainment") else category)]
+   rows=[dict(x) for x in database.latest_public(max(limit*6,limit),"all" if category in ("india","entertainment","politics") else category)]
    rows=_rank_public(rows)
-   return [x for x in rows if category=="all" or x.get("category")==category][:limit]
+   return [x for x in rows if _matches_public_desk(x,category)][:limit]
   finally:database.close()
  except RuntimeError:
   return _rank_public(_snapshot_rows(category))[:limit]
 
 def _section_html(category="all"):
- rows=_public_rows_for_section(category,40)
+ # Count against the full main feed, not merely the active 40 cards.
+ # The Politics view overlaps India while keeping original article URLs.
+ if category=="all":
+  navigation_rows=_public_rows_for_section("all",200)
+  rows=navigation_rows[:40]
+ else:
+  rows=_public_rows_for_section(category,40)
+  navigation_rows=_public_rows_for_section("all",200)
  language="hi" if category=="hindi" else "en"
  label="Latest news" if category=="all" else str(category).title()+" news"
  canonical=SITE_ORIGIN+"/" if category=="all" else SITE_ORIGIN+"/"+category+"/"
@@ -332,7 +382,12 @@ def _section_html(category="all"):
   first_media='<img src="'+html.escape(first_image,quote=True)+'" alt="" loading="eager" decoding="async">'
  jump=[]
  for cat in ("maharashtra","india","politics","world","hindi"):
-  jump.append('<a href="/'+cat+'/">'+cat.title()+'<small>'+str(sum(1 for r in rows if str(r.get("category") or "").lower()==cat))+'</small></a>')
+  # Maharashtra and Hindi are separate feeds. Do not falsely show zero from
+  # the English snapshot when their independent source was not counted here.
+  if cat=="maharashtra":count="—"
+  elif cat=="hindi":count=str(len(_hindi_rows())) if category=="hindi" else "—"
+  else:count=str(sum(1 for r in navigation_rows if _matches_public_desk(r,cat)))
+  jump.append('<a href="/'+cat+'/">'+cat.title()+'<small>'+count+'</small></a>')
  just_in=[]
  for row in rows[1:4]:
   try:
@@ -347,9 +402,9 @@ def _section_html(category="all"):
  body+='<div class="tile sc"><span class="lbl">Jump to a desk</span><div class="pills">'+"".join(jump)+'</div></div>'
  body+='<div class="tile lt"><span class="lbl">Just in</span>'+"".join(just_in)+'</div></section>'
  if category in ("india","all"):
-  body+='<section aria-label="Verified report" style="margin:20px 0"><h2>Verified India report</h2><p><a href="/nana-patekar-tribute.html">Nana Patekar dies at 75 in Goa: report and sources</a></p></section>'
+  body+='<section aria-label="Editorial guides" style="margin:20px 0"><h2>Understand the news</h2><p><a href="/guides/election-results.html">How to verify election results</a></p></section>'
  body+='<div class="sh"><h2>Latest stories</h2><span class="lbl">'+str(len(rows))+' stories</span></div><div class="grid">'+"".join(cards)+'</div>'
- return '<!doctype html><html lang="'+language+'" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta name="google-adsense-account" content="ca-pub-1752666987448533"><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1752666987448533" crossorigin="anonymous"></script><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/editorial.css?v=phui19"><link rel="stylesheet" href="/assets/polish.css?v=phui30"><script src="/assets/ui.js?v=phui30" defer></script></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/archive/">All News Archive</a></p><p><a href="/nana-patekar-tribute.html">Nana Patekar report</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="/settings.html">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=phui30"></script><script src="/assets/editorial-home.js?v=phui30"></script></body></html>'
+ return '<!doctype html><html lang="'+language+'" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta name="google-adsense-account" content="ca-pub-1752666987448533"><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/editorial.css?v=phui19"><link rel="stylesheet" href="/assets/polish.css?v=phui30"><script src="/assets/ui.js?v=phui30" defer></script></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/archive/">All News Archive</a></p><p><a href="/guides/maharashtra-mlc.html">Maharashtra Council explainer</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="/settings.html">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=phase1politics2"></script><script src="/assets/editorial-home.js?v=livepublish1"></script></body></html>'
 
 
 def _enhance_section_seo(document, category):
@@ -414,17 +469,88 @@ def db():
 
 def admin_ok():
  if recovery_session():return False
- if session.get("admin_user"):return True
+ if session.get("admin_user"):
+  if request.method in {"GET","HEAD"} and request.path.startswith("/api/news") and getattr(g,"admin_policy",None):return False
+  return True
  token=os.getenv("ADMIN_TOKEN",""); supplied=request.headers.get("X-Admin-Token",""); return bool(token and supplied and secrets.compare_digest(supplied,token))
+
+def resolve_admin_identity():
+ if not hasattr(g,'admin_permissions'):
+  username=session.get('admin_user')
+  stored_role=session.get('admin_role','owner')
+  if session.get('admin_verifier_tag'):
+   database=db()
+   try:
+    ph='%s' if database._postgres else '?'
+    row=database.conn.execute('SELECT role,password_hash FROM admin_users WHERE username='+ph,(username,)).fetchone()
+    from app.editorial_access import policy_for
+    g.admin_policy=policy_for(database,username)
+   finally:database.close()
+   if not row or row['role']=='disabled' or not secrets.compare_digest(verifier_tag(row['password_hash']),session['admin_verifier_tag']):
+    session.clear();return jsonify({'error':'Your account or password changed. Please sign in again.'}),401
+   stored_role=row['role']
+  # Legacy signed sessions retain operating access until expiry, but cannot
+  # hire or manage staff until a fresh database-authenticated login.
+  g.admin_permissions=role_permissions(username,stored_role)
+  if getattr(g,'admin_policy',None) and stored_role!='disabled':g.admin_permissions=g.admin_policy['permissions']
+  if not session.get('admin_verifier_tag') and 'users.manage' in g.admin_permissions:g.admin_permissions.remove('users.manage')
+  g.admin_role=effective_role(username,stored_role)
+  session['admin_role']=g.admin_role
+ return None
+
+@app.before_request
+def revalidate_staff_session():
+ if request.path.startswith('/api/') and session.get('admin_verifier_tag') and not recovery_session() and request.path not in {'/api/admin/login','/api/admin/logout'}:
+  return resolve_admin_identity()
+
 
 def require_admin():
  if recovery_session():
   if request.path=='/api/admin/workspace':return None
   return jsonify({'error':'This section needs a live database owner session. Recovery access is read-only.','code':'recovery_read_only'}),403
- return None if admin_ok() else (jsonify({"error":"admin authentication required"}),401)
+ if not admin_ok():return jsonify({"error":"admin authentication required"}),401
+ err=resolve_admin_identity()
+ if err:return err
+ permission=required_permission(request.path,request.method)
+ if permission not in g.admin_permissions:return jsonify({'error':'Your role does not permit this action.','permission':permission}),403
+ policy=getattr(g,'admin_policy',None)
+ if policy:
+  match=re.match(r'^/api/(?:news/|admin/(?:story/|studio/|editorial/story/))(\d+)(?:/|$)',request.path)
+  if match:
+   database=db()
+   try:
+    from app.editorial_access import allowed_story
+    if not allowed_story(database,int(match[1]),policy,session.get('admin_user')):return jsonify({'error':'This story is outside your assigned access.'}),403
+   finally:database.close()
+ return None
 def require_csrf():
  if not session.get("admin_user"):return None
  token=request.headers.get("X-CSRF-Token",""); expected=session.get("csrf_token",""); return None if token and expected and secrets.compare_digest(token,expected) else (jsonify({"error":"invalid CSRF token"}),403)
+
+from app.admin_team import register_team_routes
+register_team_routes(app,lambda:db(),require_admin,require_csrf)
+from app.live_publication import register_phone_public
+register_phone_public(app,lambda:db())
+from app.editorial_routes import register_editorial_routes
+register_editorial_routes(app,lambda:db(),require_admin,require_csrf,_public_rate_allowed)
+
+@app.get('/api/admin/diagnostics')
+@app.get('/api/admin/diagnostics.pdf')
+def admin_diagnosis():
+ err=require_admin()
+ if err:return err
+ if not _public_rate_allowed(4,60):return jsonify({'error':'Please wait before generating another diagnosis.'}),429
+ try:days=None if request.args.get('days','all')=='all' else max(1,min(int(request.args['days']),90))
+ except ValueError:return jsonify({'error':'Select all history or a period from 1 to 90 days.'}),400
+ from app.diagnostics import diagnosis,diagnosis_pdf
+ database=db()
+ try:payload=diagnosis(database,days,session.get('admin_user') or 'API administrator')
+ finally:database.close()
+ if request.path.endswith('.pdf'):
+  return Response(diagnosis_pdf(payload),mimetype='application/pdf',headers={
+   'Content-Disposition':'attachment; filename="politicshub-diagnosis-'+datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')+'.pdf"',
+   'Cache-Control':'private, no-store','X-Report-Generated-At':payload['generated_at']})
+ return jsonify(payload)
 
 def _strip_promo_nav(value):
  r=str(value or "")
@@ -449,7 +575,15 @@ def _public_title(title,source_text=""):
  return raw or quality_headline(title,source_text)
 
 def _publicize(row):
- r={k:v for k,v in dict(row).items() if not k.startswith(("instagram_","reel_cloudinary_"))}
+ from app.monetization import is_monetizable
+ ads_eligible=is_monetizable(dict(row))
+ # Public news documents use a positive projection. Unknown fields from old
+ # database schemas never become JSON/API fields, even for an admin request.
+ public_fields={"phone_public_id","public_revision","editorial_featured","editorial_featured_at","id","title","url","source_name","source_type","summary","bot_summary","bot_article",
+  "article","body","published_at","published_at_site","published_at_iso","category","status",
+  "image_url","image_source","image_license","image_credit","image_source_url","public_source",
+  "view_count","last_viewed_at","editorial_value","source_count","exam_region","exam_authority"}
+ r={k:v for k,v in dict(row).items() if k in public_fields}
  if not admin_ok():
   # Public readers may see the originating source and its public article URL.
   # Internal moderation, hashes and processing fields stay private.
@@ -463,7 +597,7 @@ def _publicize(row):
     r["published_at_iso"]=dt.astimezone(timezone.utc).isoformat().replace("+00:00","Z")
    except ValueError:pass
   source_text=_strip_promo_nav(dict(row).get("bot_article") or dict(row).get("bot_summary") or dict(row).get("summary") or "")
-  r["title"]=_public_title(r.get("title"),source_text)
+  r["title"]=plain_source_text(r.get("title")) if r.get("source_type")=="manual" else _public_title(r.get("title"),source_text)
   r["summary"]=plain_source_text(_strip_promo_nav(dict(row).get("bot_summary") or dict(row).get("summary") or ""))
   article_text=plain_source_text(_strip_promo_nav(source_text),paragraphs=True)
   article_text=re.sub(r"(?:\n|\s)*Why it matters:\s*$","",article_text,flags=re.I).strip()
@@ -475,6 +609,8 @@ def _publicize(row):
   r.pop("editorial_context",None)
   if "editorial_value" in r: r["editorial_value"]=bool(r.get("editorial_value"))
   if "source_count" in r: r["source_count"]=int(r.get("source_count") or 0)
+ r["news_number"]=news_number(dict(row))
+ r["ads_eligible"]=ads_eligible
  r["category"]=normalize_category(r.get("category"), r.get("title"), r.get("summary") or r.get("bot_summary") or "")
  score=story_score(r.get("title",""),r.get("summary",""),r.get("category") or "general",r.get("source_name") or "")
  r["news_score"]=score; r["is_breaking"]=is_breaking(r.get("title",""),r.get("summary",""),score)
@@ -572,7 +708,7 @@ def _slugify(value):
 def article_path(row):
  category=normalize_category(row.get("category"),row.get("title"),row.get("bot_summary") or row.get("summary") or "")
  category=CATEGORY_SLUGS.get(category,"india")
- return f"/{category}/{int(row['id'])}-{_slugify(row.get('title'))}"
+ return f"/{category}/{news_number(row)}"
 
 _archive_discovery_cache=(None,())
 _archive_discovery_until=0.0
@@ -608,8 +744,17 @@ def _archive_row(item_id,database=None):
  return row
 
 def _public_row_by_id(item_id):
+ from app.live_publication import lookup
+ handled,live=lookup(item_id)
+ if handled:return _publicize(live) if live else None
+ if os.getenv("VERCEL")=="1" or os.getenv("POLITICSHUB_GITHUB_FEED_ONLY")=="1":
+  revision=request.args.get('v') if request else None
+  if revision and re.fullmatch(r'[0-9a-f]{40}',revision):
+   from app.reviewed_delivery import reviewed_article
+   reviewed=reviewed_article(app.static_folder,item_id,revision)
+   if reviewed:return _publicize(reviewed)
  # Stable, content-addressed IDs for the Hindi RSS desk live outside Neon.
- for item in _hindi_rows():
+ for item in _hindi_rows()+_official_exam_rows():
   if str(item.get("id"))==str(item_id):return _publicize(item)
  try:
   database=db()
@@ -623,6 +768,10 @@ def _public_row_by_id(item_id):
   pass
  for item in _snapshot_rows("all"):
   if str(item.get("id"))==str(item_id):return _publicize(item)
+ if os.getenv("VERCEL")=="1" or os.getenv("POLITICSHUB_GITHUB_FEED_ONLY")=="1":
+  from app.reviewed_delivery import reviewed_article
+  reviewed=reviewed_article(app.static_folder,item_id)
+  if reviewed:return _publicize(reviewed)
  archived=_archive_row(item_id)
  if archived:return _publicize(archived)
  proxied=_proxy_public("/api/news/"+str(int(item_id)))
@@ -631,9 +780,11 @@ def _public_row_by_id(item_id):
 def _article_html(row):
  row=dict(row)
  indexable=is_indexable(row)
+ from app.monetization import is_monetizable
+ ads_eligible=(row["ads_eligible"] is True and indexable) if "ads_eligible" in row else is_monetizable(row)
  robots_meta = "" if indexable else '<meta name="robots" content="noindex,follow">'
- # Don't serve advertising scripts on pages containing only RSS headline excerpts.
- article_ad_code = ('<meta name="google-adsense-account" content="ca-pub-1752666987448533"><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1752666987448533" crossorigin="anonymous"></script>' if indexable else '')
+ # Search eligibility never substitutes for a recorded review of this copy.
+ article_ad_code = ('<meta name="google-adsense-account" content="ca-pub-1752666987448533"><script src="/assets/measurement.js?v=consent1" defer></script><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1752666987448533" crossorigin="anonymous"></script>' if ads_eligible else '')
  title=str(row.get("title") or "PoliticsHub.in"); category=str(row.get("category") or "India")
  canonical=SITE_ORIGIN+article_path(row)
  published=row.get("published_at_iso") or row.get("published_at_site") or row.get("published_at")
@@ -654,6 +805,8 @@ def _article_html(row):
   "mainEntityOfPage":{"@type":"WebPage","@id":canonical},"isAccessibleForFree":True
  }
  json_ld=json.dumps(data,ensure_ascii=False).replace("<", "\\u003c")
+ repeated_lead=re.sub(r"\s+"," ",body).strip()==re.sub(r"\s+"," ",summary).strip()
+ lead_html="" if repeated_lead else '<p class="dek">'+html.escape(summary)+'</p>'
  paras="".join(f"<p>{html.escape(p.strip())}</p>" for p in re.split(r"\n+",body) if p.strip())
  return f"""<!doctype html>
 <html lang="{language}"><head>
@@ -673,11 +826,11 @@ def _article_html(row):
 <link rel="stylesheet" href="/assets/polish.css?v=phui30"><script src="/assets/ui.js?v=phui30" defer></script><script src="/assets/share.js?v=phshare2" defer></script></head><body>
 <header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><div class="acts"><a class="ib" href="/" aria-label="Home">⌂</a><a class="ib" href="/about.html" aria-label="About">i</a></div></div></header>
 <main class="wrap"><article class="art" data-k="{html.escape(category.lower())}">
-<div class="ah"><span class="chip">{html.escape(category)}</span><h1>{html.escape(title)}</h1><p class="dek">{html.escape(summary)}</p>
-<div class="by"><span>By <a href="/author/politicshub-news-desk">{EDITORIAL_DESK}</a></span><time datetime="{html.escape(pub_iso,quote=True)}">{html.escape(str(published or ""))}</time><span>{html.escape(source)}</span></div></div>
+<div class="ah"><span class="chip">{html.escape(category)}</span><h1>{html.escape(title)}</h1>{lead_html}
+<div class="by"><small>News No. {html.escape(news_number(row))}</small><span>{"Reviewed by" if ads_eligible else "Compiled by"} <a href="/author/politicshub-news-desk">{EDITORIAL_DESK}</a></span><time datetime="{html.escape(pub_iso,quote=True)}">{html.escape(str(published or ""))}</time><span>{html.escape(source)}</span></div></div>
 {"<div class='ahero'><img src='"+html.escape(str(_public_image_path(row)),quote=True)+"' alt='"+html.escape(title,quote=True)+"' loading='eager'></div>" if _public_image_path(row) else ""}
 <div class="body">{paras}</div>
-{"<div class='src'><strong>Publisher excerpt:</strong> This page is a source-linked summary, not an independently reported PoliticsHub article. The original source link below contains the complete report.</div>" if not indexable else ""}
+{"<div class='src'><strong>Publisher excerpt:</strong> This page is a source-linked summary, not an independently reported PoliticsHub article. The original source link below contains the complete report.</div>" if not ads_eligible else ""}
 <div class="src"><strong>Source transparency:</strong> This is a source-linked brief prepared from the originating report. When multiple independent sources are available, PoliticsHub compares their reported details; otherwise no independent reporting claim is made.</div>
 <div class="src">Source: {html.escape(source)}. {"<a href='"+html.escape(source_url,quote=True)+"' rel='nofollow noopener noreferrer' target='_blank'>Read the original report</a>" if source_url else ""}</div>
 <button type="button" class="article-share" data-share-title="{html.escape(title,quote=True)}" data-share-url="{html.escape(canonical,quote=True)}" aria-haspopup="dialog"><span>↗</span><b>Share this story</b></button>
@@ -737,7 +890,7 @@ def security_headers(response):
  response.headers["Referrer-Policy"]="strict-origin-when-cross-origin"
  response.headers["Permissions-Policy"]="camera=(), microphone=(), geolocation=(), payment=(), usb=()"
  response.headers["Strict-Transport-Security"]="max-age=63072000; includeSubDomains; preload"
- response.headers["Content-Security-Policy"]="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://pagead2.googlesyndication.com https://www.google.com https://www.googletagmanager.com https://www.googleadservices.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; media-src 'self' https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://pagead2.googlesyndication.com https://googleads.g.doubleclick.net https://www.google.com https://www.googleadservices.com https://www.google-analytics.com https://region1.google-analytics.com https://www.googletagmanager.com; frame-src 'self' https://googleads.g.doubleclick.net https://tpc.googlesyndication.com; worker-src 'self'; upgrade-insecure-requests"
+ response.headers["Content-Security-Policy"]="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://fundingchoicesmessages.google.com https://www.gstatic.com https://tpc.googlesyndication.com https://pagead2.googlesyndication.com https://www.google.com https://www.googletagmanager.com https://www.googleadservices.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; media-src 'self' https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://fundingchoicesmessages.google.com https://www.google.com https://pagead2.googlesyndication.com https://googleads.g.doubleclick.net https://www.google.com https://www.googleadservices.com https://www.google-analytics.com https://region1.google-analytics.com https://www.googletagmanager.com; frame-src 'self' https://fundingchoicesmessages.google.com https://www.google.com https://googleads.g.doubleclick.net https://tpc.googlesyndication.com; worker-src 'self'; upgrade-insecure-requests"
  response.headers["Cross-Origin-Opener-Policy"]="same-origin"
  response.headers["Cross-Origin-Resource-Policy"]="same-origin"
  response.headers["X-Permitted-Cross-Domain-Policies"]="none"
@@ -751,6 +904,11 @@ def security_headers(response):
   response.headers["Cache-Control"]="no-store"
  elif request.method=="GET" and request.path.startswith("/api/") and "Cache-Control" not in response.headers:
   response.headers["Cache-Control"]="public, max-age=10, s-maxage=10, stale-while-revalidate=20"
+ from app.live_publication import enabled as live_public_enabled
+ if request.method in {'GET','HEAD'} and live_public_enabled() and (request.path.startswith('/api/news') or response.mimetype=='text/html'):
+  response.headers['Cache-Control']='no-store, max-age=0'
+  response.headers['Vercel-CDN-Cache-Control']='no-store'
+  response.headers['CDN-Cache-Control']='no-store'
  if response.status_code==429:
   response.headers["Retry-After"]="60"
  # Never let a logged-in browser populate a shared public HTML cache either.
@@ -804,7 +962,10 @@ def login():
    return jsonify({"error":"too many login attempts; try again later"}),429
   ph="%s" if database._postgres else "?"
   row=database.conn.execute("SELECT username,password_hash,role FROM admin_users WHERE username = "+ph,(username,)).fetchone()
-  valid=bool(row and check_password_hash(row["password_hash"] if database._postgres else row[1],password))
+  try:
+   valid=bool(row and row['role']!='disabled' and check_password_hash(row["password_hash"] if database._postgres else row[1],password))
+  except (ValueError,TypeError):
+   valid=False
   role=(row["role"] if database._postgres else row[2]) if row else None
   if not valid:
    _auth_failed(database,attempt_key)
@@ -812,7 +973,7 @@ def login():
    return jsonify({"error":"invalid username or password"}),401
   _auth_clear(database,attempt_key)
   _auth_clear(database,ip_attempt_key)
-  return _signed_in(username,role or 'owner')
+  return _signed_in(username,effective_role(username,role or 'owner'),verifier=row['password_hash'])
  except (DatabaseUnavailable,PostgresError):
   if verify_recovery_owner(username,password):return _signed_in(username,'recovery','recovery')
   return jsonify({'error':'invalid username or password'}),401
@@ -1056,12 +1217,35 @@ def public_status_page():return redirect("/#/settings/status",code=302)
 @app.get("/author/politicshub-news-desk")
 def author_page(): return _editorial_page("PoliticsHub News Desk","The PoliticsHub Editorial Desk publishes and edits newsroom stories, source links and public corrections.","author")
 
+def _resolve_news_id(value):
+ row=public_archive.by_id(value)
+ if row:return int(row['id'])
+ # Stop at the first matching feed: avoid unnecessary Hindi/official-source
+ # network reads when the story already exists in the public news snapshot.
+ for load_rows in (lambda: _snapshot_rows('all'), _hindi_rows, _official_exam_rows):
+  for row in load_rows():
+   if str(row.get('id'))==str(value) or news_number(row)==str(value):return int(row['id'])
+ try:
+  database=db()
+  try:
+   matches=[int(r['id']) for r in database.conn.execute('SELECT id FROM news_items').fetchall() if news_number(dict(r))==str(value)]
+   if len(matches)==1:return matches[0]
+  finally:database.close()
+ except RuntimeError:pass
+ return int(value)
+
 @app.get("/api/seo-article/<category>/<int:item_id>-<slug>")
 @app.get("/<category>/<int:item_id>-<slug>")
-def seo_article(category,item_id,slug):
+@app.get("/api/seo-article/<category>/<int:item_id>")
+@app.get("/<category>/<int:item_id>")
+def seo_article(category,item_id,slug=None):
+ revision=request.args.get('v','')
+ if re.fullmatch(r'[0-9a-f]{40}',revision) and not _public_rate_allowed(60,60):
+  return Response('Please retry shortly',status=429,headers={'Retry-After':'60','Cache-Control':'no-store'})
  category=category.lower()
  if category not in set(CATEGORY_SLUGS.values()):
   return jsonify({"error":"not found"}),404
+ item_id=_resolve_news_id(item_id)
  row=_public_row_by_id(item_id)
  if not row:
   # During a database outage, historical items absent from the bounded
@@ -1078,8 +1262,11 @@ def seo_article(category,item_id,slug):
     '<a href="/">Back to latest news</a></body></html>')
    return Response(message,status=503,mimetype="text/html",headers={"Retry-After":"300","Cache-Control":"no-store"})
   return jsonify({"error":"not found"}),404
- canonical_path=article_path(row); requested=f"/{category}/{item_id}-{slug}"
- if requested.rstrip("/")!=canonical_path.rstrip("/"):return redirect(SITE_ORIGIN+canonical_path,code=301)
+ canonical_path=article_path(row); requested=request.path.removeprefix("/api/seo-article")
+ if requested.rstrip("/")!=canonical_path.rstrip("/"):
+  target=SITE_ORIGIN+canonical_path
+  if re.fullmatch(r'[0-9a-f]{40}',revision):target+='?v='+revision
+  return redirect(target,code=301)
  return Response(_article_html(row),mimetype="text/html",headers={"Cache-Control":"public,max-age=60,s-maxage=180"})
 
 @app.post("/api/admin/logout")
@@ -1089,7 +1276,11 @@ def logout():
  session.clear(); return jsonify({"ok":True})
 
 @app.get("/api/admin/me")
-def me():return jsonify({"authenticated":bool(session.get("admin_user")),"username":session.get("admin_user"),"role":session.get("admin_role"),"scope":session.get('admin_scope','owner'),"read_only":recovery_session(),"expires_at":session.get('admin_expires_at'),"csrf_token":session.get("csrf_token") if session.get("admin_user") else None})
+def me():
+ if session.get('admin_user') and not recovery_session():
+  err=require_admin()
+  if err:return err
+ return jsonify({"authenticated":bool(session.get("admin_user")),"username":session.get("admin_user"),"role":session.get("admin_role"),"permissions":getattr(g,'admin_permissions',[]),"scope":session.get('admin_scope','owner'),"read_only":recovery_session(),"expires_at":session.get('admin_expires_at'),"csrf_token":session.get("csrf_token") if session.get("admin_user") else None})
 
 
 @app.get('/api/admin/workspace')
@@ -1097,39 +1288,64 @@ def admin_workspace():
  err=require_admin()
  if err:return err
  if not _public_rate_allowed(30,60):return jsonify({'error':'Workspace refresh limit reached. Please wait.'}),429
- started=time.monotonic(); database=None; connected=False; stats={}; settings={}; activity=[]
+ started=time.monotonic(); database=None; connected=False; stats={}; settings={}; activity=[]; latest_collected=None; latest_published=None; inventory=None; operations=None; alerts=None
  try:
   database=db(); connected=True
   if not recovery_session():
    # Transfer a bounded projection, never 200 complete articles per refresh.
    fields=','.join(ADMIN_LIST_FIELDS)
-   raw=database.conn.execute(f"SELECT {fields},LENGTH(COALESCE(bot_article,'')) AS article_length FROM news_items ORDER BY id DESC LIMIT 200").fetchall()
-   counts=database.conn.execute("SELECT COUNT(*) AS total,COALESCE(SUM(CASE WHEN status='published' THEN 1 ELSE 0 END),0) AS published,COALESCE(SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END),0) AS pending,COALESCE(SUM(CASE WHEN fact_check_status='needs_review' THEN 1 ELSE 0 END),0) AS review_needed FROM news_items").fetchone()
+   from app.editorial_access import scope_sql
+   restriction,scope_args=scope_sql(database,getattr(g,'admin_policy',None),session.get('admin_user'))
+   scope_where=' WHERE '+restriction if restriction else ''
+   raw=database.conn.execute(f"SELECT {fields},LENGTH(COALESCE(bot_article,'')) AS article_length FROM news_items{scope_where} ORDER BY id DESC LIMIT 200",scope_args).fetchall()
+   counts=database.conn.execute("SELECT COUNT(*) AS total,COALESCE(SUM(CASE WHEN status='published' THEN 1 ELSE 0 END),0) AS published,COALESCE(SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END),0) AS pending,COALESCE(SUM(CASE WHEN fact_check_status='needs_review' THEN 1 ELSE 0 END),0) AS review_needed,MAX(collected_at) AS latest_collected_at,MAX(CASE WHEN status='published' THEN COALESCE(NULLIF(published_at_site,''),published_at) END) AS latest_published_at FROM news_items"+scope_where,scope_args).fetchone()
    stats={key:int(counts[key]) for key in ('total','published','pending','review_needed')}
+   latest_collected=counts['latest_collected_at']; latest_published=counts['latest_published_at']
    settings=database.get_settings()
-   activity=[dict(row) for row in database.recent_activity(8)]
+   activity=[dict(row) for row in database.recent_activity(8)] if 'activity.read' in getattr(g,'admin_permissions',[]) else []
    rows=admin_project_rows(raw)
+   inventory=source_inventory(database,where=scope_where,params=scope_args)
+   if 'operations.read' in getattr(g,'admin_permissions',[]):
+    try:
+     operations=publication_operations(database,where=scope_where,params=scope_args)
+    except Exception:
+     # Optional read-only history can fail on older phone schemas; never
+     # turn an otherwise working authenticated workspace into a 503.
+     operations={'scope':'unavailable','error':'Private publication history unavailable'}
+    try:
+     alerts=newsroom_alerts(database,inventory,where=scope_where,params=scope_args)
+    except Exception:
+     # Older phone versions can lack the Phase 4 collector history table.
+     # Fail closed rather than fabricate incident counts or expose SQL errors.
+     alerts={'scope':'unavailable','status':'unavailable','note':'Private operational alerts unavailable'}
  except (DatabaseUnavailable,PostgresError):
   connected=False
  finally:
   if database:database.close()
  snapshot=not connected or recovery_session()
  if snapshot:
-  rows=admin_project_rows(sorted(_snapshot_rows(),key=_public_timestamp,reverse=True)[:200],snapshot=True)
+  snapshot_rows=sorted(_snapshot_rows(),key=_public_timestamp,reverse=True)
+  rows=admin_project_rows(snapshot_rows[:200],snapshot=True)
+  inventory=source_inventory(rows=snapshot_rows)
   stats={'total':None,'published':len(rows),'pending':None,'review_needed':None}
  now=datetime.now(timezone.utc)
- latest=max((r['timestamp'] for r in rows if r['timestamp'] is not None),default=None)
+ latest=(_public_timestamp({'published_at':latest_published}) or None) if connected and not recovery_session() else max((r['timestamp'] for r in rows if r['timestamp'] is not None),default=None)
  writable=connected and not recovery_session()
  return jsonify({'version':2,'generated_at':now.isoformat(),'mode':'snapshot' if snapshot else 'live',
-   'data_origin':'termux_github' if os.getenv("VERCEL")=="1" or os.getenv("POLITICSHUB_GITHUB_FEED_ONLY")=="1" else 'local_database',
-  'access':{'username':session.get('admin_user') or 'API token','scope':'recovery' if recovery_session() else 'owner','read_only':not writable,'expires_at':session.get('admin_expires_at')},
-  'capabilities':{'publish':writable,'settings':writable,'telemetry':writable,'export':True},
+   'data_origin':'termux_database' if writable and os.getenv('POLITICSHUB_LOCAL_ADMIN')=='1' else 'termux_github' if os.getenv("VERCEL")=="1" or os.getenv("POLITICSHUB_GITHUB_FEED_ONLY")=="1" else 'local_database',
+  'access':{'username':session.get('admin_user') or 'API token','role':getattr(g,'admin_role','recovery'),'policy':getattr(g,'admin_policy',None),'permissions':getattr(g,'admin_permissions',[]),'scope':'recovery' if recovery_session() else 'owner','read_only':not writable,'expires_at':session.get('admin_expires_at')},
+  'capabilities':{'publish':writable and 'news.publish' in getattr(g,'admin_permissions',[]),'settings':writable and 'settings.manage' in getattr(g,'admin_permissions',[]),'telemetry':writable and 'operations.read' in getattr(g,'admin_permissions',[]),'export':True},
   'health':{'database':'connected' if connected else 'unavailable','snapshot_available':bool(rows) if snapshot else None,
    'latest_published_at':datetime.fromtimestamp(latest,timezone.utc).isoformat() if latest else None,
    'latest_age_seconds':max(0,int(now.timestamp()-latest)) if latest else None,
+   'latest_collected_at':latest_collected,
    'response_ms':round((time.monotonic()-started)*1000),'reauthenticate':connected and recovery_session()},
-  'stats':stats,'settings':settings,'activity':activity,'stories':rows,'coverage':admin_coverage(rows),
-  'limits':{'stories':200,'coverage_scope':'loaded stories','refresh_seconds':60},
+  'stats':stats,'settings':settings,'activity':activity,'stories':rows,
+  'coverage':admin_coverage(rows),'source_inventory':inventory,
+  'source_triage':source_triage(inventory),
+  'newsroom_operations':operations if operations is not None else {'scope':'unavailable','note':'Private publication metrics are not available in this session.'},
+  'newsroom_alerts':alerts if alerts is not None else {'scope':'unavailable','status':'unavailable','note':'Private operations access or a connected phone is required.'},
+  'limits':{'stories':200,'coverage_scope':'loaded stories','source_inventory_scope':inventory['scope'],'refresh_seconds':60},
   'notice':('Termux is the primary news database. This website reads the published GitHub feed; editorial changes happen on the phone.' if os.getenv("VERCEL")=="1" else
    'Database restored. Sign out and sign in again for owner access.' if connected and recovery_session() else
    'Database unavailable. Showing the latest public snapshot; editorial changes are paused.' if snapshot else '')})
@@ -1149,9 +1365,15 @@ def admin_story_queue():
  database=db()
  try:
   ph='%s' if database._postgres else '?'; clauses=[]; params=[]
+  from app.editorial_access import scope_sql
+  restriction,scope_args=scope_sql(database,getattr(g,'admin_policy',None),session.get('admin_user'))
+  if restriction:clauses.append(restriction);params.extend(scope_args)
   for key,column in (('category','category'),('source','source_name'),('status','status'),('review','fact_check_status')):
    if filters[key]!='all':clauses.append(f'{column}={ph}');params.append(filters[key])
-  if query:
+  if query.isdigit():
+   archived=public_archive.by_id(query)
+   clauses.append(f'id={ph}'); params.append(int(archived['id']) if archived else _resolve_news_id(query))
+  elif query:
    clauses.append(f'(LOWER(title) LIKE LOWER({ph}) OR LOWER(COALESCE(summary,bot_summary,\'\')) LIKE LOWER({ph}) OR LOWER(source_name) LIKE LOWER({ph}))')
    params.extend([f'%{query}%']*3)
   quality="(COALESCE(NULLIF(bot_summary,''),summary,'')='' OR COALESCE(image_url,'')='' OR COALESCE(url,'')='' OR COALESCE(bot_article,'')='' OR fact_check_status='needs_review')"
@@ -1162,7 +1384,13 @@ def admin_story_queue():
   count=database.conn.execute('SELECT COUNT(*) AS total FROM news_items'+where,tuple(params)).fetchone()['total']
   fields=','.join(ADMIN_LIST_FIELDS)
   raw=database.conn.execute(f"SELECT {fields},LENGTH(COALESCE(bot_article,'')) AS article_length FROM news_items{where} ORDER BY {order} LIMIT {ph} OFFSET {ph}",(*params,25,(page-1)*25)).fetchall()
-  return jsonify({'stories':admin_project_rows(raw),'total':int(count),'page':page,'page_size':25,'mode':'live'})
+  projected=admin_project_rows(raw)
+  if not projected and query.isdigit() and page==1:
+   archived=public_archive.by_id(query)
+   if archived and not database.archive_overrides([archived]) and not restriction:
+    projected=admin_project_rows([archived],snapshot=True)
+    projected[0]['archived']=True; count=1
+  return jsonify({'stories':projected,'total':int(count),'page':page,'page_size':25,'mode':'live'})
  finally:database.close()
 
 @app.get("/api/health")
@@ -1207,6 +1435,17 @@ def public_hindi_feed():
  response.headers["Cache-Control"]="public, max-age=60, s-maxage=300"
  return response
 
+@app.get('/api/news/version')
+def public_publication_version():
+ if not _public_rate_allowed(90,60):return jsonify({'error':'Please retry shortly'}),429
+ from app.live_publication import enabled,signed_read
+ if enabled():
+  try:
+   data,status=signed_read('/api/phone-public/version')
+   if status==200:return jsonify({'version':data.get('publication_version')}),200,{'Cache-Control':'no-store'}
+  except Exception:pass
+ return jsonify({'version':None}),200,{'Cache-Control':'no-store'}
+
 @app.get("/api/news")
 @app.get("/api/admin/news")
 def news():
@@ -1224,7 +1463,9 @@ def news():
  except Exception:
   # When the database is unavailable, publish only a valid saved snapshot.
   rows=_snapshot_rows(category,search)
-  if not rows:return jsonify({"error":"news backend unavailable"}),503
+  # A category or search can have zero matches while the snapshot is healthy.
+  if not rows and not _snapshot_rows("all"):
+   return jsonify({"error":"news backend unavailable"}),503
   rows=_rank_public(rows,threshold=0.78)
   payload=rows_json(rows[:limit],compact=compact)
   if not admin_ok():
@@ -1232,17 +1473,20 @@ def news():
     for key in ("article","bot_article","bot_summary"):item.pop(key,None)
   response=jsonify(payload)
   response.headers["X-News-Mode"]="snapshot"
-  response.headers["Cache-Control"]="public, max-age=15, s-maxage=60, stale-while-revalidate=120"
+  response.headers["Cache-Control"]="public, max-age=5, s-maxage=10, stale-while-revalidate=15"
   return response
  try:
   public_listing=not admin_ok()
   if public_listing:
    # Listing cards never need the full editorial article/AI fields.
-   records=database.latest_public(max(limit*3,limit),"all" if category in ("india","entertainment") else category,search)
+   records=database.latest_public(max(limit*6,limit),"all" if category in ("india","entertainment","politics") else category,search)
   else:
    records=database.latest(max(limit*6,limit),"all" if category in ("india","entertainment") else category,status,search,review)
+  if getattr(g,'admin_policy',None):
+   from app.editorial_access import allowed_story
+   records=[row for row in records if allowed_story(database,row['id'],g.admin_policy,session.get('admin_user'))]
   rows=_rank_public(records,threshold=0.78)
-  if category!="all":rows=[x for x in rows if x.get("category")==category]
+  if category!="all":rows=[x for x in rows if (_matches_public_desk(x,category) if public_listing else x.get("category")==category)]
   # A healthy database is authoritative; never resurrect removed stories.
   payload=rows_json(rows[:limit],compact=compact)
   if public_listing:
@@ -1256,6 +1500,25 @@ def news():
    response.headers["Cache-Control"]="public, max-age=30, s-maxage=600, stale-while-revalidate=300"
   return response
  finally:database.close()
+
+@app.get('/api/library')
+def public_library_counts():
+ from app.library import counts
+ result=counts(public_archive.rows(),_snapshot_rows('all'),_hindi_rows(),_official_exam_rows(),_discovery_row)
+ result['checked_at']=datetime.now(timezone.utc).isoformat()
+ return jsonify(result),200,{'Cache-Control':'public,max-age=60,s-maxage=300'}
+
+@app.get('/library/')
+def public_library_page():return send_from_directory(app.static_folder,'library/index.html')
+
+@app.get('/exams/')
+def official_exams_page():return send_from_directory(app.static_folder,'exams/index.html')
+
+@app.get('/api/exams')
+def official_exams_api():
+ payload=_official_exam_payload()
+ if payload is None:return jsonify({'items':[],'sources':[],'notice':'Official notice collection has not completed.'}),503
+ return jsonify(payload),200,{'Cache-Control':'public,max-age=60,s-maxage=300'}
 
 @app.get("/api/search")
 def public_search():
@@ -1282,6 +1545,7 @@ def public_search():
   rows=_snapshot_rows("all",q)+_archive_rows(search=q)
  finally:
   if database is not None:database.close()
+ rows+=matching_news(_hindi_rows()+_official_exam_rows(),q)
  # Deduplicate identities, not similar headlines across different news dates.
  unique=[]; ids=set(); urls=set()
  for row in rows:
@@ -1292,7 +1556,7 @@ def public_search():
   if source and str(row.get("source_name") or row.get("source") or "").casefold()!=source:continue
   if cutoff and _public_timestamp(row)<cutoff:continue
   unique.append(row)
- unique.sort(key=lambda row:(public_archive.timestamp(row),int(row["id"])),reverse=True)
+ unique.sort(key=lambda row:(search_relevance(row,q),public_archive.timestamp(row),int(row["id"])),reverse=True)
  payload=rows_json(unique[offset:offset+limit])
  if not admin_ok():
   for item in payload:
@@ -1348,10 +1612,22 @@ def article_view(item_id):
 
 @app.get("/api/news/<int:item_id>")
 def article(item_id):
+ if not _public_rate_allowed(120,60):return jsonify({"error":"rate limit exceeded"}),429
+ from app.live_publication import lookup
+ handled,live=lookup(item_id)
+ if handled:return (jsonify(_publicize(live)),200) if live else (jsonify({"error":"not found"}),404)
+ item_id=_resolve_news_id(item_id)
  try:database=db()
  except RuntimeError:
-  snapshot=next((x for x in _snapshot_rows("all") if str(x.get("id"))==str(item_id)),None)
+  snapshot=next((x for x in _snapshot_rows("all")+_official_exam_rows() if str(x.get("id"))==str(item_id)),None)
+  if not snapshot:
+   # Hindi headlines use a separately validated published feed independent of Neon.
+   snapshot=next((x for x in _hindi_rows() if str(x.get("id"))==str(item_id)),None)
   if snapshot:return jsonify(_publicize(snapshot))
+  if os.getenv("VERCEL")=="1" or os.getenv("POLITICSHUB_GITHUB_FEED_ONLY")=="1":
+   from app.reviewed_delivery import reviewed_article
+   reviewed=reviewed_article(app.static_folder,item_id)
+   if reviewed:return jsonify(_publicize(reviewed))
   archived=_archive_row(item_id)
   if archived:return jsonify(_publicize(archived))
   proxied=_proxy_public("/api/news/"+str(item_id))
@@ -1360,6 +1636,8 @@ def article(item_id):
   row=database.get_by_id(item_id,"all")
   if row and (row["status"]=="published" or admin_ok()):return jsonify(_publicize(row))
   if row is None:
+   hindi=next((x for x in _hindi_rows() if str(x.get("id"))==str(item_id)),None)
+   if hindi:return jsonify(_publicize(hindi))
    archived=_archive_row(item_id,database)
    if archived:return jsonify(_publicize(archived))
   return jsonify({"error":"not found"}),404
@@ -1550,71 +1828,166 @@ def change(item_id,status=None,**extra):
  if err:return err
  err=require_csrf()
  if err:return err
+ if status=="published":return _verify_and_publish(item_id)
  database=db()
  try:
-  fields=dict(extra);
+  fields=dict(extra)
   existing=database.get_by_id(item_id)
   if not existing:return jsonify({'error':'story not found'}),404
-  if status=="published":
-   if existing and existing["source_type"]=="x" and existing["fact_check_status"]!="reviewed":
-    return jsonify({"error":"X post needs source and context review before publishing"}),409
-   if os.getenv("POLITICSHUB_LOCAL_ADMIN")=="1":
-    # Explicit verification is required before making a phone story public.
-    row=dict(existing)
-    if row.get("status")=="published":return jsonify({"error":"Story is already published"}),409
-    if not row.get("approved_at") or str(row.get("fact_check_status") or "").lower() not in {"reviewed","verified","passed","approved"}:
-     return jsonify({"error":"Verify and approve this story before publishing"}),409
-    if not bool(row.get("public_source")) or len((row.get("bot_article") or "").strip())<600:
-     return jsonify({"error":"Public source and a complete article are required"}),409
-    from scripts.mobile_editorial_approve import parse_published,MAX_AGE
-    original=parse_published(row.get("published_at") or row.get("published_at_site"))
-    now=datetime.now(timezone.utc)
-    if original is None or now-original>MAX_AGE or original>now+timedelta(minutes=30):
-     return jsonify({"error":"Old/future-dated news cannot be published as breaking news"}),409
-    fields["published_at_site"]=str(row.get("published_at") or row.get("published_at_site"))
   if status is not None:fields["status"]=status
-  database.update(item_id,**fields); log_admin(database,"news.update",item_id,",".join(fields.keys())); return jsonify({"ok":True,**fields})
+  database.update(item_id,**fields)
+  log_admin(database,"news.update",item_id,",".join(fields.keys()))
+  return jsonify({"ok":True,**fields})
  finally:database.close()
+
+
+def _verify_and_publish(item_id):
+ """An authenticated editor's Verify action is the publication decision.
+
+ No corroboration/originality is inferred from the click. Source briefs remain
+ readable without ads, and source timestamps are never refreshed to make old
+ reporting look new. Row locking makes approval+publication one durable action.
+ """
+ data=request.get_json(silent=True) or {}
+ expected=request.headers.get("If-Match","").strip('"') or str(data.get("revision") or "")
+ database=db()
+ changed=False
+ try:
+  ph="%s" if database._postgres else "?"
+  with database.conn.transaction() if database._postgres else database.conn:
+   if not database._postgres:database.conn.execute("BEGIN IMMEDIATE")
+   lock=" FOR UPDATE" if database._postgres else ""
+   row=database.conn.execute("SELECT * FROM news_items WHERE id="+ph+lock,(item_id,)).fetchone()
+   if not row:return jsonify({"error":"Story not found"}),404
+   current=dict(row)
+   if expected and expected!=editorial_revision(current):
+    return jsonify({"error":"This story changed. Refresh the story before verifying.","code":"story_changed"}),409
+   if (current.get("status")!="published" or not current.get("approved_at")
+       or current.get("fact_check_status")!="reviewed"):
+    title=str(current.get("title") or "").strip()
+    summary=str(current.get("bot_summary") or current.get("summary") or "").strip()
+    article=str(current.get("bot_article") or current.get("article") or summary).strip()
+    source_url=str(current.get("url") or "").strip()
+    try:
+     parsed=urlsplit(source_url)
+     public_url=parsed.scheme=="https" and bool(parsed.hostname) and not parsed.username and not parsed.password
+    except ValueError:public_url=False
+    from app.live_publication import source_withheld
+    if source_withheld(source_url):return jsonify({"error":"This source is under editorial review and cannot be republished. Use a current reporting source.","code":"source_withheld"}),409
+    if not current.get("public_source") or not public_url:
+     return jsonify({"error":"A public HTTPS source is required before publication.","code":"source_unavailable"}),409
+    if not title or not plain_source_text(article):
+     return jsonify({"error":"No readable story text is available. Process or edit this story first.","code":"content_unavailable"}),409
+    # Match the public export contract without inventing source copy. A
+    # missing excerpt uses existing article text; missing credit uses its host.
+    if len(title)>500:return jsonify({"error":"Headline must be at most 500 characters","code":"headline_too_long"}),409
+    summary=plain_source_text(summary or article)[:6000].strip()
+    source_name=str(current.get("source_name") or "").strip() or parsed.hostname
+    from scripts.mobile_editorial_approve import parse_published
+    original=None
+    for value in (current.get("published_at"),current.get("published_at_site")):
+     original=parse_published(value)
+     if original is None and value:
+      try:
+       legacy=datetime.fromisoformat(str(value).replace("Z","+00:00"))
+       original=legacy.replace(tzinfo=legacy.tzinfo or timezone.utc)
+      except (ValueError,TypeError):pass
+     if original is not None:break
+    stamp=datetime.now(timezone.utc)
+    if original and original>stamp+timedelta(minutes=30):
+     return jsonify({"error":"The source publication time is in the future. Correct it before publishing.","code":"future_source_date"}),409
+    # Existing full-copy editorial evidence is preserved only when it still
+    # matches this copy. A normal Verify click never manufactures such proof.
+    from app.monetization import is_monetizable
+    genuine_review=is_monetizable(dict(current,status="published"))
+    notes=(current.get("fact_check_notes") if genuine_review else
+      "Editor approved publication in the Admin Room. Independent corroboration and originality were not recorded by this action.")
+    approved=current.get("approved_at") if genuine_review else stamp.isoformat()
+    published=(original.isoformat() if original else current.get("published_at_site") or stamp.isoformat())
+    database.conn.execute(
+     f"UPDATE news_items SET status={ph},fact_check_status={ph},fact_check_notes={ph},approved_at={ph},published_at_site={ph},bot_summary={ph},bot_article={ph},source_name={ph} WHERE id={ph}",
+     ("published","reviewed",notes,approved,published,summary,article,source_name,item_id))
+    database.conn.execute(
+     "INSERT INTO admin_activity (username,action,item_id,details,created_at) VALUES ("+",".join([ph]*5)+")",
+     (session.get("admin_user") or "API token","news.verify_publish",item_id,"Editor verified and published this story in one action",stamp.isoformat()))
+    current.update(status="published",fact_check_status="reviewed",fact_check_notes=notes,
+      approved_at=approved,published_at_site=published,bot_summary=summary,bot_article=article,source_name=source_name)
+    changed=True
+  telemetry_recorded=None
+  if changed:
+   try:
+    from app.advanced_system import record_editorial_publication
+    record_editorial_publication(database,current)
+    telemetry_recorded=True
+   except Exception as exc:
+    # Metrics cannot undo the already-committed editorial decision.
+    print("Editorial publication telemetry unavailable: "+type(exc).__name__)
+    telemetry_recorded=False
+  try:
+   from app.phone_publication import deliver_publication
+   delivery=deliver_publication(item_id,database=database)
+  except Exception as exc:
+   print("Publication delivery unavailable: "+type(exc).__name__)
+   delivery={"state":"failed","code":"delivery_unavailable"}
+  return jsonify({"ok":True,"id":item_id,"status":"published","fact_check_status":current.get("fact_check_status"),
+    "changed":changed,"url":SITE_ORIGIN+article_path(current),"telemetry_recorded":telemetry_recorded,"public_delivery":delivery})
+ finally:database.close()
+
 
 @app.post("/api/news/<int:item_id>/approve")
 def approve(item_id):
- if os.getenv("POLITICSHUB_LOCAL_ADMIN")!="1":
-  return change(item_id,fact_check_status="reviewed",approved_at=datetime.now(timezone.utc).isoformat())
  err=require_admin()
  if err:return err
  err=require_csrf()
  if err:return err
- data=request.get_json(silent=True) or {}
- if data.get("confirm")!="APPROVE "+str(item_id) or data.get("confirmed_facts") is not True or data.get("confirmed_originality") is not True:
-  return jsonify({"error":"Exact story confirmation and independent verification required"}),400
- from scripts.mobile_editorial_approve import check_evidence,review_eligibility
- links=data.get("evidence_urls")
- notes=str(data.get("notes") or "").strip()
- if not isinstance(links,list) or len(links)>6 or any(not isinstance(link,str) for link in links) or not 40<=len(notes)<=4000:
-  return jsonify({"error":"Provide independent evidence URLs and substantive editorial notes"}),400
- database=db()
- try:
-  with database.conn.transaction():
-   row=database.conn.execute("SELECT * FROM news_items WHERE id=%s FOR UPDATE",(item_id,)).fetchone()
-   if not row:return jsonify({"error":"Story not found"}),404
-   current=dict(row)
-   issues=review_eligibility(current)
-   _,errors=check_evidence(current,links)
-   if issues or errors:return jsonify({"error":"Approval blocked: "+"; ".join(issues+errors)}),409
-   stamp=datetime.now(timezone.utc).isoformat()
-   result=database.conn.execute(
-    "UPDATE news_items SET fact_check_status=%s,fact_check_notes=%s,approved_at=%s WHERE id=%s AND status=%s AND approved_at IS NULL",
-    ("reviewed","Human verified at "+stamp+". Evidence: "+"; ".join(links)+". Notes: "+notes,stamp,item_id,"pending"))
-   if result.rowcount!=1:return jsonify({"error":"Approval conflict; reopen story"}),409
-   database.conn.execute(
-    "INSERT INTO admin_activity (username,action,item_id,details,created_at) VALUES (%s,%s,%s,%s,%s)",
-    (session.get("admin_user"),"news.approve",item_id,"Verified source/context/originality on phone",stamp))
-  return jsonify({"ok":True,"id":item_id,"status":"pending","fact_check_status":"reviewed"})
- finally:database.close()
+ return _verify_and_publish(item_id)
+
 @app.post("/api/news/<int:item_id>/reject")
 def reject(item_id):return change(item_id,status="rejected")
+
 @app.post("/api/news/<int:item_id>/publish")
-def publish(item_id):return change(item_id,status="published",published_at_site=datetime.now(timezone.utc).isoformat())
+def publish(item_id):
+ # Compatibility for an already-open Admin Room using the previous endpoint.
+ return approve(item_id)
+
+@app.get('/api/admin/archive/search')
+def search_archived_story():
+ if not session.get('admin_user'):return jsonify({'error':'Sign in required'}),401
+ if not recovery_session():
+  err=require_admin()
+  if err:return err
+ number=str(request.args.get('number','')).strip()
+ row=public_archive.by_id(number) if number.isdigit() else None
+ rows=admin_project_rows([row],snapshot=True) if row else []
+ if rows:rows[0]['archived']=True
+ return jsonify({'stories':rows,'total':len(rows)})
+
+@app.post('/api/admin/archive/restore')
+def restore_archived_story():
+ err=require_admin()
+ if err:return err
+ err=require_csrf()
+ if err:return err
+ if getattr(g,'admin_policy',None) and (getattr(g,'admin_policy')['categories'] or getattr(g,'admin_policy').get('own_only')):
+  return jsonify({'error':'Archive restoration requires unrestricted owner access'}),403
+ body=request.get_json(silent=True) or {}
+ row=public_archive.by_id(str(body.get('number','')))
+ if not row:return jsonify({'error':'Archived story not found'}),404
+ database=db()
+ try:
+  existing=database.archive_overrides([row])
+  if existing:return jsonify({'error':'A live version already exists; search its number instead'}),409
+  from app.normalize import normalize_url,fingerprint
+  normalized=normalize_url(row['url']); url_hash,title_hash=fingerprint(normalized,row['title'])
+  record={key:row.get(key) for key in public_archive.FIELDS if key not in {'legacy_ids','news_number','phone_public_id','canonical_public_id','editorial_featured','editorial_featured_at'}}
+  record.update(normalized_url=normalized,url_hash=url_hash,title_hash=title_hash,
+   collected_at=datetime.now(timezone.utc).isoformat(),status='published',fact_check_status='pending',external_id='archive-restored:'+str(row['id']))
+  ph='%s' if database._postgres else '?'
+  database.conn.execute('INSERT INTO news_items ('+','.join(record)+') VALUES ('+','.join([ph]*len(record))+')',tuple(record.values()))
+  if not database._postgres:database.conn.commit()
+  log_admin(database,'archive.restore',row['id'],'Restored public copy for editing; no verification inferred')
+  return jsonify({'ok':True,'id':row['id'],'news_number':news_number(row)})
+ finally:database.close()
 
 @app.post("/api/admin/news/create")
 def create_manual_story():
@@ -1624,6 +1997,8 @@ def create_manual_story():
  if err:return err
  body=request.get_json(silent=True)
  if not isinstance(body,dict):return jsonify({"error":"JSON body required"}),400
+ publish_now=body.get("publish_now") is True
+ if publish_now and "news.publish" not in getattr(g,"admin_permissions",[]):return jsonify({"error":"Your role cannot publish stories."}),403
  title=str(body.get("title") or "").strip()
  summary=str(body.get("summary") or "").strip()
  article=str(body.get("article") or "").strip()
@@ -1639,7 +2014,7 @@ def create_manual_story():
   return jsonify({"error":"Select a supported news desk"}),400
  from urllib.parse import urlsplit
  src=urlsplit(original)
- if src.scheme!="https" or not src.hostname or src.username or len(original)>2000:
+ if src.scheme!="https" or not src.hostname or src.username or len(original)>2000 or not public_http_url(original):
   return jsonify({"error":"A valid HTTPS reporting/source URL is required"}),400
  if image:
   parsed=urlsplit(image)
@@ -1656,6 +2031,10 @@ def create_manual_story():
  unique=str(uuid.uuid4())
  normalized=reference+"#manual-"+unique
  url_hash,title_hash=fingerprint(normalized,title)
+ # Manual articles have their own identity even when they cite the same report.
+ # fingerprint() normalizes away fragments, so hash the manual UUID explicitly.
+ import hashlib
+ url_hash=hashlib.sha256(normalized.encode()).hexdigest()
  database=db()
  try:
   ph="%s" if database._postgres else "?"
@@ -1664,28 +2043,47 @@ def create_manual_story():
         "collected_at","category","image_url","public_source","bot_summary",
         "bot_article","image_source","image_license","image_credit","image_source_url",
         "fact_check_status","status")
+  policy=getattr(g,"admin_policy",None)
+  if policy and policy["categories"] and category not in policy["categories"]:return jsonify({"error":"That desk is outside your assigned access."}),403
   params=(source,"manual",title,original,normalized,now,summary,
           "manual-"+unique,url_hash,title_hash,now,category,image,1,summary,
           article,"article-source" if image else "",image_license,image_credit,
           image if image else "","pending","pending")
-  with database.conn.transaction() if database._postgres else __import__("contextlib").nullcontext():
-   if database._postgres:
-    result=database.conn.execute(
-     "INSERT INTO news_items ("+",".join(keys)+") VALUES ("
-     +",".join([ph]*len(keys))+") RETURNING id",params)
-    item_id=result.fetchone()[0]
-   else:
-    result=database.conn.execute(
-     "INSERT INTO news_items ("+",".join(keys)+") VALUES ("
-     +",".join([ph]*len(keys))+")",params)
-    item_id=result.lastrowid
-   database.conn.execute(
-    "INSERT INTO admin_activity (username,action,item_id,details,created_at) VALUES ("
-    +",".join([ph]*5)+")",
-    (session.get("admin_user"),"news.manual.create",item_id,"Manual editorial draft created, verification pending",now))
-   if not database._postgres:database.conn.commit()
+  from app.manual_requests import reserve,complete
+  try:
+   with database.conn.transaction() if database._postgres else database.conn:
+    request_key,existing_item=reserve(database,session.get('admin_user') or 'API administrator',body)
+    if existing_item:
+     from app.editorial_access import allowed_story
+     if not allowed_story(database,existing_item,getattr(g,'admin_policy',None),session.get('admin_user')):return jsonify({'error':'This story is outside your current assignment.'}),403
+     item_id=existing_item
+    else:
+     if database._postgres:
+      result=database.conn.execute(
+       "INSERT INTO news_items ("+",".join(keys)+") VALUES ("
+       +",".join([ph]*len(keys))+") RETURNING id",params)
+      item_id=result.fetchone()["id"]
+     else:
+      result=database.conn.execute(
+       "INSERT INTO news_items ("+",".join(keys)+") VALUES ("
+       +",".join([ph]*len(keys))+")",params)
+      item_id=result.lastrowid
+     database.conn.execute(
+      "INSERT INTO admin_activity (username,action,item_id,details,created_at) VALUES ("
+      +",".join([ph]*5)+")",
+      (session.get("admin_user"),"news.manual.create",item_id,"Manual editorial draft created, verification pending",now))
+     from app.editorial_access import assign_story
+     assign_story(database,item_id,session.get("admin_user"),commit=False)
+     complete(database,session.get('admin_user') or 'API administrator',request_key,item_id)
+  except ValueError as error:return jsonify({'error':str(error)}),409
+  if publish_now:
+   database.close();database=None
+   result=_verify_and_publish(item_id)
+   if isinstance(result,Response):result.status_code=201
+   return result
   return jsonify({"ok":True,"id":item_id,"status":"pending","message":"Draft saved. Verify and approve before publishing."}),201
- finally:database.close()
+ finally:
+  if database:database.close()
 
 
 @app.post("/api/news/<int:item_id>/edit")
@@ -1696,6 +2094,8 @@ def edit_news(item_id):
  if err:return err
  body=request.get_json(silent=True) or {}; fields={k:str(body[k] or "").strip() for k in ("title","summary","category","image_url","bot_summary","bot_article") if k in body}
  if not fields:return jsonify({"error":"no editable fields supplied"}),400
+ policy=getattr(g,"admin_policy",None)
+ if policy and policy["categories"] and fields.get("category") and fields["category"] not in policy["categories"]:return jsonify({"error":"That desk is outside your assigned access."}),403
  if "title" in fields and not fields["title"]:return jsonify({"error":"title cannot be empty"}),400
  if 'title' in fields and len(fields['title'])>500:return jsonify({'error':'Headline must be at most 500 characters'}),400
  if any(len(fields.get(key,''))>6000 for key in ('summary','bot_summary')):return jsonify({'error':'Summary must be at most 6000 characters'}),400
@@ -1705,6 +2105,8 @@ def edit_news(item_id):
  try:
   existing=database.get_by_id(item_id)
   if not existing:return jsonify({'error':'story not found'}),404
+  if existing["approved_at"]:
+   fields.update(fact_check_status="pending",fact_check_notes="",approved_at=None,status="pending")
   revision=request.headers.get('If-Match','').strip('"')
   if revision:
    current=dict(existing)
@@ -1717,6 +2119,23 @@ def edit_news(item_id):
    if not updated:return jsonify({'error':'This story changed during your edit. Reopen the inspector before saving.'}),409
   else:database.update(item_id,**fields)
   log_admin(database,"news.edit",item_id,",".join(fields.keys())); return jsonify({"ok":True,"fields":fields})
+ finally:database.close()
+
+
+@app.get('/api/admin/story/<int:item_id>/delivery')
+def admin_story_delivery(item_id):
+ err=require_admin()
+ if err:return err
+ database=db()
+ try:
+  if not database.get_by_id(item_id):return jsonify({'error':'Story not found'}),404
+  from app.phone_publication import delivery_status
+  status=delivery_status(database,item_id)
+  from app.live_publication import phone_enabled,confirm_publication
+  if phone_enabled() and not getattr(g,'phone_bridge_verified',False) and status.get('state')=='verifying':
+   result=confirm_publication({'id':item_id,'status':'published','public_delivery':status},database=database)
+   return jsonify(result)
+  return jsonify(status)
  finally:database.close()
 
 
@@ -1748,7 +2167,7 @@ def admin_editorial_draft(item_id):
   row=database.get_by_id(item_id)
   if not row:return jsonify({'error':'story not found'}),404
   row=dict(row)
-  return jsonify({'id':item_id,'title':row.get('title') or '',
+  return jsonify({'id':item_id,'status':row.get('status'),'news_number':news_number(row),'title':row.get('title') or '',
    'summary':row.get('bot_summary') or row.get('summary') or '',
    'category':row.get('category') or 'general','revision':editorial_revision(row)})
  finally:database.close()
@@ -1804,7 +2223,8 @@ def process_item(item_id):
   if not row:return jsonify({"error":"not found"}),404
   source=enrich_source_text(row.get("title") or "",row.get("summary") or "",row.get("url") or ""); material=source.get("text") or row.get("summary") or row.get("title") or ""; packets=_editorial_source_packets(database,row); result=process_news(row["title"],material,row.get("category") or "general",source_materials=packets)
   if not result:return jsonify({"error":"bot could not produce complete content from available material"}),422
-  fields={"title":result["headline"],"summary":result["summary"],"bot_summary":result["summary"],"bot_article":result["article"],"editorial_context":result.get("editorial_context") or "", "editorial_value":1 if result.get("editorial_value") else 0, "source_count":int(result.get("source_count") or 0)}
+  fields={"fact_check_status":"pending","fact_check_notes":"","approved_at":None,"title":result["headline"],"summary":result["summary"],"bot_summary":result["summary"],"bot_article":result["article"],"editorial_context":result.get("editorial_context") or "", "editorial_value":1 if result.get("editorial_value") else 0, "source_count":int(result.get("source_count") or 0)}
+  if row.get("approved_at"):fields["status"]="pending"
   # Never persist Telegram CDN images as site assets. A branded OG image is generated server-side.
   if source.get("image_url") and not is_telegram_image(source.get("image_url")) and not row.get("image_url"):fields["image_url"]=source["image_url"]
   elif row.get("image_url") and is_telegram_image(row.get("image_url")):fields["image_url"]=None
@@ -2030,23 +2450,6 @@ def ai_neutrality():
         from app.phi4 import neutrality_check
         result=neutrality_check(title,article)
         return jsonify({"ok":True,"provider":"microsoft_phi4","result":result})
-    except Exception as exc:
-        return jsonify({"error":str(exc)[:500]}),503
-
-
-@app.post("/api/ai/reel-script")
-def ai_reel_script():
-    err=require_admin()
-    if err:return err
-    err=require_csrf()
-    if err:return err
-    body=request.get_json(silent=True) or {}
-    title=str(body.get("title") or "").strip()
-    article=str(body.get("article") or "").strip()
-    if not title or not article:return jsonify({"error":"title and article are required"}),400
-    try:
-        from app.phi4 import reel_script
-        return jsonify({"ok":True,"provider":"microsoft_phi4","script":reel_script(title,article)})
     except Exception as exc:
         return jsonify({"error":str(exc)[:500]}),503
 

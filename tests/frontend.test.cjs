@@ -62,14 +62,22 @@ test('service worker does not cache API, live snapshot or error responses',()=>{
 
 test('Nana Patekar and Indian obituaries are India news, not Entertainment',()=>{
  const ctx=harness({'/api/news?category=all&limit=120':[],'/news-data.json':[]});
- assert.equal(vm.runInContext('NANA_TRIBUTE.category',ctx),'india');
+ assert.equal(vm.runInContext('typeof NANA_TRIBUTE',ctx),'undefined');
  assert.equal(vm.runInContext("newsCategory('entertainment','Nana Patekar dies at 75','')",ctx),'india');
  assert.equal(vm.runInContext("newsCategory('entertainment','Indian actor dies at 82','Bollywood mourns')",ctx),'india');
  assert.equal(vm.runInContext("newsCategory('entertainment','New Bollywood movie announced','')",ctx),'india');
  assert.equal(vm.runInContext("newsCategory('entertainment','Hollywood awards show','')",ctx),'world');
  assert.equal(vm.runInContext("newsCategory('entertainment','Film actor joins election campaign','')",ctx),'politics');
- assert.equal(vm.runInContext("inCat(NANA_TRIBUTE,'india')",ctx),true);
- assert.equal(vm.runInContext("inCat(NANA_TRIBUTE,'entertainment')",ctx),false);
+ assert.equal(vm.runInContext("inCat({category:'india'},'india')",ctx),true);
+ assert.equal(vm.runInContext("inCat({category:'india'},'entertainment')",ctx),false);
+});
+
+test('Politics desk includes political India headlines without rewriting canonical story URLs',()=>{
+ const ctx=harness({'/api/news?category=all&limit=120':[],'/news-data.json':[]});
+ assert.equal(vm.runInContext("inCat({category:'india',title:'Three AAP MLAs join BJP in Punjab'},'politics')",ctx),true);
+ assert.equal(vm.runInContext("inCat({category:'india',title:'New hospital opens in district'},'politics')",ctx),false);
+ assert.equal(vm.runInContext("inCat({category:'world',title:'Congress meets in Europe'},'politics')",ctx),false);
+ assert.equal(vm.runInContext("articleHref({id:'77',news_number:'8765',category:'india',title:'Three AAP MLAs join BJP in Punjab'})",ctx),'/india/8765');
 });
 
 test('source snapshot supersedes stale browser cache and stays source-fed',async()=>{
@@ -110,4 +118,15 @@ test('archive search loads beyond fifty results and filters category on the serv
  assert.equal((elements['#sres'].innerHTML.match(/class="sr"/g)||[]).length,62);
  assert.match(elements['#sres'].innerHTML,/Result 62/);
  assert.doesNotMatch(elements['#sres'].innerHTML,/id="searchMore"/);
+});
+
+test('archive search displays the server total rather than only the loaded page count',async()=>{
+ const elements={'#si':{value:'exam'},'#sc':{textContent:''},'#sres':{innerHTML:''},'#searchMore':{}};
+ const context=vm.createContext({AbortController,Number,window:{},$:(s)=>elements[s],get:async()=>{
+  const rows=Array.from({length:50},(_,i)=>({id:String(i),title:'Official exam notice'}));rows.searchTotal=127;return rows;
+ },ENDPOINTS:{search:'/api/search'},S:{items:[]},norm:x=>x,inCat:()=>true,esc:String,articleHref:x=>'/'+x.id,ago:()=>'',doS(){}});
+ vm.runInContext(source.slice(source.indexOf('let searchRequest='),source.indexOf('const __article=')),context);
+ await vm.runInContext('doS()',context);
+ assert.match(elements['#sc'].textContent,/50 of 127/);
+ assert.match(elements['#sres'].innerHTML,/searchMore/);
 });

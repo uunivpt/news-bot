@@ -143,6 +143,38 @@ class SourceTextTests(unittest.TestCase):
         self.assertIn("<p>First report.</p><p>Second report.</p>", rendered)
 
 
+class PublisherParserTests(unittest.TestCase):
+    def extract(self, markup):
+        document = SourceDocument('https://example.org/parser-fixture', markup.encode('utf-8'), 'text/html')
+        with patch('app.article_fetcher.fetch_source', return_value=document):
+            result = extract_public_article(document.url)
+        self.assertIsNotNone(result)
+        self.assertEqual(result['url'], document.url)
+        return result
+
+    def test_invalid_numeric_entities_cannot_break_utf8_source_storage(self):
+        for entity in ('&#0;', '&#xD800;'):
+            with self.subTest(entity=entity):
+                result = self.extract('<title>Parser fixture ' + entity + '</title><article><p>' +
+                    ('Source fixture ' + entity + ' with original text retained. ') * 15 + '</p></article>')
+                for field in ('title', 'text'):
+                    self.assertNotIn('\x00', result[field])
+                    result[field].encode('utf-8')
+                    self.assertIn('\ufffd', result[field])
+
+    def test_numeric_entities_match_browser_text_without_losing_unicode(self):
+        result = self.extract('<title>Parser fixture &amp; &#128; मराठी हिंदी</title><article><p>' +
+            'Original source text retained for the parser fixture. ' * 15 + '</p></article>')
+        self.assertEqual(result['title'], 'Parser fixture & € मराठी हिंदी')
+
+    def test_mixed_void_tags_keep_source_text_and_remove_script_content(self):
+        result = self.extract('<title>Parser fixture</title><article><p>Alpha<br>Beta<br/>Gamma</p><p>' +
+            'Original source text retained for the parser fixture. ' * 15 +
+            '</p></article><script>untrusted_script_text()</script>')
+        self.assertIn('Alpha Beta Gamma', result['text'])
+        self.assertNotIn('untrusted_script_text', result['text'])
+
+
 class PublicImageSafetyTests(unittest.TestCase):
     def image_response(self, content_type):
         database = Mock()

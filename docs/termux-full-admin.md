@@ -1,15 +1,15 @@
 # PoliticsHub full-write Admin Room on the Termux phone
 
-The public website at https://www.politicshub.in/admin/ remains read-only
-because it is deployed on Vercel and intentionally has **no connection** to
-the phone's writable PostgreSQL database. Granting the Vercel recovery
-session write permission does not restore a database: it merely creates
-misleading controls and insecure data loss.
+The Admin Room uses the real phone PostgreSQL database. Direct phone access is
+`http://127.0.0.1:8765/admin/`. The public `/admin/` can also edit this same
+phone database when the signed HTTPS bridge is configured; without that bridge,
+public access remains read-only. It never silently substitutes a local SQLite
+file or the public JSON news feed for writable PostgreSQL.
 
-Instead, this setup starts the existing **full editable Admin Room** on the
-phone itself, using the exact same UI and API, but with the **real phone
-PostgreSQL**. It binds **127.0.0.1 ONLY**; no public port, Neon, tunnel or
-cloud database needed.
+The phone daemon binds 127.0.0.1 only. A configured tunnel may report the browser's
+external address; fresh HMAC authentication authorizes those gateway requests.
+Unsigned direct requests require both a loopback peer and a local Host header.
+Neither a claimed Host nor a proxy-supplied address alone authorizes remote use.
 
 ## One-time start in Termux
 
@@ -23,17 +23,18 @@ env -u DATABASE_URL -u DATABASE_3URL python scripts/termux_local_admin.py --star
 The launcher:
 1. Checks local PostgreSQL on `127.0.0.1:5432`.
 2. Requests the **local postgres database password** in a hidden prompt.
-3. On first use, requests a new **localowner website login password** twice.
+3. On first use, requests a new **website login password for `pushkarthawari`** twice.
 4. Hashes the browser login password in the private local `admin_users` table.
 5. Starts a separate loopback-only Admin Room service, then reports its address.
 
 Open **http://127.0.0.1:8765/admin/** from the **same phone**, and log in as
-`localowner` with the password you chose. The server runs in Termux while
+`pushkarthawari` with the password you chose. The server runs in Termux while
 Android allows the background process. It never displays or stores the
 postgres password on disk, and neither secret is sent to GitHub/Vercel.
 
-**Important:** The browser uses loopback HTTP, not internet HTTP. Do not
-expose port 8765 with port-forwarding, public tunnels or proxies. It has
+**Important:** Direct phone browsing uses loopback HTTP. Do not expose port
+8765 or PostgreSQL publicly; use only the configured signed HTTPS bridge for
+remote admin access. It has
 same-site, HTTP-only session cookies, CSRF checks, an eight-hour owner
 session and a local-host/remote-address restriction.
 
@@ -68,6 +69,64 @@ be entered again, since it was deliberately not persisted.
 Log file (private mode 0600):
 `~/.local/share/politicshub/phone-admin.log`
 
-To set a new localowner password, stop the existing local server deliberately
-before using `--reset-owner`. Do not share passwords, logs containing
-sensitive data, or database credentials in chat.
+After updating source, `--restart` reloads the launcher-owned daemon while
+preserving the database and existing owner password. It stops only the PID whose
+command matches the recognized launcher, never PostgreSQL or the collector.
+`--reset-owner` explicitly changes the owner password, even while the existing
+server is running; normal updates never invoke it.
+
+## Check committed storage and make a backup
+
+Run on the real phone, after updating the source:
+
+```sh
+env -u DATABASE_URL -u DATABASE_3URL python scripts/termux_database_check.py
+```
+
+The default reads committed PostgreSQL counts, collection time, database size,
+`fsync`, `full_page_writes` and `synchronous_commit`, without changing records.
+To test an actual committed write across fresh connections and create a private
+backup, use:
+
+```sh
+env -u DATABASE_URL -u DATABASE_3URL python scripts/termux_database_check.py --verify-write --backup
+```
+
+That command prompts for the local PostgreSQL password in Termux. It uses a
+separate empty probe table and deletes its marker afterwards; it never modifies
+news or owner records. A custom-format `pg_dump` archive is created atomically
+under `~/.local/share/politicshub/backups` with mode 0600 and checked using
+`pg_restore --list`. Connection readback plus durability settings are evidence
+of committed storage, not a guarantee against device loss; keep a protected
+backup outside the phone as well. No test on a cloud fixture proves phone data.
+
+## Apply a reviewed release safely
+
+`scripts/termux_admin_update.py --ref FULL_COMMIT_SHA --apply` works with the
+existing `~/politicshub-live-upload` main-branch checkout. It fetches exactly the
+reviewed commit, refuses divergent local history, first runs the database
+readback/backup checks, saves tracked and untracked local edits in a local Git
+stash, then fast-forwards the checkout including tracked file deletions. Existing
+sparse-checkout rules are expanded to include all app/API/admin dependencies.
+Local edits stay in the stash and are not automatically applied over fixed code.
+Ignored local data, credential files and logs are retained. It restarts the
+recognized admin daemon; it never resets the owner password.
+
+The launcher automatically loads a matching bridge secret already provided in
+`POLITICSHUB_ADMIN_BRIDGE_SECRET`, an explicit private
+`POLITICSHUB_ADMIN_BRIDGE_SECRET_FILE`, the private default
+`~/.config/politicshub/admin-bridge-secret`, or the existing legacy
+`~/.politicshub-admin-bridge.secret`. Files must be regular and mode 0600. A
+missing secret permits direct phone access only; a short or insecure secret file
+fails visibly. No new shared secret is generated or substituted for Vercel's.
+Do not share passwords or private logs in chat.
+
+## Set the intended website login
+
+The default owner username is `pushkarthawari`. Use
+`python scripts/termux_local_admin.py --owner pushkarthawari --reset-owner`
+to create/update that account after entering the local PostgreSQL password and
+then the intended website password twice in hidden prompts. Passwords are stored
+only as salted hashes in the phone database. Other accounts and news records
+are preserved. An already-running admin daemon can use the updated account
+without being restarted.

@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
 from xml.sax.saxutils import escape
 
+from app.news_numbers import news_number
 from app.category_routing import normalize_category
 
 SITE_ORIGIN = "https://www.politicshub.in"
@@ -19,10 +20,11 @@ CATEGORIES = {
     "entertainment": "entertainment", "science": "science", "health": "health", "hindi": "hindi"
 }
 STATIC_PAGES = (
-    "/", "/archive/", "/about.html", "/contact.html", "/editorial-policy.html",
+    "/", "/archive/", "/library/", "/exams/", "/about.html", "/contact.html", "/editorial-policy.html",
     "/corrections.html", "/privacy.html", "/cookies.html", "/terms.html",
     "/disclaimer.html", "/newsletter.html", "/data-rights.html",
-    "/licenses.html", "/sources.html", "/maharashtra/", "/guides/election-results.html", "/guides/maharashtra-mlc.html"
+    "/licenses.html", "/sources.html", "/maharashtra/", "/india/", "/politics/", "/world/", "/hindi/",
+    "/guides/election-results.html", "/guides/maharashtra-mlc.html"
 )
 
 
@@ -33,7 +35,7 @@ def slugify(value):
 def canonical_path(row):
     category = normalize_category(row.get("category"), row.get("title"), row.get("bot_summary") or row.get("summary"))
     category = CATEGORIES.get(category, "india")
-    return f"/{category}/{int(row['id'])}-{slugify(row.get('title'))}"
+    return f"/{category}/{news_number(row)}"
 
 
 def _date(value):
@@ -71,6 +73,10 @@ def is_indexable(row, now=None):
         return False
     if len(lead) < 80 or len(article) < 300 or len(article.split()) < 45:
         return False
+    if re.sub(r"\s+", " ", article).strip().casefold() == lead.casefold():
+        # A publisher excerpt repeated as its own article is a reading aid,
+        # not a separate full report for the search/news sitemap.
+        return False
     published = _date(row.get("published_at_site") or row.get("published_at_iso") or row.get("published_at"))
     if not published:
         return False
@@ -106,16 +112,9 @@ def static_sitemap_xml():
     return '<?xml version="1.0" encoding="UTF-8"?>' + '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + entries + "</urlset>"
 
 
-# Manually reviewed, independently sourced editorial page already published on-site.
-# Never add a new page without a real published HTML article and verified sources.
-STANDALONE_NEWS = (
-    {
-        "path": "/nana-patekar-tribute.html",
-        "title": "Nana Patekar dies at 75 in Goa, leaving a lasting cinema legacy",
-        "published_at": "2026-10-08T06:00:00+05:30",
-        "language": "en",
-    },
-)
+# Standalone articles need documented source verification before discovery.
+# Previously promoted static reports are withheld; their URLs show review notices.
+STANDALONE_NEWS = ()
 
 
 def standalone_sitemap_url_xml():
@@ -123,6 +122,20 @@ def standalone_sitemap_url_xml():
         "<url><loc>" + escape(SITE_ORIGIN + story["path"]) + "</loc></url>"
         for story in STANDALONE_NEWS
     )
+
+
+def _news_language(row):
+    """Use actual article language for Google News; do not label Hindi as English."""
+    language = str(row.get("language") or "").strip().lower().replace("_", "-").split("-", 1)[0]
+    if language in {"en", "hi", "mr"}:
+        return language
+    if str(row.get("category") or "").lower() == "hindi":
+        return "hi"
+    title = str(row.get("title") or "")
+    source = str(row.get("source_name") or "").lower()
+    if re.search(r"[\u0900-\u097f]", title) and ("marathi" in source or "majha" in source or "माझा" in source):
+        return "mr"
+    return "en"
 
 
 def google_news_sitemap_xml(rows, now=None):
@@ -137,7 +150,7 @@ def google_news_sitemap_xml(rows, now=None):
     for row in eligible_articles(rows, now=current):
         published = _date(row.get("published_at_iso") or row.get("published_at_site") or row.get("published_at"))
         if published and start <= published <= current + timedelta(minutes=30):
-            candidates.append((SITE_ORIGIN + canonical_path(row), str(row["title"]), published, "en"))
+            candidates.append((SITE_ORIGIN + canonical_path(row), str(row["title"]), published, _news_language(row)))
     for story in STANDALONE_NEWS:
         published = _date(story["published_at"])
         if published and start <= published <= current + timedelta(minutes=30):

@@ -1,0 +1,13 @@
+[
+ {"id":"nta","name":"National Testing Agency","url":"https://nta.ac.in/NoticeBoardArchive","region":"india","scope":"JEE Main, NEET UG, CUET, UGC NET, CSIR NET and other NTA examinations","allowed_hosts":["nta.ac.in","nta.nic.in"],"enabled":true},
+ {"id":"upsc","name":"Union Public Service Commission","url":"https://upsc.gov.in/whats-new","region":"india","scope":"Civil Services, NDA, CDS, Engineering Services and UPSC recruitment","allowed_hosts":["upsc.gov.in"],"enabled":true},
+ {"id":"ssc","name":"Staff Selection Commission","url":"https://ssc.gov.in/","region":"india","scope":"CGL, CHSL, MTS, GD, JE and SSC examinations","allowed_hosts":["ssc.gov.in"],"enabled":true},
+ {"id":"ibps","name":"Institute of Banking Personnel Selection","url":"https://www.ibps.in/","region":"india","scope":"IBPS PO, clerical, specialist officer and regional rural bank recruitment","allowed_hosts":["ibps.in"],"enabled":true},
+ {"id":"rrb","name":"Railway Recruitment Board Chandigarh","url":"https://www.rrbcdg.gov.in/","region":"india","scope":"Railway centralised recruitment notices, NTPC, ALP and Group D","allowed_hosts":["rrbcdg.gov.in"],"enabled":true},
+ {"id":"cbse","name":"Central Board of Secondary Education","url":"https://www.cbse.gov.in/cbsenew/examination_Circular.html","region":"india","scope":"CBSE board examination notices and school candidate instructions","allowed_hosts":["cbse.gov.in"],"enabled":true},
+ {"id":"nbems","name":"National Board of Examinations in Medical Sciences","url":"https://www.natboard.edu.in/","region":"india","scope":"NEET PG, NEET MDS, FMGE and NBEMS examinations","allowed_hosts":["natboard.edu.in","nbe.edu.in"],"enabled":true},
+ {"id":"mpsc","name":"Maharashtra Public Service Commission","url":"https://mpsc.gov.in/","region":"maharashtra","scope":"Maharashtra state services, Group B, Group C and MPSC recruitment","allowed_hosts":["mpsc.gov.in"],"enabled":true},
+ {"id":"mahacet","name":"Maharashtra State Common Entrance Test Cell","url":"https://cetcell.mahacet.org/","region":"maharashtra","scope":"MHT CET, MBA/MMS, law, B.Ed and other Maharashtra CET/admission notices","allowed_hosts":["mahacet.org"],"enabled":true},
+ {"id":"msce","name":"Maharashtra State Council of Examination Pune","url":"https://www.mscepune.in/","region":"maharashtra","scope":"Scholarship, teacher eligibility and council examination notices","allowed_hosts":["mscepune.in"],"enabled":true},
+ {"id":"mahboard","name":"Maharashtra State Board of Secondary and Higher Secondary Education","url":"https://mahahsscboard.in/","region":"maharashtra","scope":"Maharashtra SSC and HSC board examinations","allowed_hosts":["mahahsscboard.in"],"enabled":true}
+]

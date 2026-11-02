@@ -23,13 +23,13 @@ class RemoteAdminBridgeTests(unittest.TestCase):
         for p in ("/api/admin/login", "/api/admin/me", "/api/admin/workspace",
                   "/api/admin/story/455", "/api/admin/story/455/article",
                   "/api/admin/dashboard", "/api/admin/health",
-                  "/api/admin/operations.pdf", "/api/news/455/approve",
+                  "/api/admin/editorial/events", "/api/admin/editorial/sources", "/api/admin/editorial/readiness/probe", "/api/admin/studio/455", "/api/admin/studio/455/save", "/api/admin/editorial/story/455/claims/4", "/api/admin/editorial/story/455/updates/3/publish", "/api/admin/operations.pdf", "/api/admin/diagnostics.pdf", "/api/admin/users", "/api/admin/users/new_staff", "/api/news/455/approve",
                   "/api/news/455/edit", "/api/fact-check"):
             self.assertTrue(is_private_endpoint(p), p)
         for p in ("/api/admin/setup", "/api/admin/nonexistent",
                   "/api/news/455", "/api/news",
                   "/api/health", "/api/newsletter/daily",
-                  "/api/admin/story/../../etc/passwd"):
+                  "/api/admin/story/../../etc/passwd", "/api/admin/studio/2/unknown", "/api/admin/editorial/story/1/updates/2/delete", "/api/admin/editorial/events/not-a-valid-id/sources"):
             self.assertFalse(is_private_endpoint(p), p)
 
     def test_private_admin_preview_disallows_unrelated_public_api(self):
@@ -114,6 +114,70 @@ class RemoteAdminBridgeTests(unittest.TestCase):
     def test_request_without_signature_rejected(self):
         self.assertFalse(self.request())
         self.assertFalse(self.request(headers={"X-PH-Bridge-Time": "1234567890"}))
+
+    def proxy(self, *, content=b'{"ok":true}', status=200, cookies=(), request_headers=None,
+              path='/api/admin/me', content_type='application/json'):
+        from unittest.mock import MagicMock
+        from email.message import Message
+        from app.remote_admin_bridge import proxy_public_admin
+        response = MagicMock()
+        response.status = status
+        response.read.return_value = content
+        response.headers = Message()
+        response.headers.add_header('Content-Type', content_type)
+        for cookie in cookies:
+            response.headers.add_header('Set-Cookie', cookie)
+        with self.app.test_request_context(path, headers=request_headers or {}), \
+             patch.dict(os.environ, {'POLITICSHUB_ADMIN_BRIDGE_URL':'https://fixture-admin.ts.net',
+                                     'POLITICSHUB_ADMIN_BRIDGE_SECRET':self.secret}), \
+             patch('app.remote_admin_bridge.build_opener') as opener:
+            opener.return_value.open.return_value = response
+            result = proxy_public_admin()
+            sent = opener.return_value.open.call_args.args[0]
+        return result, sent
+
+    def test_tunnel_html_or_redirect_is_not_a_successful_admin_response(self):
+        for content, status in ((b'<html>Sign in to the tunnel</html>', 200),
+                                (b'{"ok":true}', 302)):
+            with self.subTest(status=status):
+                response, _ = self.proxy(content=content, status=status)
+                body, code = response
+                self.assertEqual(code, 502)
+                self.assertEqual(body.json['code'], 'phone_admin_invalid_response')
+
+    def test_legacy_phone_guard_has_an_actionable_gateway_error(self):
+        response, _ = self.proxy(content=b'{"error":"Phone-local admin only"}', status=403)
+        body, code = response
+        self.assertEqual(code, 503)
+        self.assertEqual(body.json['code'], 'phone_admin_gateway_rejected')
+        self.assertIn('Termux', body.json['error'])
+
+    def test_only_the_phone_session_cookie_is_sent_through_the_tunnel(self):
+        _, sent = self.proxy(request_headers={'Cookie':'unrelated_secret=private; politicshub_phone_admin=phone-session; __Host-politicshub_admin_session=recovery'})
+        headers = dict((key.lower(), value) for key, value in sent.header_items())
+        self.assertEqual(headers['cookie'], 'politicshub_phone_admin=phone-session')
+        self.assertEqual(headers['cache-control'], 'no-store')
+
+    def test_logout_relay_expires_the_phone_cookie_on_the_public_origin(self):
+        response, _ = self.proxy(cookies=('politicshub_phone_admin=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/',))
+        cookie = response.headers['Set-Cookie']
+        self.assertIn('Max-Age=0', cookie)
+        self.assertIn('Secure', cookie)
+
+    def test_pdf_report_remains_downloadable_only_from_its_allowlisted_endpoint(self):
+        pdf = b'%PDF-1.4\nsynthetic fixture'
+        response, _ = self.proxy(path='/api/admin/operations.pdf', content=pdf,
+                                 content_type='application/pdf')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, 'application/pdf')
+        self.assertEqual(response.data, pdf)
+        response, _ = self.proxy(path='/api/admin/diagnostics.pdf', content=pdf, content_type='application/pdf')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers['Content-Disposition'], 'attachment; filename="politicshub-diagnosis.pdf"')
+        for path, content in (('/api/admin/me', pdf),
+                              ('/api/admin/operations.pdf', b'<html>gateway challenge</html>')):
+            response, _ = self.proxy(path=path, content=content, content_type='application/pdf')
+            self.assertEqual(response[1], 502)
 
 
 if __name__ == "__main__":

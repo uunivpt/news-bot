@@ -89,6 +89,24 @@ def run(base, output,admin_fixture=False):
 
         check('homepage loads published stories', home)
         article_href = page.locator('.ph14-lead').get_attribute('href')
+        if admin_fixture:
+            # The homepage's newest report can come from an independent Hindi
+            # feed with an absolute canonical redirect to the production host.
+            # Reader controls must be exercised on a stable local article,
+            # without sending an isolated fixture browser to production.
+            catalog = page.request.get(base + '/api/news?category=india&limit=20')
+            require(catalog.status == 200, 'Fixture India feed unavailable')
+            canonical = None
+            for row in catalog.json():
+                number = row.get('news_number') or row.get('id')
+                if not number:
+                    continue
+                candidate = '/india/' + str(number)
+                if page.request.get(base + candidate, max_redirects=0).status == 200:
+                    canonical = candidate
+                    break
+            require(canonical is not None, 'No locally readable canonical news article for reader controls')
+            article_href = canonical
 
         def responsive():
             for width in (320, 360, 390, 768, 1440):
@@ -259,6 +277,41 @@ def run(base, output,admin_fixture=False):
             page.wait_for_function("() => document.documentElement.lang === 'hi'")
         check('Hindi desk sets document language', hindi)
 
+        def measurement_consent():
+            requests = []
+            page.on('request', lambda request: requests.append(request.url) if 'googletagmanager.com/gtag/js' in request.url else None)
+            page.route('https://www.googletagmanager.com/**', lambda route: route.fulfill(
+                status=200, content_type='application/javascript', body='/* intercepted measurement fixture */'))
+            visit('/nana-patekar-tribute.html')
+            require(page.locator('script[src*="/assets/measurement.js"]').count() == 0, 'Withheld notice enables measurement')
+            require(page.locator('script[src*="pagead2.googlesyndication.com"]').count() == 0, 'Withheld notice enables advertising')
+            # The withheld report is intentionally ad-free. Exercise the real
+            # consent module on a local test document without changing eligibility.
+            page.route(base + '/__audit_measurement__', lambda route: route.fulfill(
+                status=200, content_type='text/html',
+                body='<!doctype html><html lang="en"><head><script src="/assets/measurement.js?v=consent1" defer></script></head><body>Consent module fixture</body></html>'))
+            visit('/__audit_measurement__')
+            page.wait_for_function('() => !!window.googlefc?.callbackQueue?.length')
+            require(not requests, 'Measurement requested before consent data')
+            page.evaluate("""() => {
+              const fc=window.googlefc;
+              fc.ConsentModePurposeStatusEnum={CONSENT_MODE_PURPOSE_STATUS_GRANTED:1,
+                CONSENT_MODE_PURPOSE_STATUS_DENIED:2,CONSENT_MODE_PURPOSE_STATUS_NOT_APPLICABLE:3};
+              window.auditConsent=2;
+              fc.getGoogleConsentModeValues=()=>({analyticsStoragePurposeConsentStatus:window.auditConsent,
+                adStoragePurposeConsentStatus:window.auditConsent,adUserDataPurposeConsentStatus:window.auditConsent,
+                adPersonalizationPurposeConsentStatus:window.auditConsent});
+              window.auditConsentCallback=fc.callbackQueue.find(x=>x.CONSENT_MODE_DATA_READY).CONSENT_MODE_DATA_READY;
+              window.auditConsentCallback();
+            }""")
+            require(not requests, 'Denied consent enabled measurement')
+            with page.expect_request('https://www.googletagmanager.com/**'):
+                page.evaluate('() => { window.auditConsent=1; window.auditConsentCallback(); }')
+            page.evaluate('() => { window.auditConsentCallback(); window.auditConsent=2; window.auditConsentCallback(); }')
+            require(len(requests)==1, 'Consent callbacks duplicated the measurement loader')
+            require(page.evaluate("window['ga-disable-G-2HVZQST08G']===true"), 'Consent withdrawal did not disable Analytics')
+        check('measurement waits for consent and handles grant, repeat callbacks and withdrawal', measurement_consent)
+
         if admin_fixture:
             def devanagari_feed():
                 from api import index as api
@@ -346,16 +399,26 @@ def run(base, output,admin_fixture=False):
             page.route('**/api/maharashtra?*',feed)
             visit('/maharashtra/')
             page.wait_for_selector('.mh-lead')
+            require(page.locator('.mh-editorial-intro').is_visible(), 'Maharashtra editorial source context missing')
+            require('महाराष्ट्र बातम्या' in page.locator('#mhAboutTitle').inner_text(), 'Marathi editorial context missing')
+            require(page.locator('#mhSources a').count()==2, 'Publisher sources not visible')
             original=page.locator('.mh-card-actions a').first.get_attribute('href')
             page.locator('.mh-lang [data-language="en"]').click()
             page.wait_for_function("() => document.documentElement.lang==='en' && !document.querySelector('#mhTranslationNote').hidden")
             require(page.locator('.mh-card-actions a').first.get_attribute('href')==original,'Language changed the original publisher')
             require('original Marathi' in page.locator('#mhTranslationNote').inner_text(),'Unavailable translation was not disclosed')
+            require(page.locator('#mhAboutTitle').inner_text()=='Maharashtra news: sources and languages',
+                    'English switch did not translate the editorial context')
             failed[0]=True
             page.locator('#mhRefresh').click()
             page.wait_for_function("() => document.querySelector('#mhStatus').textContent.includes('previously loaded')")
             require(page.locator('.mh-lead').count()==1,'A failed refresh erased previously loaded headlines')
-            require(page.evaluate('document.documentElement.scrollWidth <= innerWidth'),'Maharashtra page overflows')
+            for width in (320,390,768,1440):
+                page.set_viewport_size({'width':width,'height':900})
+                require(page.evaluate('document.documentElement.scrollWidth <= innerWidth'),
+                        f'Maharashtra page overflow at {width}px')
+            # Later admin acceptance steps expect a mobile viewport and visible menu.
+            page.set_viewport_size({'width':390,'height':844})
         check('Maharashtra language, attribution and failed-refresh recovery',maharashtra)
 
         def revoke():

@@ -3,10 +3,12 @@
 const $ = id => document.getElementById(id);
 const arr = value => Array.isArray(value) ? value : [];
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
-const views = {overview:'Overview',news:'Newsroom',sources:'Source coverage',operations:'Agent operations',upgrade:'Intelligence & QA',activity:'Activity',system:'System status',settings:'Settings'};
+const views = {overview:'Overview',news:'Newsroom',sources:'Source coverage',operations:'Agent operations',upgrade:'Intelligence & QA',activity:'Activity',system:'System status',settings:'Settings',team:'Team & roles',events:'Events & sources',studio:'Marathi Studio',readiness:'AdSense readiness'};
+let manualRequestId='', manualBusy=false;
 let csrf = '', settings = {}, workspace = null, rows = [], currentView = 'overview';
 let pageNumber = 1, pageTotal = 0, queue = 'all', selected = new Set(), visibleRows = [];
-let workspacePromise = null, newsController = null, newsSequence = 0, inspectorSequence = 0;
+let deliveryController = null;
+let workspacePromise = null, workspaceController = null, workspaceSequence = 0, newsController = null, newsSequence = 0, inspectorSequence = 0;
 let newsTimer, liveTimer, noticeTimer, loginBusy = false, mutationBusy = false, sessionVersion = 0;
 const pending = new Map();
 
@@ -17,14 +19,19 @@ function notice(message, type = 'ok') {
   noticeTimer = setTimeout(() => $('notice').classList.add('hidden'), 5500);
 }
 function showLogin(message = '') {
+  window.Editorial?.reset();
+  clearStaffCredentials();
+  $('teamMembers').replaceChildren();
+  manualRequestId='';manualBusy=false;
   sessionVersion++;
   closeMenu();
   clearInterval(liveTimer); liveTimer = null;
-  newsController?.abort(); inspectorSequence++; newsSequence++;
+  deliveryController?.abort(); deliveryController = null; mutationBusy = false;
+  workspaceController?.abort(); workspaceSequence++; newsController?.abort(); inspectorSequence++; newsSequence++;
   pending.clear(); workspacePromise = null;
   for (const id of ['inspector','commandDialog','confirmDialog']) if ($(id).open) $(id).close();
   workspace = null; rows = []; visibleRows = []; settings = {}; selected.clear(); csrf = '';
-  for (const id of ['newsList','recentStories','activityList','inspectorBody','agents','errors','overviewMetrics','health','attentionList','sourceMetrics','sourceChart','sourceTable','qualityChart','deskChart','opsTotals','opsPhases','quality','advancedReport','upgradeMetrics','upgradeAlerts','upgradeScores','upgradeSources','upgradeEvents','upgradePreviews','upgradeResources','upgradeHistory','upgradeRegression','sessionDetails','systemChecks']) $(id).replaceChildren();
+  for (const id of ['newsList','recentStories','activityList','inspectorBody','agents','errors','overviewMetrics','health','attentionList','sourceMetrics','sourceChart','sourceTable','sourceTriageMetrics','sourceIncidents','sourceOperationsMetrics','phase4Metrics','phase4Alerts','phase4Trend','qualityChart','deskChart','opsTotals','opsPhases','quality','advancedReport','upgradeMetrics','upgradeAlerts','upgradeScores','upgradeSources','upgradeEvents','upgradeResources','upgradeHistory','upgradeRegression','sessionDetails','systemChecks']) $(id).replaceChildren();
   $('shell').classList.add('hidden'); $('login').classList.remove('hidden');
   $('loginErr').textContent = message;
 }
@@ -32,17 +39,34 @@ async function api(url, options = {}) {
   const method = options.method || 'GET';
   const request = async () => {
     const version = sessionVersion;
-    const response = await fetch(url, {credentials:'same-origin', cache:'no-store', signal:AbortSignal.timeout(15000), ...options});
-    let data = {};
-    try { data = await response.json(); } catch { /* HTTP status still determines success. */ }
-    if (version !== sessionVersion) throw new DOMException('Session changed','AbortError');
-    if (!response.ok) {
-      if (response.status === 401 && !url.endsWith('/login')) showLogin('Your session has ended. Please sign in again.');
-      const error = new Error(data.error || `Request failed (${response.status})`);
-      error.status = response.status;
-      throw error;
+    const {signal, ...requestOptions} = options;
+    const deadline = AbortSignal.timeout(30000);
+    const requestSignal = signal ? AbortSignal.any([signal,deadline]) : deadline;
+    // Retry a transient read once. Mutations are never automatically repeated.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (requestSignal.aborted) throw requestSignal.reason || new DOMException('Request cancelled','AbortError');
+      if (version !== sessionVersion) throw new DOMException('Session changed','AbortError');
+      try {
+        const response = await fetch(url, {credentials:'same-origin', cache:'no-store', ...requestOptions, signal:requestSignal});
+        let data = {};
+        try { data = await response.json(); } catch {
+          if (response.ok) throw new Error('Admin service returned an invalid response. Please retry when the phone admin is available.');
+        }
+        if (version !== sessionVersion) throw new DOMException('Session changed','AbortError');
+        if (!response.ok) {
+          if (response.status === 401 && !url.endsWith('/login')) showLogin('Your session has ended. Please sign in again.');
+          const error = new Error(data?.error || `Request failed (${response.status})`);
+          error.status = response.status;
+          throw error;
+        }
+        if (!data || typeof data !== 'object') throw new Error('Admin service returned an invalid response. Please retry.');
+        return data;
+      } catch (error) {
+        const retryable = error.name === 'TypeError' || [502,503,504].includes(error.status);
+        if (method !== 'GET' || attempt || !retryable || requestSignal.aborted || version !== sessionVersion || error.name === 'AbortError') throw error;
+        await new Promise(resolve => setTimeout(resolve,250));
+      }
     }
-    return data;
   };
   // Share identical read requests; search requests have their own abort lifecycle.
   if (method !== 'GET' || options.signal) return request();
@@ -89,7 +113,7 @@ function closeMenu(returnFocus = false) {
   if (wasOpen && returnFocus) $('menuToggle').focus();
 }
 function go(view, updateHash = true) {
-  if (!views[view]) view = 'overview';
+  if (!views[view] || (workspace && !canView(view))) view = 'overview';
   currentView = view;
   document.querySelectorAll('.view').forEach(node => node.classList.toggle('active', node.id === view));
   document.querySelectorAll('.nav button').forEach(node => { node.classList.toggle('active',node.dataset.view === view); if (node.dataset.view === view) node.setAttribute('aria-current','page'); else node.removeAttribute('aria-current'); });
@@ -104,22 +128,84 @@ function go(view, updateHash = true) {
   if (view === 'activity') loadActivity();
   if (view === 'system') renderSystem();
   if (view === 'settings') loadSettings();
+  if (view === 'team') loadTeam();
+  if (['events','studio','readiness'].includes(view)) window.Editorial?.load(view);
   window.scrollTo({top:0,behavior:'instant'});
 }
+function powerLabel(permission) {
+  return ({'news.read':'Read newsroom','news.create':'Create drafts','news.edit':'Edit stories','news.process':'Process source material','news.publish':'Verify and publish','news.reject':'Reject stories','reports.read':'Download diagnosis reports','operations.read':'View operations and quality','settings.manage':'Manage publishing settings','training.manage':'Record operating guidance','activity.read':'Read audit history','users.manage':'Manage staff and roles'})[permission] || permission;
+}
+function can(permission) {
+  if (!workspace || workspace.access.read_only) return false;
+  const powers = workspace.access.permissions;
+  return Array.isArray(powers) ? powers.includes(permission) : true;
+}
+function canView(view) {
+  if (workspace?.access.read_only) return view !== 'team';
+  return !({readiness:'reports.read',team:'users.manage',settings:'settings.manage',activity:'activity.read',operations:'operations.read',upgrade:'operations.read'}[view]) || can({readiness:'reports.read',team:'users.manage',settings:'settings.manage',activity:'activity.read',operations:'operations.read',upgrade:'operations.read'}[view]);
+}
+function controlPermission(node) {
+  if (node.dataset.permission) return node.dataset.permission;
+  if (node.dataset.bulk) return node.dataset.bulk === 'reject' ? 'news.reject' : 'news.publish';
+  if (['factBtn'].includes(node.id)) return 'news.publish';
+  if (['websiteEnabled','saveSettings','siteToggle'].includes(node.id)) return 'settings.manage';
+  if (['trainAgent','trainNotes','trainBtn'].includes(node.id)) return 'training.manage';
+  if (node.id === 'manualComposer') return 'news.create';
+  return 'news.read';
+}
+function clearStaffCredentials() {
+  $('staffLogin').value = ''; $('staffPassword').value = '';
+  if ($('staffCredentials').open) $('staffCredentials').close();
+}
+function showStaffCredentials(data) {
+  $('staffLogin').value = data.username; $('staffPassword').value = data.password;
+  $('staffCredentials').showModal();
+}
+let teamRoles = [];
+async function loadTeam() {
+  if (!can('users.manage')) return;
+  try {
+    const data = await api('/api/admin/users');
+    teamRoles = data.roles;
+    $('hireRole').innerHTML = '<option value="">Select a role…</option>' + teamRoles.map(role => `<option value="${esc(role.id)}">${esc(role.name)}</option>`).join('');
+    $('hirePowers').textContent = 'Choose a job to see exactly which actions it permits.';
+    $('teamMembers').innerHTML = '<table class="table"><thead><tr><th>Username</th><th>Role / powers</th><th>Actions</th></tr></thead><tbody>' + data.users.map(user => `<tr><td>${esc(user.username)}</td><td>${user.protected ? '<b>Main owner · all permissions</b>' : `<select class="field" data-staff-role="${esc(user.username)}">${!user.enabled ? '<option value="">Disabled · select a role to restore</option>' : ''}${teamRoles.map(role => `<option value="${esc(role.id)}" ${user.role === role.id ? 'selected' : ''}>${esc(role.name)}</option>`).join('')}</select>`}<small>${esc(user.permissions.map(powerLabel).join(', ') || 'No access')}</small></td><td>${user.protected ? 'Protected owner' : `<button class="btn small" data-policy-user="${esc(user.username)}">Exact permissions</button> <button class="btn small" data-staff="role" data-user="${esc(user.username)}">Save role</button> <button class="btn small" data-staff="reset_password" data-user="${esc(user.username)}">Generate new password</button> <button class="btn small danger" data-staff="disable" data-user="${esc(user.username)}" ${!user.enabled ? 'disabled' : ''}>Disable access</button>`}</td></tr>`).join('') + '</tbody></table>';
+  } catch (error) { notice(error.message,'err'); }
+}
+async function downloadDiagnosis() {
+  if (!can('reports.read')) return;
+  const button = $('downloadDiagnostics'), version = sessionVersion;
+  button.disabled = true; button.textContent = 'Preparing live diagnosis…';
+  try {
+    const response = await fetch('/api/admin/diagnostics.pdf?days=' + encodeURIComponent($('diagnosisPeriod').value),{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(30000)});
+    if (!response.ok) { const error = await response.json().catch(() => ({})); throw new Error(error.error || 'Diagnosis download failed'); }
+    if (!(response.headers.get('Content-Type') || '').startsWith('application/pdf')) throw new Error('The diagnosis service did not return a PDF.');
+    const blob = await response.blob();
+    if (version !== sessionVersion) return;
+    download('politicshub-diagnosis-' + new Date().toISOString().slice(0,10) + '.pdf',blob,'application/pdf');
+    notice('Fresh diagnosis downloaded. Full database totals and source inventory; recent history is scoped in the PDF.');
+  } catch (error) { notice(error.message,'err'); }
+  finally { button.textContent = '↓ Download diagnosis PDF'; button.disabled = !can('reports.read'); }
+}
+
 function applyCapabilities() {
   const writable = !!workspace && !workspace.access.read_only;
-  document.querySelectorAll('[data-write]').forEach(node => { node.disabled = !writable || mutationBusy; node.title = writable ? '' : workspace?.data_origin === 'termux_github' ? 'Edits run on the Termux phone, not on the public website' : 'Requires a live database and owner session'; });
+  document.querySelectorAll('[data-write]').forEach(node => { node.disabled = !writable || !can(controlPermission(node)) || mutationBusy; node.title = writable ? '' : workspace?.data_origin === 'termux_github' ? 'Edits run on the Termux phone, not on the public website' : 'Requires a live database and owner session'; });
+  document.querySelectorAll('[data-view]').forEach(node => { node.hidden = !canView(node.dataset.view); });
+  $('downloadDiagnostics').disabled = !can('reports.read');
+  $('publishManual').disabled = !can('news.create') || !can('news.publish') || mutationBusy;
+  $('saveManual').closest('.panel').hidden = !can('news.create');
   $('status').disabled = !writable; $('review').disabled = !writable;
   $('settingsState').textContent = writable ? '' : workspace?.data_origin === 'termux_github' ? 'Read-only website. Review and approve stories using the local Termux workflow.' : 'Read-only. Publishing controls require a live database owner session.';
 }
 function renderWorkspace() {
   const data = workspace, health = data.health, stats = data.stats, sample = data.coverage.sample_size;
-  const githubOnly = data.data_origin === 'termux_github';
+  const githubOnly = data.data_origin === 'termux_github' && data.mode !== 'live';
   rows = data.stories;
   settings = data.settings || {};
   $('userName').textContent = data.access.username;
   $('avatar').textContent = data.access.username.slice(0,1).toUpperCase();
-  $('sessionRole').textContent = data.access.scope === 'recovery' ? 'Recovery · read-only' : data.access.read_only ? (githubOnly ? 'Owner · GitHub feed view' : 'Owner · database unavailable') : 'Owner session';
+  $('sessionRole').textContent = data.access.scope === 'recovery' ? 'Recovery · read-only' : data.access.read_only ? (githubOnly ? 'Owner · GitHub feed view' : 'Owner · database unavailable') : (data.access.role || 'Administrator') + ' session';
   $('connectionBadge').className = 'pill ' + (data.mode === 'live' || (githubOnly && sample) ? 'green' : 'amber');
   $('connectionBadge').textContent = data.mode === 'live' ? 'Live database' : githubOnly ? 'GitHub news feed' : 'Snapshot mode';
   $('workspaceBanner').classList.toggle('hidden',!data.notice);
@@ -134,14 +220,15 @@ function renderWorkspace() {
   $('recentStories').innerHTML = rows.slice(0,5).map((row,index) => `<article class="recent-story"><span class="story-index">${String(index+1).padStart(2,'0')}</span><div><button data-inspect="${Number(row.id)}">${esc(row.title)}</button><div class="meta">${esc(row.source_name || 'Unknown source')} · ${esc(row.category || 'General')}</div></div></article>`).join('') || empty('No reports available','No saved public stories were found.');
   $('deskChart').innerHTML = barChart(data.coverage.categories,sample,6);
   $('coverageScope').textContent = `Based on ${sample} loaded stories. Distribution is not a count of the full archive.`;
-  $('health').innerHTML = `<div class="health-row"><div><b>${githubOnly ? 'News storage' : 'Database'}</b><small>${githubOnly ? 'PostgreSQL is local to Termux; phone health is not checked here' : health.database === 'connected' ? 'Connection available' : 'Persistent services are paused'}</small></div><span class="pill ${health.database === 'connected' ? 'green' : 'amber'}">${githubOnly ? 'Termux' : esc(health.database)}</span></div><div class="health-row"><div><b>Story delivery</b><small>Newest report: ${esc(date(health.latest_published_at))}</small></div><span class="pill ${health.latest_age_seconds != null && health.latest_age_seconds < 86400 ? 'green' : 'amber'}">${esc(age(health.latest_age_seconds))}</span></div><div class="health-row"><div><b>Editorial permissions</b><small>${data.access.read_only ? 'Changes are disabled server-side' : 'Authenticated owner access'}</small></div><span class="pill ${data.access.read_only ? 'amber' : 'green'}">${data.access.read_only ? 'Read-only' : 'Owner'}</span></div>`;
+  $('health').innerHTML = `<div class="health-row"><div><b>${githubOnly ? 'News storage' : 'Database'}</b><small>${githubOnly ? 'PostgreSQL is local to Termux; phone health is not checked here' : health.database === 'connected' ? 'Connection available' : 'Persistent services are paused'}</small></div><span class="pill ${health.database === 'connected' ? 'green' : 'amber'}">${githubOnly ? 'Termux' : esc(health.database)}</span></div><div class="health-row"><div><b>Story delivery</b><small>Newest report: ${esc(date(health.latest_published_at))}</small></div><span class="pill ${health.latest_age_seconds != null && health.latest_age_seconds < 86400 ? 'green' : 'amber'}">${esc(age(health.latest_age_seconds))}</span></div><div class="health-row"><div><b>Editorial permissions</b><small>${data.access.read_only ? 'Changes are disabled server-side' : 'Permissions follow your assigned role'}</small></div><span class="pill ${data.access.read_only ? 'amber' : 'green'}">${data.access.read_only ? 'Read-only' : esc(data.access.role || 'Administrator')}</span></div>`;
   $('attentionList').innerHTML = data.coverage.quality.slice(0,4).map(item => `<div class="attention-row"><span>${esc(item.name)}</span><b>${number(item.count)} stories</b></div>`).join('') || '<p class="muted">No completeness flags in the loaded sample.</p>';
   const synced = new Date(data.generated_at).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit'});
   $('footerSync').textContent = `Updated ${synced} IST · Refreshes every 60s on overview`;
   $('todayLabel').textContent = new Date().toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata',weekday:'short',day:'numeric',month:'long',year:'numeric'});
   fillOptions('category',data.coverage.categories,'All desks');
-  fillOptions('source',data.coverage.sources,'All sources');
+  fillOptions('source',sourceOptions(),'All sources');
   applyCapabilities();
+  if (!canView(currentView)) go('overview');
   if (currentView === 'sources') renderSources();
   if (currentView === 'system') renderSystem();
 }
@@ -150,31 +237,53 @@ function fillOptions(id, items, label) {
   $(id).innerHTML = `<option value="all">${label}</option>` + arr(items).map(item => `<option value="${esc(item.name)}">${esc(item.name)}</option>`).join('');
   if ([...$(id).options].some(option => option.value === value)) $(id).value = value;
 }
-async function loadOverview(silent = false) {
-  if (workspacePromise) return workspacePromise;
-  const version = sessionVersion;
+function sourceOptions() {
+  const items = [...arr(workspace?.source_inventory?.items),...arr(workspace?.coverage?.sources)];
+  return [...new Map(items.map(item => [item.name,item])).values()].sort((a,b) => a.name.localeCompare(b.name));
+}
+async function loadOverview(silent = false, {fresh = false} = {}) {
+  if (workspacePromise && !fresh) return workspacePromise;
+  if (fresh) workspaceController?.abort();
+  const version = sessionVersion, sequence = ++workspaceSequence;
+  const controller = new AbortController(); workspaceController = controller;
   $('refresh').disabled = true;
-  workspacePromise = (async () => {
-    try { const data = await api('/api/admin/workspace'); if ($('shell').classList.contains('hidden')) return; workspace = data; renderWorkspace(); return data; }
-    catch (error) { if (version === sessionVersion && error.status !== 401) { if (!silent) notice(error.message,'err'); $('connectionBadge').className = 'pill amber'; $('connectionBadge').textContent = 'Refresh failed'; $('workspaceBanner').classList.remove('hidden'); $('workspaceBanner').textContent = 'Workspace refresh failed. Displayed data may be out of date. Retry with Refresh.'; } }
-    finally { if (version === sessionVersion) { workspacePromise = null; $('refresh').disabled = false; } }
+  const promise = (async () => {
+    try {
+      const data = await api('/api/admin/workspace',{signal:controller.signal});
+      if (version !== sessionVersion || sequence !== workspaceSequence || $('shell').classList.contains('hidden')) return null;
+      workspace = data; renderWorkspace(); return data;
+    } catch (error) {
+      if (version === sessionVersion && sequence === workspaceSequence && error.status !== 401 && error.name !== 'AbortError') {
+        if (!silent) notice(error.name === 'TimeoutError' ? 'Workspace refresh timed out. Displayed data is retained; retry with Refresh.' : error.message,'err');
+        $('connectionBadge').className = 'pill amber'; $('connectionBadge').textContent = 'Refresh failed';
+        $('workspaceBanner').classList.remove('hidden');
+        $('workspaceBanner').textContent = 'Workspace refresh failed. Displayed data may be out of date. Retry with Refresh.';
+      }
+      return null;
+    } finally {
+      if (version === sessionVersion && sequence === workspaceSequence) {
+        workspacePromise = null; workspaceController = null; $('refresh').disabled = false;
+      }
+    }
   })();
-  return workspacePromise;
+  workspacePromise = promise;
+  return promise;
 }
 function filteredSnapshot() {
   const query = $('search').value.trim().toLowerCase();
-  const result = rows.filter(row => (!query || [row.title,row.summary,row.source_name].join(' ').toLowerCase().includes(query)) && ($('category').value === 'all' || row.category === $('category').value) && ($('source').value === 'all' || row.source_name === $('source').value) && ($('status').value === 'all' || row.status === $('status').value) && (queue !== 'quality' || row.quality_flags.length));
+  const result = rows.filter(row => (!query || [row.id,row.news_number,row.title,row.summary,row.source_name].join(' ').toLowerCase().includes(query)) && ($('category').value === 'all' || row.category === $('category').value) && ($('source').value === 'all' || row.source_name === $('source').value) && ($('status').value === 'all' || row.status === $('status').value) && (queue !== 'quality' || row.quality_flags.length));
   const sort = $('sort').value;
   return result.sort((a,b) => sort === 'oldest' ? (a.timestamp || 0)-(b.timestamp || 0) : sort === 'views' ? Number(b.view_count || 0)-Number(a.view_count || 0) : sort === 'quality' ? b.quality_flags.length-a.quality_flags.length : (b.timestamp || 0)-(a.timestamp || 0));
 }
 function storyActions(row) {
+  if(row.archived && !workspace?.access.read_only) return `<button class="btn" data-inspect="${Number(row.id)}">Inspect saved article</button><button class="btn" data-restore-archive="${esc(row.news_number)}">Restore for editing</button>`;
   if (workspace?.access.read_only) return `<button class="btn" data-inspect="${Number(row.id)}">Inspect ↗</button>`;
   const id = Number(row.id);
-  return `<button class="btn" data-inspect="${id}">Inspect</button>` + (!row.article_available ? `<button class="btn" data-news="process" data-id="${id}">Process</button>` : '') + (row.status === 'pending' && !['reviewed','verified','passed','approved'].includes(row.fact_check_status) ? `<button class="btn" data-news="approve" data-id="${id}">Verify &amp; approve</button>` : '') + (row.status === 'pending' && ['reviewed','verified','passed','approved'].includes(row.fact_check_status) ? `<button class="btn" data-news="publish" data-id="${id}">Publish</button>` : '') + (row.status !== 'rejected' ? `<button class="btn danger" data-news="reject" data-id="${id}">Reject</button>` : '');
+  return `<button class="btn" data-inspect="${id}">Inspect</button><button class="btn" data-studio="${id}">Studio</button>` + (!row.article_available ? `<button class="btn" data-permission="news.process" data-news="process" data-id="${id}" data-write>Process</button>` : '') + (['pending','published'].includes(row.status) ? `<button class="btn" data-permission="news.publish" data-news="approve" data-id="${id}" data-write>${row.status === 'published' ? 'Make main news / check website' : 'Verify &amp; publish'}</button>` : '') + (row.status !== 'rejected' ? `<button class="btn danger" data-permission="news.reject" data-news="reject" data-id="${id}" data-write>Reject</button>` : '');
 }
 function renderNews(list, total) {
   visibleRows = list; pageTotal = total;
-  $('newsList').innerHTML = list.map(row => `<article class="story"><input type="checkbox" data-select="${Number(row.id)}" aria-label="Select story ${Number(row.id)}" ${selected.has(Number(row.id)) ? 'checked' : ''}><div class="story-content"><div class="story-tags"><span class="desk-tag">${esc(row.category || 'General')}</span><span class="pill ${row.status === 'published' ? 'green' : 'amber'}">${esc(row.status)}</span><span class="quality-tag">${row.quality_flags.length ? row.quality_flags.length+' completeness flags' : 'No completeness flags'}</span></div><h3><button class="story-title" data-inspect="${Number(row.id)}">${esc(row.title)}</button></h3><div class="meta">#${Number(row.id)} · ${esc(row.source_name || 'Unknown source')} · ${esc(date(row.timestamp ? row.timestamp * 1000 : row.published_at))}</div><p>${esc(row.summary)}</p></div><div class="actions">${storyActions(row)}</div></article>`).join('') || empty('No matching stories','Try another search or reset your filters.');
+  $('newsList').innerHTML = list.map(row => `<article class="story"><input type="checkbox" data-select="${Number(row.id)}" aria-label="Select story ${Number(row.id)}" ${selected.has(Number(row.id)) ? 'checked' : ''}><div class="story-content"><div class="story-tags"><span class="desk-tag">${esc(row.category || 'General')}</span><span class="pill ${row.status === 'published' ? 'green' : 'amber'}">${esc(row.status)}</span><span class="quality-tag">${row.quality_flags.length ? row.quality_flags.length+' completeness flags' : 'No completeness flags'}</span></div><h3><button class="story-title" data-inspect="${Number(row.id)}">${esc(row.title)}</button></h3><div class="meta">News No. ${esc(row.news_number || row.id)} · ${esc(row.source_name || 'Unknown source')} · ${esc(date(row.timestamp ? row.timestamp * 1000 : row.published_at))}</div><p>${esc(row.summary)}</p></div><div class="actions">${storyActions(row)}</div></article>`).join('') || empty('No matching stories','Try another search or reset your filters.');
   $('newsCount').textContent = `${number(total)} matching ${total === 1 ? 'story' : 'stories'}`;
   $('newsScope').textContent = workspace.mode === 'snapshot' ? `Read-only search across ${rows.length} saved public reports. Private queues require the database.` : 'Search the full database. Showing 25 stories per page.';
   $('exportNews').textContent = workspace.mode === 'snapshot' ? '↓ Export filtered CSV' : '↓ Export page CSV';
@@ -182,19 +291,68 @@ function renderNews(list, total) {
   $('nextPage').disabled = pageNumber * 25 >= total;
   $('pageInfo').textContent = `Page ${pageNumber} of ${Math.max(1,Math.ceil(total/25))}`;
   updateSelection();
+  applyCapabilities();
 }
-async function loadNews(reset = false) {
-  if (!workspace) return;
+function newsNumberInput(value) {
+  const text=String(value || '').trim().replace(/^(?:News\s*No\.?\s*[:#]?\s*|#)/i,'');
+  if (/^\d{9,16}$/.test(text)) return text;
+  try { const url=new URL(text); return /^https?:$/.test(url.protocol) ? (url.pathname.match(/\/(\d{9,16})(?:-[^/]*)?\/?$/)?.[1] || '') : ''; }
+  catch { return ''; }
+}
+async function loadNews(reset = false, {silent = false} = {}) {
+  if (!workspace) return false;
   if (reset) { pageNumber = 1; selected.clear(); }
   const sequence = ++newsSequence;
   newsController?.abort();
-  if (workspace.mode === 'snapshot') { const result = filteredSnapshot(); renderNews(result.slice((pageNumber-1)*25,pageNumber*25),result.length); return; }
   newsController = new AbortController();
+  const signal=newsController.signal;
+  const numberQuery=newsNumberInput($('search').value);
   $('newsList').setAttribute('aria-busy','true');
-  const query = new URLSearchParams({page:pageNumber,search:$('search').value.trim(),category:$('category').value,source:$('source').value,status:$('status').value,review:$('review').value,sort:$('sort').value,quality:queue === 'quality' ? '1' : '0'});
-  try { const data = await api('/api/admin/stories?' + query,{signal:AbortSignal.any([newsController.signal,AbortSignal.timeout(15000)])}); if (sequence === newsSequence) renderNews(data.stories,data.total); }
-  catch (error) { if (sequence === newsSequence && error.name !== 'AbortError') { notice(error.message,'err'); if (error.status === 503) { await loadOverview(); if (workspace?.mode === 'snapshot') loadNews(true); } } }
-  finally { if (sequence === newsSequence) $('newsList').removeAttribute('aria-busy'); }
+  try {
+    if (numberQuery) {
+      let article;
+      try { article=await api('/api/news/'+encodeURIComponent(numberQuery),{signal}); }
+      catch(error) { if (error.status !== 404) throw error; }
+      if (sequence !== newsSequence || signal.aborted) return false;
+      if (article?.id) {
+        const stamp=Date.parse(article.published_at_iso || article.published_at_site || article.published_at);
+        const story={...article,news_number:String(article.news_number || numberQuery),
+          summary:article.bot_summary || article.summary || '', quality_flags:[],
+          article_available:!!(article.article || article.bot_article), timestamp:Number.isFinite(stamp)?stamp/1000:null,
+          status:'published',fact_check_status:null,archived:true};
+        renderNews([story],1);
+        $('newsScope').textContent='Exact news number match across the public archive. Queue and desk filters do not hide this result.';
+        // Public identity resolution must work even while the phone runs an
+        // older queue implementation or the article is absent from its database.
+        if (!workspace.access.read_only) {
+          try {
+            const draft=await api('/api/admin/story/'+encodeURIComponent(story.id),{signal});
+            if(sequence !== newsSequence || signal.aborted)return false;
+            if(String(draft.id)===String(story.id)) {
+              Object.assign(story,draft,{archived:false,status:draft.status || 'unknown'});
+              renderNews([story],1);
+              $('newsScope').textContent='Exact news number match. The connected editor contains this story.';
+            }
+          } catch(error) {
+            if(sequence !== newsSequence || signal.aborted || error.status===401)return false;
+            $('newsScope').textContent='Public article found. Its saved text is available to inspect; the connected editor has not confirmed an editable copy.';
+          }
+        }
+        return true;
+      }
+    }
+    if (workspace.mode === 'snapshot') { const result = filteredSnapshot(); renderNews(result.slice((pageNumber-1)*25,pageNumber*25),result.length); return true; }
+    const query = new URLSearchParams({page:pageNumber,search:numberQuery || $('search').value.trim(),category:$('category').value,source:$('source').value,status:$('status').value,review:$('review').value,sort:$('sort').value,quality:queue === 'quality' ? '1' : '0'});
+    const data = await api('/api/admin/stories?' + query,{signal});
+    if (sequence === newsSequence) { renderNews(data.stories,data.total); return true; }
+    return false;
+  } catch (error) {
+    if (sequence === newsSequence && error.name !== 'AbortError') {
+      if (!silent) notice(error.name === 'TimeoutError' ? 'News refresh timed out. Displayed stories are retained.' : error.message,'err');
+      $('newsScope').textContent = 'News refresh failed. Displayed stories may be out of date; use Refresh to retry.';
+    }
+    return false;
+  } finally { if (sequence === newsSequence) $('newsList').removeAttribute('aria-busy'); }
 }
 function updateSelection() {
   $('bulkBar').classList.toggle('hidden',!selected.size);
@@ -207,50 +365,147 @@ function confirmAction(title, message) {
   const dialog = $('confirmDialog'); dialog.returnValue = ''; dialog.showModal();
   return new Promise(resolve => dialog.addEventListener('close',() => resolve(dialog.returnValue === 'yes'),{once:true}));
 }
-async function newsAction(kind, id) {
-  if (mutationBusy || workspace?.access.read_only || !['process','approve','publish','reject'].includes(kind)) return;
-  if (['publish','reject'].includes(kind) && !await confirmAction(`${kind === 'publish' ? 'Publish' : 'Reject'} this story?`,`Story #${id}. This changes its publication state in the live database.`)) return;
-  let payload = {};
-  if (kind === 'approve') {
-    const evidence = prompt('Independently verified source URLs (one per line; conflict/Telegram news needs at least two different publishers):');
-    if (evidence === null) return;
-    const sources = evidence.split(/[\\n,]+/).map(s => s.trim()).filter(Boolean);
-    const notes = prompt('Verification notes: which facts, dates, locations, context and originality did you personally check? (40+ characters)');
-    if (notes === null) return;
-    const confirmation = prompt(`After checking the FULL article, type APPROVE ${id} to confirm this exact story:`);
-    if (confirmation !== `APPROVE ${id}`) return notice('Approval cancelled; no changes made.','err');
-    payload = {evidence_urls:sources,notes,confirm:confirmation,confirmed_facts:true,confirmed_originality:true};
+function markPublished(id) {
+  const previous = [...visibleRows,...rows].find(row => Number(row.id) === id)?.status;
+  for (const list of [rows,visibleRows]) for (const row of list) if (Number(row.id) === id) {
+    row.status = 'published'; row.fact_check_status = 'reviewed';
   }
+  selected.delete(id);
+  if (workspace && previous && previous !== 'published') {
+    if (workspace.stats.pending != null && previous === 'pending') workspace.stats.pending = Math.max(0,workspace.stats.pending-1);
+    if (workspace.stats.published != null) workspace.stats.published++;
+  }
+  if (currentView === 'news') {
+    const statusFilter = $('status').value, reviewFilter = $('review').value;
+    const publishedExcluded = (statusFilter !== 'all' && statusFilter !== 'published') || (reviewFilter !== 'all' && reviewFilter !== 'reviewed');
+    const list = publishedExcluded ? visibleRows.filter(row => Number(row.id) !== id) : visibleRows;
+    renderNews(list,Math.max(0,pageTotal-(publishedExcluded && previous !== 'published' ? 1 : 0)));
+  }
+}
+async function refreshAfterMutation() {
+  const checks = [loadOverview(true,{fresh:true})];
+  if (currentView === 'news') checks.push(loadNews(false,{silent:true}));
+  const results = await Promise.allSettled(checks);
+  return results.every(result => result.status === 'fulfilled' && !!result.value);
+}
+function publicationMessage(result) {
+  const state = result.public_delivery?.state;
+  if (state === 'synced') return 'Story published on the website.';
+  if (result.public_delivery?.configured === false) return 'Story published on the phone. Website sync is not configured.';
+  if (state === 'queued' || state === 'verifying') return 'Publication saved. Checking that the story is visible on the website…';
+  if (state === 'not_configured') return 'Story published on the phone. Website sync is not configured.';
+  if (state === 'failed') return 'Story published on the phone. Website sync failed; publication is saved.';
+  return 'Story published.';
+}
+async function waitForPublicationDelivery(id, result, version) {
+  if (!['queued','verifying'].includes(result.public_delivery?.state) || result.public_delivery.configured !== true) return result;
+  const controller = new AbortController(); deliveryController = controller;
+  const signal = AbortSignal.any([controller.signal,AbortSignal.timeout(20000)]);
+  const end = Date.now()+20000;
+  try {
+    while (Date.now() < end && !signal.aborted && version === sessionVersion) {
+      await new Promise(resolve => setTimeout(resolve,2000));
+      if (signal.aborted || version !== sessionVersion) break;
+      try {
+        const response = await api('/api/admin/story/'+id+'/delivery',{signal});
+        if (version !== sessionVersion) break;
+        const delivery = response.public_delivery || response;
+        result = {...result,public_delivery:{...result.public_delivery,...delivery}};
+        if (['synced','failed','not_configured','not_queued'].includes(delivery.state)) return result;
+      } catch (error) {
+        if (signal.aborted || error.status === 401 || version !== sessionVersion) break;
+        // Publication is saved. A failed status read never repeats the write.
+      }
+    }
+  } finally { if (deliveryController === controller) deliveryController = null; }
+  return result;
+}
+function showPublicationNotice(message, result, type = 'ok') {
+  notice(message,type);
+  if (result.public_delivery?.state !== 'synced') return;
+  try { const channel=new BroadcastChannel('politicshub-public-news'); channel.postMessage({type:'published'});channel.close(); } catch {}
+  const raw = result.public_delivery.public_url || result.public_url || result.url;
+  if (!raw) return;
+  let url;
+  try { url = new URL(raw,location.origin); } catch { return; }
+  if (!['https://www.politicshub.in',location.origin].includes(url.origin)) return;
+  const link = document.createElement('a');
+  link.href = url.href; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'View article ↗';
+  $('notice').append(' ',link);
+  clearTimeout(noticeTimer); noticeTimer = setTimeout(() => $('notice').classList.add('hidden'),15000);
+}
+async function newsAction(kind, id) {
+  if (mutationBusy || !workspace || workspace.access.read_only || !['process','approve','publish','reject'].includes(kind)) return;
+  if (kind === 'reject' && !await confirmAction('Reject this story?',`Story #${id}. This changes its publication state in the live database.`)) return;
+  const publication = kind === 'approve' || kind === 'publish', version = sessionVersion;
+  const row = [...visibleRows,...rows].find(item => Number(item.id) === id);
+  const payload = row?.revision ? {revision:row.revision} : {};
   mutationBusy = true; applyCapabilities();
-  try { await action(`/api/news/${id}/${kind}`, payload); notice(kind === 'approve' ? 'Human verification saved; publish only after final review.' : 'Action completed'); await loadOverview(); await loadNews(); }
-  catch (error) { notice(error.message,'err'); }
-  finally { mutationBusy = false; applyCapabilities(); }
+  try {
+    let result = await action(`/api/news/${id}/${publication ? 'approve' : kind}`,payload);
+    if (publication && (result.ok !== true || result.status !== 'published')) throw new Error('Publication was not confirmed by the server. Refresh the story before retrying.');
+    if (publication) {
+      markPublished(id);
+      notice(publicationMessage(result));
+      result = await waitForPublicationDelivery(id,result,version);
+      if (version !== sessionVersion) return;
+    }
+    const message = publication ? publicationMessage(result) : kind === 'process' ? 'Story processed.' : 'Story rejected.';
+    if (publication) showPublicationNotice(message,result); else notice(message);
+    const refreshed = await refreshAfterMutation();
+    if (version !== sessionVersion) return;
+    if (!refreshed) {
+      const warning = message + ' Latest lists could not be refreshed; use Refresh.';
+      if (publication) showPublicationNotice(warning,result,'warn'); else notice(warning,'warn');
+    }
+  } catch (error) { if (version === sessionVersion && error.name !== 'AbortError') notice(error.message,'err'); }
+  finally { if (version === sessionVersion) { mutationBusy = false; applyCapabilities(); } }
 }
 async function bulkAction(kind) {
-  if (mutationBusy || workspace?.access.read_only || !selected.size) return;
+  if (mutationBusy || !workspace || workspace.access.read_only || !selected.size || !['approve','publish','reject'].includes(kind)) return;
   if (selected.size > 10) return notice('Select at most 10 stories per action.','err');
-  if (['approve','publish'].includes(kind)) return notice('Approve and publish one verified story at a time; bulk publication is disabled.','err');
-  const ids = [...selected];
-  if (!await confirmAction(`${kind === 'approve' ? 'Mark reviewed' : kind === 'publish' ? 'Publish' : 'Reject'} ${ids.length} stories?`,'Actions run sequentially. Processing stops at the first failure; completed changes stay saved.')) return;
+  const ids = [...selected], publication = kind === 'approve' || kind === 'publish', version = sessionVersion;
+  if (!publication && !await confirmAction(`Reject ${ids.length} stories?`,'Actions run sequentially. Processing stops at the first failure; completed changes stay saved.')) return;
   mutationBusy = true; applyCapabilities();
-  let completed = 0;
-  try { for (const id of ids) { await action(`/api/news/${id}/${kind}`); selected.delete(id); completed++; } notice(`${completed} stories updated`); }
-  catch (error) { notice(`${completed} updated. Stopped: ${error.message}`,'err'); }
-  finally { mutationBusy = false; await loadOverview(); await loadNews(); applyCapabilities(); }
+  let completed = 0, failure = '', websitePending = false;
+  try {
+    for (const id of ids) {
+      if (version !== sessionVersion) return;
+      const row = [...visibleRows,...rows].find(item => Number(item.id) === id);
+      const result = await action(`/api/news/${id}/${publication ? 'approve' : kind}`,row?.revision ? {revision:row.revision} : {});
+      if (publication && (result.ok !== true || result.status !== 'published')) throw new Error(`Publication of story #${id} was not confirmed. Refresh before retrying.`);
+      if (publication) {
+        markPublished(id);
+        if (result.public_delivery && result.public_delivery.state !== 'synced') websitePending = true;
+      } else selected.delete(id);
+      completed++;
+    }
+  } catch (error) { failure = error.message; }
+  finally {
+    if (version !== sessionVersion) return;
+    const refreshed = await refreshAfterMutation();
+    if (version !== sessionVersion) return;
+    mutationBusy = false; applyCapabilities();
+    let message = `${completed} ${completed === 1 ? 'story' : 'stories'} ${publication ? 'published' : 'rejected'}.`;
+    if (websitePending) message += ' Website sync is pending for some stories.';
+    if (failure) notice(message + ' Stopped: ' + failure,'err');
+    else if (!refreshed) notice(message + ' Latest lists could not be refreshed; use Refresh.','warn');
+    else notice(message);
+  }
 }
 async function inspectStory(id) {
   const row = [...visibleRows,...rows].find(item => Number(item.id) === id);
   if (!row) return;
   const sequence = ++inspectorSequence, url = safeUrl(row.url);
-  $('inspectorBody').innerHTML = `<span class="desk-tag">${esc(row.category || 'General')} / #${id}</span><h2 id="inspectorTitle">${esc(row.title)}</h2><span class="pill ${row.status === 'published' ? 'green' : 'amber'}">${esc(row.status)}</span><dl class="detail-grid">${detail('Source',row.source_name || 'Unknown')}${detail('Published',date(row.timestamp ? row.timestamp*1000 : row.published_at))}${detail('Review',row.fact_check_status || 'Not available in public snapshot')}${detail('Recorded views',number(row.view_count))}</dl><p class="inspector-summary">${esc(row.summary || 'No summary available.')}</p><div class="quality-flags">${row.quality_flags.map(flag => `<span class="pill amber">${esc(flag)}</span>`).join('')}</div><div class="actions">${url ? `<a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(url)}">Open original source ↗</a>` : ''}<button id="loadArticle" class="btn">Load article text</button><button id="copySource" class="btn" ${url ? '' : 'disabled'}>Copy source URL</button></div><div id="inspectorArticle" class="article-body"></div>`;
+  $('inspectorBody').innerHTML = `<span class="desk-tag">${esc(row.category || 'General')} / News No. ${esc(row.news_number || id)}</span><h2 id="inspectorTitle">${esc(row.title)}</h2><span class="pill ${row.status === 'published' ? 'green' : 'amber'}">${esc(row.status)}</span><dl class="detail-grid">${detail('Source',row.source_name || 'Unknown')}${detail('Published',date(row.timestamp ? row.timestamp*1000 : row.published_at))}${detail('Review',row.fact_check_status || 'Not available in public snapshot')}${detail('Recorded views',number(row.view_count))}</dl><p class="inspector-summary">${esc(row.summary || 'No summary available.')}</p><div class="quality-flags">${row.quality_flags.map(flag => `<span class="pill amber">${esc(flag)}</span>`).join('')}</div><div class="actions">${url ? `<a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(url)}">Open original source ↗</a>` : ''}<button id="loadArticle" class="btn">Load article text</button><button id="copySource" class="btn" ${url ? '' : 'disabled'}>Copy source URL</button></div><div id="inspectorArticle" class="article-body"></div>`;
   if (!$('inspector').open) $('inspector').showModal();
   $('loadArticle').onclick = async () => {
     $('loadArticle').disabled = true; $('inspectorArticle').textContent = 'Loading article…';
-    try { const data = await api((workspace && !workspace.access.read_only ? '/api/admin/story/' + id + '/article' : '/api/news/' + id)); if (sequence !== inspectorSequence || !$('inspector').open) return; $('inspectorArticle').textContent = data.article || data.bot_article || data.summary || 'No article text available.'; }
+    try { const data = await api((workspace && !workspace.access.read_only && !row.archived ? '/api/admin/story/' + id + '/article' : '/api/news/' + id)); if (sequence !== inspectorSequence || !$('inspector').open) return; $('inspectorArticle').textContent = data.article || data.bot_article || data.summary || 'No article text available.'; }
     catch (error) { if (sequence === inspectorSequence && $('inspector').open) { $('inspectorArticle').textContent = error.message; $('loadArticle').disabled = false; } }
   };
   $('copySource').onclick = async () => { try { await navigator.clipboard.writeText(url); notice('Source link copied'); } catch { notice('Clipboard unavailable. Open the original source link.','err'); } };
-  if (!workspace.access.read_only) {
+  if (can('news.edit') && !row.archived) {
     const editor = document.createElement('details'); editor.className = 'story-editor';
     editor.innerHTML = `<summary>Edit headline &amp; summary</summary><form id="editStoryForm"><label class="label" for="editTitle">Headline</label><textarea id="editTitle" class="field" maxlength="500" required rows="3">${esc(row.title)}</textarea><label class="label" for="editCategory">Editorial desk</label><select id="editCategory" class="field">${['general','india','world','politics','business','technology','sports','entertainment','science','health','hindi','maharashtra'].map(category => `<option ${category === row.category ? 'selected' : ''}>${category}</option>`).join('')}</select><label class="label" for="editSummary">Summary</label><textarea id="editSummary" class="field" maxlength="6000" rows="5">${esc(row.summary)}</textarea><p class="panel-foot">Changes are saved to the database and recorded in the audit trail. Source links stay attached to the story.</p><button class="btn primary" type="submit">Save story</button></form>`;
     $('inspectorBody').append(editor);
@@ -272,7 +527,7 @@ async function inspectStory(id) {
     $('editStoryForm').onsubmit = async event => {
       event.preventDefault(); const button = event.currentTarget.querySelector('[type=submit]'); button.disabled = true;
       if (!revision) { button.disabled = false; return notice('Load the full editorial draft before saving.','err'); }
-      try { await action('/api/news/' + id + '/edit',{title:$('editTitle').value.trim(),category:$('editCategory').value,summary:$('editSummary').value.trim(),bot_summary:$('editSummary').value.trim()},{'If-Match':revision}); $('inspector').close(); notice('Story changes saved'); await loadOverview(); await loadNews(); }
+      try { await action('/api/news/' + id + '/edit',{title:$('editTitle').value.trim(),category:$('editCategory').value,summary:$('editSummary').value.trim(),bot_summary:$('editSummary').value.trim()},{'If-Match':revision}); $('inspector').close(); notice('Story changes saved'); if (!await refreshAfterMutation()) notice('Story changes saved. Latest lists could not be refreshed; use Refresh.','warn'); }
       catch (error) { notice(error.message,'err'); }
       finally { button.disabled = false; }
     };
@@ -280,12 +535,142 @@ async function inspectStory(id) {
 }
 function renderSources() {
   if (!workspace) return;
-  const data = workspace.coverage, total = data.sample_size, lead = data.sources[0];
-  $('sourceMetrics').innerHTML = metric('Sources represented',data.sources.length,'In the loaded sample') + metric('Desks represented',data.categories.length,'In the loaded sample') + metric('Largest source share',lead ? pct(Math.round(lead.count/Math.max(1,total)*100)) : '—',lead?.name || 'No records') + metric('Reports sampled',number(total),workspace.mode === 'snapshot' ? 'Saved public snapshot' : 'Latest database records');
-  $('sourceChart').innerHTML = barChart(data.sources,total,12);
-  $('qualityChart').innerHTML = barChart(data.quality,total,10);
-  $('sourceScope').textContent = total + ' loaded stories';
-  $('sourceTable').innerHTML = '<table class="table"><thead><tr><th>Publisher</th><th>Stories</th><th>Share</th><th>Latest report</th><th></th></tr></thead><tbody>' + data.sources.map(source => {const matching = rows.filter(row => (row.source_name || 'Unknown') === source.name); const latest = Math.max(...matching.map(row => row.timestamp || 0)); return `<tr><td>${esc(source.name)}</td><td>${source.count}</td><td>${Math.round(source.count/Math.max(1,total)*100)}%</td><td>${esc(latest ? date(latest*1000) : 'Not recorded')}</td><td><button class="text-btn" data-source-filter="${esc(source.name)}">View stories ↗</button></td></tr>`;}).join('') + '</tbody></table>';
+  const inventory = workspace.source_inventory;
+  const complete = !!inventory && Array.isArray(inventory.items);
+  const scope = complete ? inventory.scope : 'sample';
+  const database = scope === 'database', snapshot = scope === 'snapshot';
+  const countScope = database ? workspace.access?.policy ? 'Your accessible database stories' : 'Entire database' : snapshot ? 'Saved public snapshot only' : scope === 'sample' ? 'Loaded sample only' : 'Database counts unavailable';
+  const items = complete ? inventory.items : arr(workspace.coverage.sources).map(source => ({name:source.name,story_count:source.count,collection_status:'unknown'}));
+  const total = complete ? inventory.total_stories : workspace.coverage.sample_size;
+  const represented = complete ? inventory.represented_count : items.length;
+  $('sourceMetrics').innerHTML = metric('Configured publishers',complete ? number(inventory.configured_count) : 'Unavailable','Full source configuration') + metric('Publishers with reports',number(represented),countScope) + metric('Stored reports',number(total),countScope) + metric('Desks represented',number(complete ? inventory.categories_count : workspace.coverage.categories.length),countScope);
+  const counted = items.filter(item => Number(item.story_count) > 0).sort((a,b) => b.story_count-a.story_count || a.name.localeCompare(b.name));
+  $('sourceChart').innerHTML = counted.length ? barChart(counted.map(item => ({name:item.name,count:item.story_count})),total,12) : empty('No stored reports in this scope',scope === 'unavailable' ? 'Database counts could not be loaded.' : 'Configured publishers remain listed in the directory below.');
+  $('sourceChartScope').textContent = countScope + ' · largest 12 publishers';
+  $('qualityChart').innerHTML = barChart(workspace.coverage.quality,workspace.coverage.sample_size,10);
+  $('qualityScope').textContent = `Completeness checks cover ${number(workspace.coverage.sample_size)} loaded stories. Source counts use ${database ? 'the entire database' : snapshot ? 'the saved public snapshot' : 'the scope shown above'}.`;
+  const warnings = complete ? arr(inventory.errors).map(error => typeof error === 'string' ? error : error.message || 'Source inventory could not be fully loaded.') : ['Full source inventory is unavailable from this phone version. Update the Termux service to load every configured publisher; the counts below describe only the loaded sample.'];
+  if (snapshot) warnings.unshift('Stored report counts cover the saved public snapshot. Private phone collection status is not checked here.');
+  $('sourceInventoryNotice').classList.toggle('hidden',!warnings.length);
+  $('sourceInventoryNotice').textContent = warnings.join(' ');
+  const query = $('sourceSearch').value.trim().toLocaleLowerCase();
+  const filtered = items.filter(item => [item.name,item.category,arr(item.categories).join(' '),item.kind,item.url,item.feed_url].join(' ').toLocaleLowerCase().includes(query));
+  $('sourceScope').textContent = `${number(filtered.length)} of ${number(items.length)} publishers · ${countScope}`;
+  $('sourceTable').innerHTML = filtered.length ? '<table class="table source-directory"><thead><tr><th>Publisher / desk</th><th>Stored reports</th><th>Collection status</th><th>Latest stored report</th><th></th></tr></thead><tbody>' + filtered.map(source => {
+    const url = source.url || source.feed_url ? safeUrl(source.url || source.feed_url) : '';
+    const categories = arr(source.categories).length ? source.categories.join(', ') : source.category || '';
+    const configured = source.configured === false ? 'Stored source · not in current configuration' : source.kind ? String(source.kind).replaceAll('_',' ') : '';
+    const status = sourceCollectionStatus(source,scope);
+    const latest = source.latest_collected_at || source.latest_published_at;
+    const count = source.story_count == null ? 'Unavailable' : number(source.story_count);
+    const canFilter = source.story_count != null && Number(source.story_count) > 0;
+    return `<tr><td><b>${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(source.name)} ↗</a>` : esc(source.name)}</b><small>${esc([categories,configured].filter(Boolean).join(' · '))}</small></td><td>${esc(count)}</td><td><span class="pill ${status.tone}">${esc(status.label)}</span>${status.detail ? `<small>${esc(status.detail)}</small>` : ''}</td><td>${esc(latest ? date(latest) : 'Not recorded')}</td><td>${canFilter ? `<button class="text-btn" data-source-filter="${esc(source.name)}">${database ? 'View stories' : 'View saved stories'} ↗</button>` : `<span class="muted">${source.story_count == null ? 'Counts unavailable' : 'No stored stories'}</span>`}</td></tr>`;
+  }).join('') + '</tbody></table>' : empty('No matching publishers','Try another publisher name, language or desk.');
+  renderPhase3Operations();
+  renderPhase4Operations();
+}
+
+/* Private operational evidence only; snapshots may describe published stories,
+   but are never promoted to collector success or phone delivery claims. */
+function renderPhase3Operations() {
+  const triage=workspace?.source_triage || {scope:'unavailable',status:'unavailable'};
+  const metrics=$('sourceTriageMetrics'), issues=$('sourceIncidents'), notice=$('sourceTriageNotice');
+  const opMetrics=$('sourceOperationsMetrics'), opNote=$('sourceOperationsNote');
+  if(triage.scope!=='database'||triage.status==='unavailable') {
+    metrics.innerHTML=metric('Collector checks','Unavailable','Private phone database not measured')
+      +metric('Source incidents','Unavailable','Cannot infer failures from the public feed')
+      +metric('Last successful fetch','Unavailable','No authenticated collector telemetry');
+    issues.innerHTML=empty('Phone collector status not checked','Public GitHub snapshots can show stories, not private source fetches or failures.');
+    notice.textContent='Private collector metrics are unavailable. A working public feed does not prove the phone collector is online.';
+  } else {
+    const counts=triage.counts||{};
+    metrics.innerHTML=metric('Recorded checks',number(triage.observed)+' / '+number(triage.tracked),'Enabled publishers managed by the phone collector')
+      +metric('Failed checks',number(counts.failed||0),'Latest recorded collector attempt')
+      +metric('Overdue sources',number(counts.stale||0),'Last recorded attempt older than its check window')
+      +metric('Awaiting first check',number(counts.awaiting_collection||0),'Configured, no attempt recorded');
+    notice.textContent=triage.status==='awaiting_checks'
+      ? 'No successful or failed collector attempts are recorded. Source statuses are not verified.'
+      : 'Based on actual phone collector records. A successful fetch does not independently verify the resulting news.';
+    const incidents=arr(triage.incidents);
+    issues.innerHTML=incidents.length
+      ? '<table class="table"><thead><tr><th>Publisher</th><th>Problem</th><th>Last attempt</th><th>Last success</th><th>Recorded error class</th></tr></thead><tbody>'
+        +incidents.map(item=>'<tr><td>'+esc(item.name)+'</td><td><span class="pill '+(item.state==='failed'?'red':'amber')+'">'+esc(item.state)+'</span></td><td>'+esc(date(item.last_attempt_at))+'</td><td>'+esc(date(item.last_success_at))+'</td><td>'+esc(item.error_class||'—')+'</td></tr>').join('')
+        +'</tbody></table>'
+      : triage.status==='awaiting_checks'
+        ? empty('No collection checks recorded','The worker must report actual attempts before a source can be called healthy.')
+        : empty('No failed or overdue sources recorded','This is only a summary of the latest available phone collection records.');
+  }
+  const ops=workspace?.newsroom_operations;
+  if(!ops||ops.scope!=='database') {
+    opMetrics.innerHTML=metric('Collection → publish','Unavailable','Requires real phone article history')
+      +metric('Delivery queue','Unavailable','Private website sync status not checked')
+      +metric('Pending corrections','Unavailable','Private editorial updates not checked');
+    opNote.textContent='Source fetches, delivery receipts and pending corrections cannot be inferred from the public website. Sign into the connected phone Admin Room to inspect them.';
+    return;
+  }
+  const latency=ops.latency||{}, delivery=ops.delivery||{}, corrections=ops.corrections||{};
+  const states=delivery.counts||{}, edits=corrections.counts||{};
+  const queue=delivery.recorded?(Number(states.queued||0)+Number(states.syncing||0)+Number(states.failed||0)):null;
+  opMetrics.innerHTML=metric('Median collection → publish',latency.median_minutes==null?'Unavailable':number(latency.median_minutes)+' min',number(latency.measured)+' measured / '+number(latency.evaluated)+' recent rows')
+    +metric('95th-percentile delay',latency.p95_minutes==null?'Unavailable':number(latency.p95_minutes)+' min','Recorded publication timestamps, not website reachability')
+    +metric('Queued / failed delivery',queue==null?'Unavailable':number(queue),delivery.recorded?'Failed: '+number(states.failed||0)+' · Synced: '+number(states.synced||0):'Delivery queue table not present')
+    +metric('Pending editorial updates',corrections.recorded?number(edits.pending||0):'Unavailable','Includes proposed corrections awaiting review');
+  opNote.textContent=(latency.definition||'Collection-to-publication timestamps are measured from private records.')+' Latest sample limited to '+number(latency.sample_limit)+' published rows. A synced queue state does not prove public visibility; check the signed receipt and live article.';
+}
+
+/* Phase 4: display only source-backed, authorized operations. Nothing in this
+   renderer sends a notification, edits a story, or retries a publication. */
+function renderPhase4Operations() {
+  const d=workspace?.newsroom_alerts;
+  const metrics=$('phase4Metrics'), table=$('phase4Alerts'), trend=$('phase4Trend');
+  const notice=$('phase4Notice'), trendNote=$('phase4TrendNote');
+  if(!d || d.scope!=='database' || !d.trend) {
+    metrics.innerHTML=metric('Operational alerts','Unavailable','Private phone database not verified')
+      +metric('Corrections follow-up','Unavailable','Private editorial queue not checked')
+      +metric('Collection trends','Unavailable','Requires completed phone checks');
+    table.innerHTML=empty('Private alerts unavailable','Sign into an authorized phone-connected Admin Room. Public GitHub snapshots do not contain collector incidents.');
+    trend.innerHTML=empty('Historical data unavailable','Collector history and signed-in publication records are held on the phone.');
+    notice.textContent='No authenticated private operational telemetry; unavailable is not a healthy result.';
+    trendNote.textContent='Collection history begins with the upgraded phone worker. Previously completed checks cannot be recreated.';
+    return;
+  }
+  const alerts=arr(d.alerts), followups=arr(d.followups), history=d.trend||{};
+  const availability=d.availability||{};
+  const corrections=followups.filter(x=>x.kind==='correction');
+  const delivery=alerts.filter(x=>x.kind==='delivery');
+  metrics.innerHTML=metric('Active alerts',number(alerts.length),'Only up to '+number(d.alert_limit||30)+' alerts are shown')
+    +metric('Overdue corrections',availability.corrections?number(corrections.length):'Unavailable','Pending correction proposals older than 6 hours')
+    +metric('Delivery warnings',availability.delivery?number(delivery.length):'Unavailable','Failed delivery or stalled for over 45 minutes')
+    +metric('Recorded source outcomes',history.collector_history_available?number(history.recorded_outcomes):'Unavailable','Completed collector attempts in the last 14 days');
+  notice.textContent=(d.status==='attention'?'Recorded incidents require editorial/operational review. ':d.status==='partial'?'Some private histories are not available yet. ':'No current alerts among checked records. ')
+    +(d.note||'');
+  table.innerHTML=alerts.length
+    ? '<table class="table"><thead><tr><th>Priority</th><th>Alert</th><th>Source / story</th><th>Recorded time</th><th>Next action</th></tr></thead><tbody>'
+      +alerts.map(a=>'<tr><td><span class="pill '+(a.severity==='high'?'red':'amber')+'">'+esc(a.severity)+'</span></td><td><b>'+esc(a.title)+'</b></td><td>'+esc(a.source||(a.item_id!=null?'Story #'+a.item_id:'—'))+'</td><td>'+esc(date(a.at))+'</td><td>'+esc(a.detail)+'</td></tr>').join('')
+      +'</tbody></table>'
+    : empty('No current alerts in the available records',d.status==='partial'?'Some source or delivery histories have not been recorded yet; do not interpret this as a verified healthy system.':'The available private evidence has no triggered thresholds; refresh to check again.');
+  const series=arr(history.series);
+  trend.innerHTML=series.length
+    ? '<table class="table phase4-daily"><thead><tr><th>UTC day</th><th>Successful checks</th><th>Failed checks</th><th>Not configured</th><th>Published stories</th></tr></thead><tbody>'
+      +series.map(day=>'<tr><td><b>'+esc(day.day)+'</b></td><td>'+esc(day.healthy==null?'Not recorded':number(day.healthy))+'</td><td>'+esc(day.failed==null?'Not recorded':number(day.failed))+'</td><td>'+esc(day.not_configured==null?'Not recorded':number(day.not_configured))+'</td><td>'+esc(number(day.published))+'</td></tr>').join('')
+      +'</tbody></table>'
+    : empty('No historical measurements available','No private records have been loaded.');
+  trendNote.textContent=history.note||'These series use committed database records only, not live external website checks.';
+}
+
+function sourceCollectionStatus(source,scope) {
+  if (source.configured === false) return {label:'Stored source',tone:'',detail:'Not in current configuration'};
+  if (source.enabled === false) return {label:'Disabled',tone:'',detail:'Not enabled for collection'};
+  const status = source.collection_status;
+  if (status === 'external_pipeline') return {label:'Separate pipeline',tone:'',detail:'Collected by the GitHub pipeline'};
+  if (scope === 'snapshot' || scope === 'sample') return {label:'Not checked',tone:'',detail:'Phone collection status unavailable'};
+  if (status === 'failed') return {label:'Collection failed',tone:'red',detail:String(source.last_error || 'Latest collection attempt failed').slice(0,300)};
+  if (status === 'stale') return {label:'Collection overdue',tone:'amber',detail:source.last_success_at ? 'Last successful fetch: ' + date(source.last_success_at) : 'No recent successful fetch recorded'};
+  if (status === 'healthy' || status === 'ok') return {label:'Fetch succeeded',tone:'green',detail:source.last_success_at ? date(source.last_success_at) : 'Successful collection recorded'};
+  if (status === 'checking') return {label:'Collection in progress',tone:'amber',detail:source.last_attempt_at ? 'Started: ' + date(source.last_attempt_at) : 'Feed check started'};
+  if (status === 'awaiting_collection' || status === 'pending' || status === 'never_attempted') return {label:'Awaiting first collection',tone:'amber',detail:'Configured; no collection attempt recorded'};
+  if (status === 'not_configured') return {label:'Not configured',tone:'amber',detail:'Collector configuration is incomplete'};
+  return {label:'Not recorded',tone:'',detail:source.last_attempt_at ? 'Last attempt: ' + date(source.last_attempt_at) : 'No collection telemetry recorded'};
 }
 function telemetryAvailable(kind) {
   const available = !!workspace?.capabilities.telemetry;
@@ -309,14 +694,15 @@ async function loadActivity() {
 function renderSystem() {
   if (!workspace) return;
   const health = workspace.health, access = workspace.access;
-  $('systemChecks').innerHTML = (workspace.data_origin === 'termux_github' ? metric('Primary storage','Termux PostgreSQL','Private phone database; not remotely checked') + metric('Public delivery','GitHub feed','Approved phone exports plus attributed public sources') : metric('Database',health.database === 'connected' ? 'Connected' : 'Unavailable',health.database === 'connected' ? 'Connection verified' : 'Persistent writes are paused') + metric('Data mode',workspace.mode === 'live' ? 'Live' : 'Snapshot',workspace.mode === 'live' ? 'Database-backed newsroom' : 'Saved public reports')) + metric('Latest report age',age(health.latest_age_seconds),date(health.latest_published_at)) + metric('Workspace response',health.response_ms + ' ms','Server processing time, not browser latency');
+  const githubOnly = workspace.data_origin === 'termux_github' && workspace.mode !== 'live';
+  $('systemChecks').innerHTML = (githubOnly ? metric('Primary storage','Termux PostgreSQL','Private phone database; not remotely checked') + metric('Public delivery','GitHub feed','Approved phone exports plus attributed public sources') : metric('Database',health.database === 'connected' ? 'Connected' : 'Unavailable',health.database === 'connected' ? 'Connection verified' : 'Persistent writes are paused') + metric('Data mode',workspace.mode === 'live' ? 'Live' : 'Snapshot',workspace.mode === 'live' ? 'Database-backed newsroom' : 'Saved public reports')) + metric('Latest report age',age(health.latest_age_seconds),date(health.latest_published_at)) + metric('Workspace response',health.response_ms + ' ms','Server processing time, not browser latency');
   $('lastSync').textContent = 'Checked ' + date(workspace.generated_at);
-  $('sessionDetails').innerHTML = detail('Signed in as',access.username) + detail('Access scope',access.scope === 'recovery' ? 'Recovery · read-only' : access.read_only ? 'Owner · writes unavailable' : 'Owner') + detail('Session expires',access.expires_at ? date(access.expires_at*1000) : 'Legacy session') + detail(workspace.data_origin === 'termux_github' ? 'Public website edits' : 'Database writes',workspace.data_origin === 'termux_github' ? 'Disabled — manage locally in Termux' : access.read_only ? 'Blocked' : 'Allowed with CSRF protection') + detail('Private data storage','Session cookie only; no admin records in local storage') + detail('Coverage limit',workspace.limits.stories + ' loaded stories; charts describe this sample');
+  $('sessionDetails').innerHTML = detail('Signed in as',access.username) + detail('Assigned role',access.role || 'Administrator') + detail('Allowed actions',arr(access.permissions).map(powerLabel).join(', ') || 'Read-only / unavailable') + detail('Access scope',access.scope === 'recovery' ? 'Recovery · read-only' : access.read_only ? 'Writes unavailable' : (access.role || 'Administrator')) + detail('Session expires',access.expires_at ? date(access.expires_at*1000) : 'Legacy session') + detail(githubOnly ? 'Public website edits' : 'Database writes',githubOnly ? 'Disabled — manage locally in Termux' : access.read_only ? 'Blocked' : 'Limited to assigned role; CSRF protection required') + detail('Private data storage','Session cookie only; no admin records in local storage') + detail('Coverage limit',workspace.limits.stories + ' loaded stories; charts describe this sample');
 }
 function fillSettings(value) { settings = value || {}; $('websiteEnabled').checked = settings.website_enabled !== 'false'; }
 async function loadSettings() {
   $('trainAgent').innerHTML = ['trend','manager','research','factcheck','writer','reviewer','hr','automation','publisher','reporting'].map(agent => `<option>${agent}</option>`).join('');
-  if (workspace?.access.read_only) { $('websiteEnabled').checked = false; applyCapabilities(); return; }
+  if (!can('settings.manage')) { $('websiteEnabled').checked = false; applyCapabilities(); return; }
   $('saveSettings').disabled = true; $('siteToggle').disabled = true;
   try { fillSettings(await api('/api/admin/settings')); applyCapabilities(); }
   catch (error) { notice(error.message,'err'); }
@@ -349,14 +735,25 @@ function openCommands() {
 let commandIndex = 0;
 function renderCommands() {
   const query = $('commandInput').value.trim().toLowerCase(); commandIndex = 0;
-  $('commandResults').innerHTML = Object.entries(views).filter(([,label]) => label.toLowerCase().includes(query)).map(([key,label],index) => `<button class="command-item" data-command="${key}" aria-selected="${index === 0}"><span>${esc(label)}</span><small>Open ↵</small></button>`).join('') || '<p class="muted">No matching sections.</p>';
+  $('commandResults').innerHTML = Object.entries(views).filter(([key,label]) => canView(key) && label.toLowerCase().includes(query)).map(([key,label],index) => `<button class="command-item" data-command="${key}" aria-selected="${index === 0}"><span>${esc(label)}</span><small>Open ↵</small></button>`).join('') || '<p class="muted">No matching sections.</p>';
 }
 async function signedIn(data) {
+  if (!data.authenticated) {
+    // A successful password response does not prove the browser retained the
+    // phone session cookie. Verify it before opening an empty workspace.
+    data = await api('/api/admin/me');
+  }
+  if (!data.authenticated || !data.csrf_token) {
+    throw new Error('Your sign-in session could not be saved. Allow cookies for this site and try again.');
+  }
   csrf = data.csrf_token || '';
   $('password').value = ''; $('password').type = 'password'; $('showPassword').textContent = 'Show'; $('showPassword').setAttribute('aria-pressed','false');
   $('login').classList.add('hidden'); $('shell').classList.remove('hidden');
   await loadOverview();
-  if (!workspace) return;
+  if (!workspace) {
+    showLogin('Your session is valid, but the phone workspace could not be loaded. Check that the phone admin is online and retry.');
+    return;
+  }
   go(location.hash.slice(1) || 'overview',false);
   if (!liveTimer) liveTimer = setInterval(() => { if (!document.hidden && currentView === 'overview' && !mutationBusy) loadOverview(true); },60000);
 }
@@ -380,17 +777,30 @@ $('previewManual').onclick = () => {
  $('manualPreview').append(title,summary,article);
  $('manualPreview').parentElement.open = true;
 };
+$('createArticleForm').addEventListener('input',()=>{if(!manualBusy)manualRequestId='';});
 $('createArticleForm').onsubmit = async event => {
  event.preventDefault();
+ if(manualBusy)return;
  if (workspace?.access.read_only) return notice('Remote write access is not connected yet. Open the authenticated phone admin or configure the secure bridge.','err');
- const button = $('saveManual'); button.disabled = true;
+ const publishNow=event.submitter?.id==='publishManual';
+ if(publishNow && !can('news.publish'))return notice('Your role cannot publish news.','err');
+ manualBusy=true;manualRequestId=manualRequestId || crypto.randomUUID();
+ const button = $('saveManual'); button.disabled = true; $('publishManual').disabled=true;
  try {
-  const result = await action('/api/admin/news/create',manualPayload());
-  $('createArticleForm').reset(); $('manualMessage').textContent = 'Draft #' + result.id + ' saved for human review.';
+  let result = await action('/api/admin/news/create',{...manualPayload(),publish_now:publishNow,request_id:manualRequestId});
+  if(publishNow){
+   if(result.status!=='published')throw new Error('Publication was not confirmed.');
+   result=await waitForPublicationDelivery(result.id,result,sessionVersion);
+   $('createArticleForm').reset();manualRequestId='';$('manualMessage').textContent='Article #'+result.id+' · '+publicationMessage(result);
+   showPublicationNotice(publicationMessage(result),result);
+   await refreshAfterMutation();return;
+  }
+  $('createArticleForm').reset();manualRequestId=''; $('manualMessage').textContent = 'Draft #' + result.id + ' saved for human review.';
   notice('New article draft #' + result.id + ' saved. Verify before publishing.');
-  await loadOverview(); await loadNews(true);
+  pageNumber = 1; selected.clear();
+  if (!await refreshAfterMutation()) notice('Draft saved. Latest lists could not be refreshed; use Refresh.','warn');
  } catch(error) { $('manualMessage').textContent = error.message; notice(error.message,'err'); }
- finally { button.disabled = false; applyCapabilities(); }
+ finally { manualBusy=false;button.disabled = false; applyCapabilities(); }
 };
 $('loginForm').onsubmit = async event => {
   event.preventDefault(); if (loginBusy) return; loginBusy = true;
@@ -406,9 +816,10 @@ $('logout').onclick = async () => {
   catch (error) { notice('Sign-out was not confirmed. Please retry.','err'); }
   finally { $('logout').disabled = false; }
 };
-$('refresh').onclick = async () => { await loadOverview(); go(currentView,false); };
-$('newsRefresh').onclick = async () => { await loadOverview(); loadNews(); };
+$('refresh').onclick = async () => { const view = currentView; await loadOverview(false,{fresh:true}); if (workspace && currentView === view) go(view,false); };
+$('newsRefresh').onclick = async () => { await Promise.allSettled([loadOverview(false,{fresh:true}),loadNews()]); };
 $('search').oninput = () => { newsSequence++; newsController?.abort(); clearTimeout(newsTimer); newsTimer = setTimeout(() => loadNews(true),250); };
+$('sourceSearch').oninput = renderSources;
 for (const id of ['category','source','status','review','sort']) $(id).onchange = () => loadNews(true);
 $('resetFilters').onclick = () => { $('search').value = ''; for (const id of ['category','source','status','review']) $(id).value = 'all'; $('sort').value = 'newest'; queue = 'all'; document.querySelectorAll('[data-queue]').forEach(node => node.classList.toggle('active',node.dataset.queue === 'all')); loadNews(true); };
 $('selectAll').onchange = event => { for (const row of visibleRows) event.target.checked ? selected.add(Number(row.id)) : selected.delete(Number(row.id)); renderNews(visibleRows,pageTotal); };
@@ -416,11 +827,30 @@ $('clearSelection').onclick = () => { selected.clear(); renderNews(visibleRows,p
 $('prevPage').onclick = () => { pageNumber--; loadNews(); };
 $('nextPage').onclick = () => { pageNumber++; loadNews(); };
 $('exportNews').onclick = exportNews;
-$('downloadDiagnostics').onclick = () => { if (workspace) download('politicshub-diagnostics.json',JSON.stringify({generated_at:workspace.generated_at,mode:workspace.mode,health:workspace.health,capabilities:workspace.capabilities,limits:workspace.limits},null,2),'application/json'); };
+$('hireRole').onchange = () => { const role = teamRoles.find(item => item.id === $('hireRole').value); $('hirePowers').textContent = role ? 'Allowed actions: ' + role.permissions.map(powerLabel).join(', ') : 'Select a role.'; };
+$('hireForm').onsubmit = async event => {
+  event.preventDefault(); if (!can('users.manage')) return;
+  $('hireSubmit').disabled = true;
+  try { const data = await action('/api/admin/users',{username:$('hireUsername').value.trim(),role:$('hireRole').value}); $('hireForm').reset(); await loadTeam(); showStaffCredentials(data); }
+  catch (error) { notice(error.message,'err'); }
+  finally { $('hireSubmit').disabled = false; }
+};
+$('teamMembers').onclick = async event => {
+  const button = event.target.closest('[data-staff]'); if (!button || !can('users.manage')) return;
+  const username = button.dataset.user, operation = button.dataset.staff;
+  const select = [...document.querySelectorAll('[data-staff-role]')].find(node => node.dataset.staffRole === username);
+  button.disabled = true;
+  try { const data = await action('/api/admin/users/' + encodeURIComponent(username),{operation,role:select?.value}); await loadTeam(); if (data.password) showStaffCredentials(data); else notice('Staff access updated'); }
+  catch (error) { notice(error.message,'err'); }
+  finally { button.disabled = false; }
+};
+$('staffCredentialsClose').onclick = clearStaffCredentials;
+$('staffCredentials').addEventListener('close',() => { $('staffLogin').value = ''; $('staffPassword').value = ''; });
+$('downloadDiagnostics').onclick = downloadDiagnosis;
 $('saveSettings').onclick = saveSettings;
 $('siteToggle').onclick = async () => { if (!await confirmAction('Change website publishing?', 'This updates the persistent publication setting.')) return; try { const data = await action('/api/admin/settings',{website_enabled:settings.website_enabled === 'false'}); fillSettings(data.settings); notice('Publishing controls saved'); } catch (error) { notice(error.message,'err'); } };
 $('trainBtn').onclick = async () => { const notes = $('trainNotes').value.trim(); if (!notes) return notice('Enter a reviewed operating instruction.','err'); $('trainBtn').disabled = true; try { await action('/api/admin/training',{agent_id:$('trainAgent').value,event_type:'knowledge_update',notes}); $('trainNotes').value = ''; notice('Knowledge event recorded'); } catch (error) { notice(error.message,'err'); } finally { applyCapabilities(); } };
-$('factBtn').onclick = async () => { if (mutationBusy) return; mutationBusy = true; applyCapabilities(); try { const data = await action('/api/fact-check'); notice('Verification precheck completed: ' + (data.checked || 0) + ' stories'); await loadOverview(); await loadNews(); } catch (error) { notice(error.message,'err'); } finally { mutationBusy = false; applyCapabilities(); } };
+$('factBtn').onclick = async () => { if (mutationBusy) return; mutationBusy = true; applyCapabilities(); try { const data = await action('/api/fact-check'); notice('Verification precheck completed: ' + (data.checked || 0) + ' stories'); if (!await refreshAfterMutation()) notice('Source precheck completed. Latest lists could not be refreshed; use Refresh.','warn'); } catch (error) { notice(error.message,'err'); } finally { mutationBusy = false; applyCapabilities(); } };
 $('activityRefresh').onclick = loadActivity;
 $('menuToggle').onclick = () => { const open = !$('sidebar').classList.contains('open'); closeMenu(); if (open) { $('sidebar').inert = false; $('sidebar').classList.add('open'); $('sidebarBackdrop').classList.remove('hidden'); $('menuToggle').setAttribute('aria-expanded','true'); document.body.style.overflow = 'hidden'; $('commandOpen').focus(); } };
 $('sidebarBackdrop').onclick = () => closeMenu(true);
@@ -438,7 +868,7 @@ document.addEventListener('click',event => {
   const actionButton = event.target.closest('[data-news]'); if (actionButton) newsAction(actionButton.dataset.news,Number(actionButton.dataset.id));
   const bulk = event.target.closest('[data-bulk]'); if (bulk) bulkAction(bulk.dataset.bulk);
   const filter = event.target.closest('[data-queue]'); if (filter && !filter.disabled) { queue = filter.dataset.queue; $('status').value = ['pending','published'].includes(queue) ? queue : 'all'; $('review').value = queue === 'needs_review' ? 'needs_review' : 'all'; document.querySelectorAll('[data-queue]').forEach(node => node.classList.toggle('active',node === filter)); loadNews(true); }
-  const source = event.target.closest('[data-source-filter]'); if (source) { $('resetFilters').click(); $('source').value = source.dataset.sourceFilter; go('news'); }
+  const source = event.target.closest('[data-source-filter]'); if (source) { $('search').value = ''; for (const id of ['category','status','review']) $(id).value = 'all'; $('sort').value = 'newest'; queue = 'all'; pageNumber = 1; selected.clear(); $('source').value = source.dataset.sourceFilter; go('news'); }
 });
 document.addEventListener('change',event => { if (event.target.matches('[data-select]')) { const id = Number(event.target.dataset.select); event.target.checked ? selected.add(id) : selected.delete(id); updateSelection(); } });
 document.addEventListener('keydown',event => {
@@ -459,3 +889,10 @@ $('themeToggle').onclick = () => { const theme = document.documentElement.datase
 window.addEventListener('hashchange',() => { if (workspace) go(location.hash.slice(1),false); });
 matchMedia('(max-width:800px)').addEventListener('change',() => closeMenu());
 document.addEventListener('DOMContentLoaded',async () => { closeMenu(); try { const data = await api('/api/admin/me'); if (data.authenticated) await signedIn(data); } catch (error) { $('loginErr').textContent = 'Session check unavailable. You can still try signing in.'; } });
+
+document.addEventListener('click',async event=>{
+ const button=event.target.closest('[data-restore-archive]'); if(!button)return;
+ button.disabled=true;
+ try {const result=await action('/api/admin/archive/restore',{number:button.dataset.restoreArchive}); await loadNews(true); notice('Archived story restored. Open its inspector to edit.');}
+ catch(error){notice(error.message,'err');}finally{button.disabled=false;}
+});

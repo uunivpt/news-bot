@@ -51,6 +51,21 @@ class OfflineNewsFallbackTests(unittest.TestCase):
         self.assertIsNone(public_story(item(date=(NOW-timedelta(days=3)).isoformat()), NOW))
         self.assertIsNone(public_story(item(url="javascript:alert(1)"), NOW))
 
+    def test_error_page_headlines_never_publish_or_survive_snapshot(self):
+        for title in ("The page you requested cannot be found", "Page Unavailable", "404 Not Found", "Access Denied"):
+            with self.subTest(title=title):
+                bogus = replace(item(), title=title)
+                self.assertIsNone(public_story(bogus, NOW))
+                old = public_story(item(url="https://example.org/previous-report"), NOW)
+                old["title"] = title
+                kept, repaired = build([old], [], NOW)
+                self.assertEqual(kept, [])
+                self.assertGreater(repaired, 0)
+
+    def test_legitimate_headline_about_site_errors_is_preserved(self):
+        legitimate = replace(item(), title="Government website outages disrupt online service access")
+        self.assertIsNotNone(public_story(legitimate, NOW))
+
     def test_rss_standfirst_without_period_is_preserved_in_full(self):
         text = "The hill town uses about 60 lakh gallons a day; officials now pin their hopes on the northeast monsoon"
         story = public_story(replace(item(), source_type="rss", summary=text), NOW)
@@ -132,7 +147,10 @@ class OfflineNewsFallbackTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["id"], prior["id"])
         self.assertEqual(rows[0]["bot_article"], prior["bot_article"])
-        self.assertEqual(changed, 0)
+        self.assertEqual(changed, 1)  # Reviewed metadata updates once while preserving the canonical ID.
+        again, changed_again = merge_mobile_reviewed(rows, [approved], NOW)
+        self.assertEqual(changed_again, 0)
+        self.assertEqual(again, rows)
 
     def test_mobile_merge_blocks_id_collision(self):
         prior = public_story(item(), NOW)

@@ -30,6 +30,20 @@ MAX_AGE = timedelta(hours=48)
 ARCHIVE_AGE = timedelta(days=5)
 log = logging.getLogger("offline_feed")
 
+# Source providers sometimes return their own 404/unavailable page as a news
+# headline. Such placeholders must not enter (or remain in) the public feed.
+SOURCE_ERROR_PAGE_TITLE = re.compile(
+    r"^(?:the page you requested cannot be found|page (?:unavailable|not found)|"
+    r"(?:404[ \t]*[:-]?[ \t]*)?not found|access denied|error[ \t]*404)"
+    r"(?:[.!])?$",
+    re.IGNORECASE,
+)
+
+
+def is_source_error_page(title):
+    return bool(SOURCE_ERROR_PAGE_TITLE.fullmatch(clean_text(title).strip()))
+
+
 
 def parse_date(value):
     if not value:
@@ -63,7 +77,7 @@ def public_story(item, now):
     title = clean_text(item.title)
     summary = clean_text(item.summary)
     published = parse_date(item.published_at)
-    if not valid_url(item.url) or not published:
+    if not valid_url(item.url) or not published or is_source_error_page(title):
         return None
     if published > now + timedelta(minutes=30) or now - published > MAX_AGE:
         return None
@@ -110,6 +124,9 @@ def build(current, collected, now):
     fresh = 0
     for row in current:
         if not isinstance(row, dict) or not valid_url(row.get("url")):
+            continue
+        if is_source_error_page(row.get("title")):
+            fresh += 1  # Repair already-published error-page placeholders.
             continue
         published = parse_date(row.get("published_at") or row.get("published_at_site"))
         if not published or published > now + timedelta(minutes=30) or now - published > ARCHIVE_AGE:
@@ -163,7 +180,7 @@ def mobile_reviewed_story(row, now):
     if not valid_url(url):
         return None
     try:
-        story_id = int(row.get("id"))
+        story_id = int(row.get("canonical_public_id") or row.get("phone_public_id") or row.get("id"))
     except (TypeError, ValueError):
         return None
     if not 0 < story_id < 2**53:
@@ -171,13 +188,17 @@ def mobile_reviewed_story(row, now):
     title = clean_text(row.get("title"))
     source = clean_text(row.get("source_name"))
     summary = clean_text(row.get("bot_summary") or row.get("summary"))
-    published = parse_date(row.get("published_at_site") or row.get("published_at"))
-    if not (title and source and 20 <= len(title) <= 210 and 55 <= len(summary) <= 4200 and published):
+    published = parse_date(row.get("published_at") or row.get("published_at_site"))
+    if not (title and source and 1 <= len(title) <= 500 and 1 <= len(summary) <= 6000 and published):
         return None
-    if published > now + timedelta(minutes=30) or now - published > ARCHIVE_AGE:
+    if published > now + timedelta(minutes=30):
         return None
     stamp = published.isoformat()
+    body = source_text(row.get("bot_article") or row.get("article") or "", paragraphs=True)
+    licensed_image = bool(row.get("image_url") and row.get("image_credit") and
+                          str(row.get("image_license") or "").lower() in {"cc0", "pdm", "licensed", "rights-owned"})
     return {
+        **{key:row[key] for key in ("phone_public_id","canonical_public_id","editorial_featured","editorial_featured_at") if key in row},
         "id": story_id,
         "title": title,
         "url": url,
@@ -187,9 +208,11 @@ def mobile_reviewed_story(row, now):
         "published_at_site": stamp,
         "summary": summary,
         "bot_summary": summary,
-        "bot_article": "",
+        "bot_article": body,
         "category": normalize_category(row.get("category") or "india", title, summary),
-        "image_url": None,
+        "image_url": row.get("image_url") if licensed_image else None,
+        "image_license": row.get("image_license") if licensed_image else None,
+        "image_credit": row.get("image_credit") if licensed_image else None,
         "public_source": True,
         "status": "published",
     }
@@ -197,7 +220,8 @@ def mobile_reviewed_story(row, now):
 
 def merge_mobile_reviewed(current, incoming, now):
     """Merge verified phone exports without deleting or renumbering public stories."""
-    indexed = {normalize_url(row["url"]): dict(row) for row in current
+    from app.live_publication import publication_key
+    indexed = {publication_key(row): dict(row) for row in current
                if isinstance(row, dict) and valid_url(row.get("url"))}
     identities = {str(row.get("id")): key for key, row in indexed.items()}
     changed = 0
@@ -205,10 +229,17 @@ def merge_mobile_reviewed(current, incoming, now):
         story = mobile_reviewed_story(raw, now)
         if story is None:
             continue
-        key = normalize_url(story["url"])
+        key = publication_key(story)
         if key in indexed:
-            # Existing public stories may contain full articles and verified metadata.
-            # Never downgrade or change their stable ID using phone excerpts.
+            # Keep the canonical public identity while publishing reviewed edits.
+            # A summary-only export must not erase an existing full manuscript.
+            previous = indexed[key]
+            if previous.get("bot_article") and not story.get("bot_article"):
+                continue
+            story["id"] = previous["id"]
+            if previous != story:
+                indexed[key] = story
+                changed += 1
             continue
         if identities.get(str(story["id"]), key) != key:
             log.warning("Mobile feed ID conflict; skipping story %s", story["id"])
@@ -216,9 +247,12 @@ def merge_mobile_reviewed(current, incoming, now):
         indexed[key] = story
         changed += 1
         identities[str(story["id"])] = key
+    featured=max((row for row in indexed.values() if row.get("editorial_featured")),key=lambda row:str(row.get("editorial_featured_at") or ""),default=None)
+    for row in indexed.values():
+        if row is not featured:row.pop("editorial_featured",None);row.pop("editorial_featured_at",None)
     result = sorted(indexed.values(),
-                    key=lambda row: parse_date(row.get("published_at_site") or row.get("published_at"))
-                    or datetime.min.replace(tzinfo=timezone.utc),
+                    key=lambda row: (bool(row.get("editorial_featured")),str(row.get("editorial_featured_at") or ""),parse_date(row.get("published_at_site") or row.get("published_at"))
+                    or datetime.min.replace(tzinfo=timezone.utc)),
                     reverse=True)[:MAX_STORIES]
     return result, changed
 
@@ -297,6 +331,9 @@ def main():
         log.info("No newly eligible stories or editorial changes; public snapshot unchanged")
         return
 
+    from app.news_numbers import news_number, number_index
+    number_index(result)
+    for row in result: row['news_number'] = news_number(row)
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(json.dumps(result, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
     log.info("Published %s new source-linked articles to emergency snapshot (%s retained)", fresh, len(result))

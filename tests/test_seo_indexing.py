@@ -31,7 +31,7 @@ class SEOIndexingTests(unittest.TestCase):
     def test_valid_source_story_and_canonical(self):
         row=example()
         self.assertTrue(is_indexable(row))
-        self.assertEqual(canonical_path(row),"/india/44-india-parliament-passes-a-significant-new-public-services-law")
+        self.assertEqual(canonical_path(row),"/india/"+__import__("app.news_numbers",fromlist=["news_number"]).news_number(row))
         xml=news_sitemap_xml([row,row])
         root=ET.fromstring(xml)
         self.assertEqual(len(list(root)),1)
@@ -58,6 +58,56 @@ class SEOIndexingTests(unittest.TestCase):
             self.assertTrue(loc.startswith("https://www.politicshub.in/"),loc)
         self.assertIn("https://www.politicshub.in/",[x[0].text for x in static])
 
+    def test_served_static_sitemap_matches_generator_exactly(self):
+        # Vercel serves this file directly; changing only the Python generator
+        # does NOT update the URLs actually seen by crawlers.
+        served=Path("public/static-sitemap.xml").read_text(encoding="utf-8").strip()
+        generated=static_sitemap_xml()
+        self.assertEqual(served,generated)
+        self.assertEqual(len(ET.fromstring(served)),23)
+
+    def test_active_category_landings_are_discoverable_but_retired_desks_are_not(self):
+        from app.seo_indexing import STATIC_PAGES
+        locations={node[0].text for node in ET.fromstring(static_sitemap_xml())}
+        for path in ("/india/", "/politics/", "/world/", "/hindi/", "/maharashtra/"):
+            self.assertIn(path,STATIC_PAGES)
+            self.assertIn(SITE_ORIGIN+path,locations)
+        for desk in ("business","technology","sports","entertainment","science","health"):
+            self.assertNotIn(SITE_ORIGIN+"/"+desk+"/",locations)
+
+    def test_marathi_maharashtra_landing_has_source_links_and_correct_schema(self):
+        page=Path("public/maharashtra/index.html").read_text(encoding="utf-8")
+        self.assertIn('lang="mr"',page)
+        self.assertIn('rel="canonical" href="'+SITE_ORIGIN+'/maharashtra/"',page)
+        self.assertIn("TV9 मराठी",page)
+        self.assertIn("ABP माझा",page)
+        self.assertIn("www.tv9marathi.com/maharashtra",page)
+        self.assertIn("marathi.abplive.com/news/maharashtra",page)
+        self.assertIn('data-i18n="regionIntroBody"',page)
+        self.assertNotIn("LocalBusiness",page)
+        match=re.search(r'<script type="application/ld\+json">([\s\S]*?)</script>',page)
+        self.assertIsNotNone(match)
+        structured=json.loads(match.group(1))
+        page_nodes=[node for node in structured["@graph"] if node["@type"]=="CollectionPage"]
+        self.assertEqual(len(page_nodes),1)
+        self.assertEqual(page_nodes[0]["url"],SITE_ORIGIN+"/maharashtra/")
+        self.assertEqual(page_nodes[0]["inLanguage"],["mr","en"])
+
+    def test_google_news_language_is_not_hardcoded_to_english(self):
+        now=datetime.now(timezone.utc)
+        english=example()
+        hindi=dict(example(),id=45,url="https://example.org/news/45",category="hindi",
+                   title="Latest India government minister policy news report")
+        marathi=dict(example(),id=46,url="https://example.org/news/46",source_name="TV9 Marathi",
+                     title="महाराष्ट्रातील आजच्या महत्त्वाच्या बातम्या शहरातील राजकीय घडामोडी")
+        xml=google_news_sitemap_xml([english,hindi,marathi],now=now)
+        root=ET.fromstring(xml)
+        ns={"u":"http://www.sitemaps.org/schemas/sitemap/0.9",
+            "n":"http://www.google.com/schemas/sitemap-news/0.9"}
+        all_languages=[node.find("n:news/n:publication/n:language",ns).text
+                       for node in root.findall("u:url",ns)]
+        self.assertCountEqual(all_languages,["en","hi","mr"])
+
     def test_flask_html_and_status_codes(self):
         client=api.app.test_client()
         row=example()
@@ -83,6 +133,12 @@ class SEOIndexingTests(unittest.TestCase):
         for path in STATIC_PAGES:
             if path=="/archive/":
                 continue  # Server-rendered dynamic archive, not a static HTML file.
+            if path in {"/india/", "/politics/", "/world/", "/hindi/"}:
+                with patch.object(api, "_public_rows_for_section", return_value=[]):
+                    response=api.app.test_client().get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn('<link rel="canonical" href="'+SITE_ORIGIN+path+'">', response.get_data(as_text=True))
+                continue
             source_path = "public/index.html" if path=="/" else "public"+path
             if source_path.endswith("/"):
                 source_path += "index.html"
@@ -101,7 +157,7 @@ class SEOIndexingTests(unittest.TestCase):
             response=api.app.test_client().get("/api/seo-news-sitemap")
             self.assertEqual(response.status_code,200)
             nodes=ET.fromstring(response.data)
-            self.assertEqual(len(nodes),2)
+            self.assertEqual(len(nodes),1)
             self.assertEqual(nodes[0][0].text,expected)
         with patch.object(api,"_public_row_by_id",return_value=displayed):
             page=api.app.test_client().get("/api/seo-article"+canonical_path(displayed))
@@ -113,7 +169,7 @@ class SEOIndexingTests(unittest.TestCase):
             response=api.app.test_client().get("/api/seo-archive")
         self.assertEqual(response.status_code,200)
         page=response.get_data(as_text=True)
-        self.assertIn('href="/nana-patekar-tribute.html"',page)
+        self.assertNotIn('href="/nana-patekar-tribute.html"',page)
         self.assertIn("noindex,follow",page)
         self.assertNotIn("pagead2.googlesyndication.com",page)
 
@@ -133,7 +189,7 @@ class SEOIndexingTests(unittest.TestCase):
         self.assertIn("href=\"/archive/\"",Path("public/index.html").read_text())
         config=json.loads(Path("vercel.json").read_text())
         self.assertIn({"source":"/archive/","destination":"/api/seo-archive"},config["rewrites"])
-        self.assertIn("href=\"/nana-patekar-tribute.html\"",html_text)
+        self.assertNotIn("href=\"/nana-patekar-tribute.html\"",html_text)
         sm=static_sitemap_xml()
         self.assertIn(SITE_ORIGIN+"/archive/",sm)
 
@@ -143,33 +199,32 @@ class SEOIndexingTests(unittest.TestCase):
         row["published_at"]="2026-10-08T08:00:00+00:00"
         xml=google_news_sitemap_xml([row],now=now)
         root=ET.fromstring(xml)
-        self.assertEqual(len(root),2)
+        self.assertEqual(len(root),1)
         self.assertEqual(root.attrib.get("xmlns:news"),None)  # Namespace parsed by ElementTree.
         ns={"s":"http://www.sitemaps.org/schemas/sitemap/0.9","n":"http://www.google.com/schemas/sitemap-news/0.9"}
         titles=[x.text for x in root.findall(".//n:title",ns)]
         self.assertIn(row["title"],titles)
-        self.assertIn("Nana Patekar dies at 75 in Goa, leaving a lasting cinema legacy",titles)
-        self.assertEqual(len(root.findall(".//n:publication_date",ns)),2)
-        self.assertEqual(len(root.findall(".//n:name",ns)),2)
-        self.assertEqual(len(root.findall(".//n:language",ns)),2)
+        self.assertNotIn("Nana Patekar dies at 75 in Goa, leaving a lasting cinema legacy",titles)
+        self.assertEqual(len(root.findall(".//n:publication_date",ns)),1)
+        self.assertEqual(len(root.findall(".//n:name",ns)),1)
+        self.assertEqual(len(root.findall(".//n:language",ns)),1)
         later=google_news_sitemap_xml([row],now=now+timedelta(days=4))
         self.assertEqual(len(ET.fromstring(later)),0)
 
-    def test_standalone_news_markup_and_sitemap_alignment(self):
-        h=Path("public/nana-patekar-tribute.html").read_text(encoding="utf-8")
-        self.assertIn('"@type":"NewsArticle"',h)
-        self.assertIn('datetime="2026-10-08T06:00:00+05:30"',h)
-        self.assertIn('https://www.politicshub.in/nana-patekar-tribute.html',h)
-        self.assertIn('href="/nana-patekar-tribute.html"',Path("public/index.html").read_text())
-        with patch.object(api,"_published_sitemap_rows",return_value=[example()]):
-            archive=api.app.test_client().get("/api/seo-news-sitemap")
-            self.assertEqual(archive.status_code,200)
-            self.assertIn("https://www.politicshub.in/nana-patekar-tribute.html",archive.get_data(as_text=True))
-            fresh=api.app.test_client().get("/api/seo-google-news")
-            self.assertEqual(fresh.status_code,200)
-            self.assertIn('xmlns:news=',fresh.get_data(as_text=True))
-        config=json.loads(Path("vercel.json").read_text())
-        self.assertIn({"source":"/google-news.xml","destination":"/api/seo-google-news"},config["rewrites"])
+    def test_withheld_reports_are_not_promoted_or_in_sitemaps(self):
+        for name in ('nana-patekar-tribute.html', 'elon-musk-ambani-starlink.html'):
+            page = Path('public', name).read_text()
+            self.assertIn('noindex,follow', page)
+            self.assertNotIn('NewsArticle', page)
+            self.assertNotIn(name, Path('public/index.html').read_text())
+            with patch.object(api, '_published_sitemap_rows', return_value=[example()]):
+                for path in ('/api/seo-news-sitemap', '/api/seo-google-news'):
+                    response = api.app.test_client().get(path)
+                    self.assertEqual(response.status_code, 200)
+                    self.assertNotIn(name, response.get_data(as_text=True))
+        feed = Path('public/assets/site.js').read_text()
+        self.assertNotIn('const NANA_TRIBUTE=', feed)
+        self.assertNotIn('const MUSK_STARLINK=', feed)
 
     def test_production_routes_and_snapshot_sitemap(self):
         config=json.loads(Path("vercel.json").read_text())
@@ -182,7 +237,7 @@ class SEOIndexingTests(unittest.TestCase):
             resp=api.app.test_client().get("/api/seo-news-sitemap")
             self.assertEqual(resp.status_code,200)
             parsed=ET.fromstring(resp.data)
-            self.assertEqual(len(parsed),2)
+            self.assertEqual(len(parsed),1)
             self.assertEqual(parsed[0][0].text,SITE_ORIGIN+canonical_path(row))
 
 
