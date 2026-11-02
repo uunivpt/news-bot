@@ -118,6 +118,14 @@ def run(output):
             assert 'No collection checks recorded' in page.locator('#sourceIncidents').inner_text()
             assert 'Unavailable' in page.locator('#sourceOperationsMetrics').inner_text()
             assert 'collection' in page.locator('#sourceOperationsNote').inner_text().lower()
+            # Phase 4 starts with no invented source fetch history. Private
+            # delivery/corrections tables may not exist in this phone fixture.
+            assert page.locator('#phase4Metrics .metric').count()==4
+            assert 'Unavailable' in page.locator('#phase4Metrics').inner_text()
+            assert page.locator('#phase4Trend tbody tr').count()==14
+            assert 'Not recorded' in page.locator('#phase4Trend').inner_text()
+            assert 'Previously completed checks cannot be recreated' in page.locator('#phase4TrendNote').inner_text()
+            page.screenshot(path=str(output/'phase4-source-alerts-desktop.png'))
             page.screenshot(path=str(output/'source-operations-desktop.png'))
             page.locator('#sourceSearch').fill('TV9')
             assert page.locator('#sourceTable tbody tr').count()>=1
