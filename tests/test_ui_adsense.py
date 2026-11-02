@@ -38,13 +38,18 @@ class UIAdSenseTests(unittest.TestCase):
         self.assertEqual(attrs.get('crossorigin'), 'anonymous')
         self.assertNotIn('/assets/adsense.js', page)
 
-    def test_static_news_documents_include_one_async_adsense_script(self):
+    def test_withheld_static_reports_are_ad_free_review_notices(self):
         client = app.test_client()
         for path in ['/elon-musk-ambani-starlink.html', '/nana-patekar-tribute.html']:
             with self.subTest(path=path):
                 response = client.get(path)
                 self.assertEqual(response.status_code, 200)
-                self.assert_adsense_head(response.get_data(as_text=True))
+                page = response.get_data(as_text=True)
+                self.assertEqual(AdSenseScripts(page).scripts, [])
+                self.assertIn('noindex,follow', page)
+                self.assertIn('Report withheld pending verification', page)
+                self.assertNotIn('"@type":"NewsArticle"', page)
+                self.assertNotIn('/assets/measurement.js', page)
 
     def test_server_rendered_news_documents_include_one_async_adsense_script(self):
         row = {
