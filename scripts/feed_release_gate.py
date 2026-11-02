@@ -14,7 +14,7 @@ import subprocess
 
 INTERVAL = timedelta(hours=1)
 CHANNEL_FILES = {
-    "news": ("public/news-data.json", "app/data/public-archive.json.gz", "public/exam-notices.json"),
+    "news": ("public/news-data.json", "app/data/public-archive.json.gz", "public/exam-notices.json", "app/data/official-exams.json"),
     "hindi": ("public/hindi-news.json",),
 }
 

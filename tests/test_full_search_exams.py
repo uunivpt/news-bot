@@ -53,9 +53,23 @@ class ExamRefreshTests(unittest.TestCase):
   row={'id':8000000000000001,'title':'Official examination result notice','url':'https://board.gov.in/result.pdf','source_name':'Official Board','source_type':'official_exam','public_source':True,'status':'published','exam_authority':'board','category':'india','published_at':'2026-10-01T00:00:00Z'}
   with tempfile.TemporaryDirectory() as directory:
    file=Path(directory)/'exams.json';file.write_text(json.dumps({'items':[row],'sources':[{'id':'board','last_success_at':'2026-10-01T00:00:00Z'}]}))
-   with patch.object(refresh,'OUTPUT',file),patch.object(refresh,'sources',return_value=[{'id':'board','name':'Official Board','enabled':True}]),patch.object(refresh,'fetch_notices',side_effect=TimeoutError()),patch.object(refresh,'retain_public_records'):
+   with patch.object(refresh,'OUTPUT',file),patch.object(refresh,'PACKAGED_OUTPUT',Path(directory)/'packaged.json'),patch.object(refresh,'sources',return_value=[{'id':'board','name':'Official Board','enabled':True}]),patch.object(refresh,'fetch_notices',side_effect=TimeoutError()),patch.object(refresh,'retain_public_records'):
     refresh.main()
    result=json.loads(file.read_text());self.assertEqual(result['items'][0]['url'],row['url'])
    self.assertEqual(result['sources'][0]['status'],'unavailable')
    self.assertEqual(result['sources'][0]['last_success_at'],'2026-10-01T00:00:00Z')
    self.assertEqual(result['items'][0]['news_number'],news_number(row))
+
+class ExamPackagingTests(unittest.TestCase):
+ def test_api_uses_packaged_notice_data_when_public_files_live_only_on_cdn(self):
+  import tempfile,json
+  from pathlib import Path
+  from app import public_archive
+  row={'id':8000000000000001,'title':'Official examination notice','url':'https://board.gov.in/notice.pdf','status':'published','public_source':True,'source_type':'official_exam'}
+  with tempfile.TemporaryDirectory() as directory:
+   root=Path(directory);(root/'data').mkdir();(root/'data/official-exams.json').write_text(json.dumps({'items':[row],'sources':[{'id':'board'}]}))
+   with patch.object(api.app,'_static_folder',str(root/'cdn-only-public')),patch.object(public_archive,'ARCHIVE_PATH',root/'data/public-archive.json.gz'):
+    response=api.app.test_client().get('/api/exams')
+    self.assertEqual(response.status_code,200)
+    self.assertEqual(response.json['items'][0]['id'],row['id'])
+    self.assertEqual(api._official_exam_rows()[0]['id'],row['id'])
