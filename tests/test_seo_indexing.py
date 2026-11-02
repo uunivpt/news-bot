@@ -77,7 +77,7 @@ class SEOIndexingTests(unittest.TestCase):
         self.assertIn("marathi.abplive.com/news/maharashtra",page)
         self.assertIn('data-i18n="regionIntroBody"',page)
         self.assertNotIn("LocalBusiness",page)
-        match=re.search(r'<script type="application/ld\\+json">([\\s\\S]*?)</script>',page)
+        match=re.search(r'<script type="application/ld\+json">([\s\S]*?)</script>',page)
         self.assertIsNotNone(match)
         structured=json.loads(match.group(1))
         page_nodes=[node for node in structured["@graph"] if node["@type"]=="CollectionPage"]
