@@ -58,7 +58,7 @@ def load_bridge_secret():
 def configure_private_app():
     """Called only by the local daemon, not by the public Vercel API."""
     from api.index import app
-    from flask import jsonify, request
+    from flask import jsonify, request, g
 
     app.config.update(
         SESSION_COOKIE_NAME="politicshub_phone_admin",
@@ -82,6 +82,7 @@ def configure_private_app():
             # including path/body/time/nonce, authenticates the gateway; an IP
             # reported by that proxy does not. Check the signature first.
             if verify_phone_bridge(request, secret):
+                g.phone_bridge_verified = True
                 return None
         # Direct phone browser access remains possible even with a bridge
         # configured, but requires BOTH a local peer and a local Host header.

@@ -271,6 +271,13 @@ def _snapshot_rows(category="all", search=None):
    payload=[x for x in curated if isinstance(x,dict) and x.get("title") and str(x.get("id")) not in present] + payload
  except (OSError,ValueError):
   pass
+ from app.live_publication import read_feed
+ live=read_feed()
+ if live:
+  payload=[dict(row,editorial_featured=False,editorial_featured_at=None) for row in payload if isinstance(row,dict)]
+ ids={str(r["id"]) for r in live}
+ live_urls={r.get("url") for r in live if r.get("source_type")!="manual"}
+ payload=live+[row for row in payload if str(row.get("id")) not in ids and row.get("url") not in live_urls]
  rows=[dict(x) for x in payload if isinstance(x,dict) and x.get("title") and x.get("status","published")=="published"]
  for row in rows:
   row.setdefault("status","published")
@@ -310,7 +317,7 @@ def _rank_public(rows,threshold=0.82):
   item["category"]=normalize_category(item.get("category"),item.get("title"),item.get("bot_summary") or item.get("summary") or "")
   item["news_score"]=story_score(item.get("title",""),item.get("bot_summary") or item.get("summary") or "",item.get("category") or "general",item.get("source_name") or "")
   item["is_breaking"]=is_breaking(item.get("title",""),item.get("bot_summary") or item.get("summary") or "",item["news_score"])
- items.sort(key=lambda item:(_public_timestamp(item),int(item.get("id") or 0)),reverse=True)
+ items.sort(key=lambda item:(bool(item.get("editorial_featured")),str(item.get("editorial_featured_at") or ""),_public_timestamp(item),int(item.get("id") or 0)),reverse=True)
  return dedupe_story_rows(items,threshold=threshold)
 def _public_rows_for_section(category="all",limit=200):
  if category=="hindi":return _rank_public(_hindi_rows())[:limit]
@@ -375,7 +382,7 @@ def _section_html(category="all"):
  if category in ("india","all"):
   body+='<section aria-label="Editorial guides" style="margin:20px 0"><h2>Understand the news</h2><p><a href="/guides/election-results.html">How to verify election results</a></p></section>'
  body+='<div class="sh"><h2>Latest stories</h2><span class="lbl">'+str(len(rows))+' stories</span></div><div class="grid">'+"".join(cards)+'</div>'
- return '<!doctype html><html lang="'+language+'" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta name="google-adsense-account" content="ca-pub-1752666987448533"><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/editorial.css?v=phui19"><link rel="stylesheet" href="/assets/polish.css?v=phui30"><script src="/assets/ui.js?v=phui30" defer></script></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/archive/">All News Archive</a></p><p><a href="/guides/maharashtra-mlc.html">Maharashtra Council explainer</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="/settings.html">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=search32"></script><script src="/assets/editorial-home.js?v=phui30"></script></body></html>'
+ return '<!doctype html><html lang="'+language+'" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta name="google-adsense-account" content="ca-pub-1752666987448533"><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/editorial.css?v=phui19"><link rel="stylesheet" href="/assets/polish.css?v=phui30"><script src="/assets/ui.js?v=phui30" defer></script></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/archive/">All News Archive</a></p><p><a href="/guides/maharashtra-mlc.html">Maharashtra Council explainer</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="/settings.html">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=livepublish1"></script><script src="/assets/editorial-home.js?v=livepublish1"></script></body></html>'
 
 
 def _enhance_section_seo(document, category):
@@ -500,6 +507,8 @@ def require_csrf():
 
 from app.admin_team import register_team_routes
 register_team_routes(app,lambda:db(),require_admin,require_csrf)
+from app.live_publication import register_phone_public
+register_phone_public(app,lambda:db())
 from app.editorial_routes import register_editorial_routes
 register_editorial_routes(app,lambda:db(),require_admin,require_csrf,_public_rate_allowed)
 
@@ -548,7 +557,7 @@ def _publicize(row):
  ads_eligible=is_monetizable(dict(row))
  # Public news documents use a positive projection. Unknown fields from old
  # database schemas never become JSON/API fields, even for an admin request.
- public_fields={"id","title","url","source_name","source_type","summary","bot_summary","bot_article",
+ public_fields={"phone_public_id","public_revision","editorial_featured","editorial_featured_at","id","title","url","source_name","source_type","summary","bot_summary","bot_article",
   "article","body","published_at","published_at_site","published_at_iso","category","status",
   "image_url","image_source","image_license","image_credit","image_source_url","public_source",
   "view_count","last_viewed_at","editorial_value","source_count","exam_region","exam_authority"}
@@ -566,7 +575,7 @@ def _publicize(row):
     r["published_at_iso"]=dt.astimezone(timezone.utc).isoformat().replace("+00:00","Z")
    except ValueError:pass
   source_text=_strip_promo_nav(dict(row).get("bot_article") or dict(row).get("bot_summary") or dict(row).get("summary") or "")
-  r["title"]=_public_title(r.get("title"),source_text)
+  r["title"]=plain_source_text(r.get("title")) if r.get("source_type")=="manual" else _public_title(r.get("title"),source_text)
   r["summary"]=plain_source_text(_strip_promo_nav(dict(row).get("bot_summary") or dict(row).get("summary") or ""))
   article_text=plain_source_text(_strip_promo_nav(source_text),paragraphs=True)
   article_text=re.sub(r"(?:\n|\s)*Why it matters:\s*$","",article_text,flags=re.I).strip()
@@ -713,6 +722,9 @@ def _archive_row(item_id,database=None):
  return row
 
 def _public_row_by_id(item_id):
+ from app.live_publication import lookup
+ handled,live=lookup(item_id)
+ if handled:return _publicize(live) if live else None
  if os.getenv("VERCEL")=="1" or os.getenv("POLITICSHUB_GITHUB_FEED_ONLY")=="1":
   revision=request.args.get('v') if request else None
   if revision and re.fullmatch(r'[0-9a-f]{40}',revision):
@@ -870,6 +882,11 @@ def security_headers(response):
   response.headers["Cache-Control"]="no-store"
  elif request.method=="GET" and request.path.startswith("/api/") and "Cache-Control" not in response.headers:
   response.headers["Cache-Control"]="public, max-age=10, s-maxage=10, stale-while-revalidate=20"
+ from app.live_publication import enabled as live_public_enabled
+ if request.method in {'GET','HEAD'} and live_public_enabled() and (request.path.startswith('/api/news') or response.mimetype=='text/html'):
+  response.headers['Cache-Control']='no-store, max-age=0'
+  response.headers['Vercel-CDN-Cache-Control']='no-store'
+  response.headers['CDN-Cache-Control']='no-store'
  if response.status_code==429:
   response.headers["Retry-After"]="60"
  # Never let a logged-in browser populate a shared public HTML cache either.
@@ -1376,6 +1393,17 @@ def public_hindi_feed():
  response.headers["Cache-Control"]="public, max-age=60, s-maxage=300"
  return response
 
+@app.get('/api/news/version')
+def public_publication_version():
+ if not _public_rate_allowed(90,60):return jsonify({'error':'Please retry shortly'}),429
+ from app.live_publication import enabled,signed_read
+ if enabled():
+  try:
+   data,status=signed_read('/api/phone-public/version')
+   if status==200:return jsonify({'version':data.get('publication_version')}),200,{'Cache-Control':'no-store'}
+  except Exception:pass
+ return jsonify({'version':None}),200,{'Cache-Control':'no-store'}
+
 @app.get("/api/news")
 @app.get("/api/admin/news")
 def news():
@@ -1540,6 +1568,10 @@ def article_view(item_id):
 
 @app.get("/api/news/<int:item_id>")
 def article(item_id):
+ if not _public_rate_allowed(120,60):return jsonify({"error":"rate limit exceeded"}),429
+ from app.live_publication import lookup
+ handled,live=lookup(item_id)
+ if handled:return (jsonify(_publicize(live)),200) if live else (jsonify({"error":"not found"}),404)
  item_id=_resolve_news_id(item_id)
  try:database=db()
  except RuntimeError:
@@ -1791,6 +1823,8 @@ def _verify_and_publish(item_id):
      parsed=urlsplit(source_url)
      public_url=parsed.scheme=="https" and bool(parsed.hostname) and not parsed.username and not parsed.password
     except ValueError:public_url=False
+    from app.live_publication import source_withheld
+    if source_withheld(source_url):return jsonify({"error":"This source is under editorial review and cannot be republished. Use a current reporting source.","code":"source_withheld"}),409
     if not current.get("public_source") or not public_url:
      return jsonify({"error":"A public HTTPS source is required before publication.","code":"source_unavailable"}),409
     if not title or not plain_source_text(article):
@@ -1896,9 +1930,9 @@ def restore_archived_story():
   if existing:return jsonify({'error':'A live version already exists; search its number instead'}),409
   from app.normalize import normalize_url,fingerprint
   normalized=normalize_url(row['url']); url_hash,title_hash=fingerprint(normalized,row['title'])
-  record={key:row.get(key) for key in public_archive.FIELDS if key not in {'legacy_ids','news_number'}}
+  record={key:row.get(key) for key in public_archive.FIELDS if key not in {'legacy_ids','news_number','phone_public_id','canonical_public_id','editorial_featured','editorial_featured_at'}}
   record.update(normalized_url=normalized,url_hash=url_hash,title_hash=title_hash,
-   collected_at=datetime.now(timezone.utc).isoformat(),status='published',fact_check_status='pending')
+   collected_at=datetime.now(timezone.utc).isoformat(),status='published',fact_check_status='pending',external_id='archive-restored:'+str(row['id']))
   ph='%s' if database._postgres else '?'
   database.conn.execute('INSERT INTO news_items ('+','.join(record)+') VALUES ('+','.join([ph]*len(record))+')',tuple(record.values()))
   if not database._postgres:database.conn.commit()
@@ -1914,6 +1948,8 @@ def create_manual_story():
  if err:return err
  body=request.get_json(silent=True)
  if not isinstance(body,dict):return jsonify({"error":"JSON body required"}),400
+ publish_now=body.get("publish_now") is True
+ if publish_now and "news.publish" not in getattr(g,"admin_permissions",[]):return jsonify({"error":"Your role cannot publish stories."}),403
  title=str(body.get("title") or "").strip()
  summary=str(body.get("summary") or "").strip()
  article=str(body.get("article") or "").strip()
@@ -1929,7 +1965,7 @@ def create_manual_story():
   return jsonify({"error":"Select a supported news desk"}),400
  from urllib.parse import urlsplit
  src=urlsplit(original)
- if src.scheme!="https" or not src.hostname or src.username or len(original)>2000:
+ if src.scheme!="https" or not src.hostname or src.username or len(original)>2000 or not public_http_url(original):
   return jsonify({"error":"A valid HTTPS reporting/source URL is required"}),400
  if image:
   parsed=urlsplit(image)
@@ -1946,6 +1982,10 @@ def create_manual_story():
  unique=str(uuid.uuid4())
  normalized=reference+"#manual-"+unique
  url_hash,title_hash=fingerprint(normalized,title)
+ # Manual articles have their own identity even when they cite the same report.
+ # fingerprint() normalizes away fragments, so hash the manual UUID explicitly.
+ import hashlib
+ url_hash=hashlib.sha256(normalized.encode()).hexdigest()
  database=db()
  try:
   ph="%s" if database._postgres else "?"
@@ -1960,26 +2000,41 @@ def create_manual_story():
           "manual-"+unique,url_hash,title_hash,now,category,image,1,summary,
           article,"article-source" if image else "",image_license,image_credit,
           image if image else "","pending","pending")
-  with database.conn.transaction() if database._postgres else __import__("contextlib").nullcontext():
-   if database._postgres:
-    result=database.conn.execute(
-     "INSERT INTO news_items ("+",".join(keys)+") VALUES ("
-     +",".join([ph]*len(keys))+") RETURNING id",params)
-    item_id=result.fetchone()["id"]
-   else:
-    result=database.conn.execute(
-     "INSERT INTO news_items ("+",".join(keys)+") VALUES ("
-     +",".join([ph]*len(keys))+")",params)
-    item_id=result.lastrowid
-   database.conn.execute(
-    "INSERT INTO admin_activity (username,action,item_id,details,created_at) VALUES ("
-    +",".join([ph]*5)+")",
-    (session.get("admin_user"),"news.manual.create",item_id,"Manual editorial draft created, verification pending",now))
-   from app.editorial_access import assign_story
-   assign_story(database,item_id,session.get("admin_user"),commit=False)
-   if not database._postgres:database.conn.commit()
+  from app.manual_requests import reserve,complete
+  try:
+   with database.conn.transaction() if database._postgres else database.conn:
+    request_key,existing_item=reserve(database,session.get('admin_user') or 'API administrator',body)
+    if existing_item:
+     from app.editorial_access import allowed_story
+     if not allowed_story(database,existing_item,getattr(g,'admin_policy',None),session.get('admin_user')):return jsonify({'error':'This story is outside your current assignment.'}),403
+     item_id=existing_item
+    else:
+     if database._postgres:
+      result=database.conn.execute(
+       "INSERT INTO news_items ("+",".join(keys)+") VALUES ("
+       +",".join([ph]*len(keys))+") RETURNING id",params)
+      item_id=result.fetchone()["id"]
+     else:
+      result=database.conn.execute(
+       "INSERT INTO news_items ("+",".join(keys)+") VALUES ("
+       +",".join([ph]*len(keys))+")",params)
+      item_id=result.lastrowid
+     database.conn.execute(
+      "INSERT INTO admin_activity (username,action,item_id,details,created_at) VALUES ("
+      +",".join([ph]*5)+")",
+      (session.get("admin_user"),"news.manual.create",item_id,"Manual editorial draft created, verification pending",now))
+     from app.editorial_access import assign_story
+     assign_story(database,item_id,session.get("admin_user"),commit=False)
+     complete(database,session.get('admin_user') or 'API administrator',request_key,item_id)
+  except ValueError as error:return jsonify({'error':str(error)}),409
+  if publish_now:
+   database.close();database=None
+   result=_verify_and_publish(item_id)
+   if isinstance(result,Response):result.status_code=201
+   return result
   return jsonify({"ok":True,"id":item_id,"status":"pending","message":"Draft saved. Verify and approve before publishing."}),201
- finally:database.close()
+ finally:
+  if database:database.close()
 
 
 @app.post("/api/news/<int:item_id>/edit")
@@ -2026,7 +2081,12 @@ def admin_story_delivery(item_id):
  try:
   if not database.get_by_id(item_id):return jsonify({'error':'Story not found'}),404
   from app.phone_publication import delivery_status
-  return jsonify(delivery_status(database,item_id))
+  status=delivery_status(database,item_id)
+  from app.live_publication import phone_enabled,confirm_publication
+  if phone_enabled() and not getattr(g,'phone_bridge_verified',False) and status.get('state')=='verifying':
+   result=confirm_publication({'id':item_id,'status':'published','public_delivery':status},database=database)
+   return jsonify(result)
+  return jsonify(status)
  finally:database.close()
 
 

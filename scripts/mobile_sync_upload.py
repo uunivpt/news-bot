@@ -42,6 +42,7 @@ def sync_public_rows(rows, checkout, remote, *, env=None, now=None):
     from scripts.offline_snapshot import mobile_reviewed_story
     from app.seo_indexing import SITE_ORIGIN, canonical_path
     from app.normalize import normalize_url
+    from app.live_publication import publication_key
     from datetime import datetime, timezone
     from app.phone_publication import public_export
     rows = [public_export(dict(row)) for row in rows]
@@ -64,15 +65,15 @@ def sync_public_rows(rows, checkout, remote, *, env=None, now=None):
     # queued content remains in PostgreSQL until a successful push receipt.
     _git(['fetch','--depth=1','origin',BRANCH],checkout,env)
     _git(['reset','--hard','FETCH_HEAD'],checkout,env)
-    incoming = {normalize_url(row['url']): dict(row) for row in rows}
+    incoming = {publication_key(row): dict(row) for row in rows}
     target = checkout/TARGET
     saved = json.loads(target.read_text()) if target.is_file() else []
-    combined = list(incoming.values()) + [public_export(row) for row in saved if normalize_url(row.get('url')) not in incoming]
+    combined = list(incoming.values()) + [public_export(row) for row in saved if publication_key(row) not in incoming]
     kept = []
     for row in combined:
         attempt = kept+[row]
         if len(attempt)>1000 or len(json.dumps(attempt,ensure_ascii=False).encode())>1_950_000:
-            if normalize_url(row.get('url')) in incoming:
+            if publication_key(row) in incoming:
                 raise ValueError('Publication batch too large')
             break
         kept=attempt
@@ -81,17 +82,17 @@ def sync_public_rows(rows, checkout, remote, *, env=None, now=None):
     target.write_text(json.dumps(kept,ensure_ascii=False,separators=(',',':'))+'\n')
     publish(checkout,now=now)
     public = json.loads((checkout/'public/news-data.json').read_text())
-    by_url = {normalize_url(row['url']):row for row in public}
+    by_url = {publication_key(row):row for row in public}
     archive_file = checkout/'app/data/public-archive.json.gz'
     if archive_file.is_file():
         import gzip
         with gzip.open(archive_file,'rt',encoding='utf-8') as archive:
-            by_url = {**{normalize_url(row['url']):row for row in json.load(archive)}, **by_url}
-    if any(normalize_url(row['url']) not in by_url for row in rows):
+            by_url = {**{publication_key(row):row for row in json.load(archive)}, **by_url}
+    if any(publication_key(row) not in by_url for row in rows):
         raise ValueError('Public identity conflict; story was not added to the feed/archive')
     # Public exports use the same canonical ID as the public feed/archive.
     # The caller's private phone PK remains the outbox key and return-map key.
-    normalized = [{**row, 'id':by_url.get(normalize_url(row['url']),row)['id']} for row in kept]
+    normalized = [{**row, 'id':by_url.get(publication_key(row),row)['id']} for row in kept]
     validated(normalized)
     target.write_text(json.dumps(normalized,ensure_ascii=False,separators=(',',':'))+'\n')
     _git(['add','--',*PUBLIC_TARGETS],checkout,env)
@@ -107,7 +108,7 @@ def sync_public_rows(rows, checkout, remote, *, env=None, now=None):
     # The feed may retain an existing canonical ID for a previously seen URL.
     urls = {}
     for row in rows:
-        public_row = by_url.get(normalize_url(row['url'])) or mobile_reviewed_story(row,now)
+        public_row = by_url.get(publication_key(row)) or mobile_reviewed_story(row,now)
         urls[str(row['id'])] = SITE_ORIGIN+canonical_path(public_row)+'?v='+commit
     return {'commit_sha':commit,'public_urls':urls,'state':'synced'}
 
@@ -152,10 +153,12 @@ def validated(rows):
         sid = row.get("id")
         if type(sid) is not int or not (0 < sid < 2**53):
             raise ValueError("Unsafe story id")
-        if sid in seen_ids or row["url"] in seen_urls:
+        from app.live_publication import publication_key
+        identity=publication_key(row)
+        if sid in seen_ids or identity in seen_urls:
             raise ValueError("Duplicate story ID or URL in export")
         seen_ids.add(sid)
-        seen_urls.add(row["url"])
+        seen_urls.add(identity)
     return len(rows)
 
 

@@ -697,7 +697,7 @@ def dedupe_story_rows(rows, threshold=0.82):
                 prior=kept[index]
                 prior_score=int(prior.get("news_score") or 0)
                 row_score=int(row.get("news_score") or 0)
-                if row_score>prior_score:
+                if (bool(row.get("editorial_featured")),row_score)>(bool(prior.get("editorial_featured")),prior_score):
                     kept[index]=row
                     token_sets[index]=words
                 break

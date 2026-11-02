@@ -67,7 +67,7 @@ test('legacy publish button uses the same one-step approval endpoint',async()=>{
 });
 
 test('publication reports website sync status without claiming a queued article is live',async()=>{
-  for (const [state,expected] of [['queued',/sync is queued automatically/],
+  for (const [state,expected] of [['queued',/Checking that the story is visible/],['verifying',/Checking that the story is visible/],
                                 ['not_configured',/sync is not configured/],
                                 ['failed',/sync failed; publication is saved/],
                                 ['synced',/published on the website/]]) {
@@ -96,6 +96,15 @@ test('all pending rows expose Verify and publish, including previously reviewed 
   assert.match(html,/Verify &amp; publish/);
   assert.match(html,/data-news="approve"/);
   assert.doesNotMatch(html,/data-news="publish"/);
+});
+
+test('phone-published stories can be promoted and checked again without a new article',()=>{
+  const context=vm.createContext({workspace:{access:{read_only:false}},Number});
+  vm.runInContext(source.slice(source.indexOf('function storyActions('),source.indexOf('function renderNews(')),context);
+  const html=vm.runInContext("storyActions({id:44,status:'published',article_available:true})",context);
+  assert.match(html,/Make main news \/ check website/);
+  assert.match(html,/data-news="approve" data-id="44"/);
+  assert.match(html,/data-permission="news.publish"/);
 });
 
 test('a fresh post-write workspace response cannot be replaced by an older refresh',async()=>{

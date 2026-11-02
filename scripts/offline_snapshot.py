@@ -163,7 +163,7 @@ def mobile_reviewed_story(row, now):
     if not valid_url(url):
         return None
     try:
-        story_id = int(row.get("id"))
+        story_id = int(row.get("canonical_public_id") or row.get("phone_public_id") or row.get("id"))
     except (TypeError, ValueError):
         return None
     if not 0 < story_id < 2**53:
@@ -181,6 +181,7 @@ def mobile_reviewed_story(row, now):
     licensed_image = bool(row.get("image_url") and row.get("image_credit") and
                           str(row.get("image_license") or "").lower() in {"cc0", "pdm", "licensed", "rights-owned"})
     return {
+        **{key:row[key] for key in ("phone_public_id","canonical_public_id","editorial_featured","editorial_featured_at") if key in row},
         "id": story_id,
         "title": title,
         "url": url,
@@ -202,7 +203,8 @@ def mobile_reviewed_story(row, now):
 
 def merge_mobile_reviewed(current, incoming, now):
     """Merge verified phone exports without deleting or renumbering public stories."""
-    indexed = {normalize_url(row["url"]): dict(row) for row in current
+    from app.live_publication import publication_key
+    indexed = {publication_key(row): dict(row) for row in current
                if isinstance(row, dict) and valid_url(row.get("url"))}
     identities = {str(row.get("id")): key for key, row in indexed.items()}
     changed = 0
@@ -210,7 +212,7 @@ def merge_mobile_reviewed(current, incoming, now):
         story = mobile_reviewed_story(raw, now)
         if story is None:
             continue
-        key = normalize_url(story["url"])
+        key = publication_key(story)
         if key in indexed:
             # Keep the canonical public identity while publishing reviewed edits.
             # A summary-only export must not erase an existing full manuscript.
@@ -228,9 +230,12 @@ def merge_mobile_reviewed(current, incoming, now):
         indexed[key] = story
         changed += 1
         identities[str(story["id"])] = key
+    featured=max((row for row in indexed.values() if row.get("editorial_featured")),key=lambda row:str(row.get("editorial_featured_at") or ""),default=None)
+    for row in indexed.values():
+        if row is not featured:row.pop("editorial_featured",None);row.pop("editorial_featured_at",None)
     result = sorted(indexed.values(),
-                    key=lambda row: parse_date(row.get("published_at_site") or row.get("published_at"))
-                    or datetime.min.replace(tzinfo=timezone.utc),
+                    key=lambda row: (bool(row.get("editorial_featured")),str(row.get("editorial_featured_at") or ""),parse_date(row.get("published_at_site") or row.get("published_at"))
+                    or datetime.min.replace(tzinfo=timezone.utc)),
                     reverse=True)[:MAX_STORIES]
     return result, changed
 

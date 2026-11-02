@@ -41,6 +41,17 @@ def delivery_status(database, item_id):
     if not record:
         return {'state': 'not_queued'}
     row = dict(record)
+    from app.editorial_access import table_exists
+    if table_exists(database,'ph_live_receipts'):
+        receipt=database.conn.execute('SELECT * FROM ph_live_receipts WHERE item_id='+p,(int(item_id),)).fetchone()
+        current=database.get_by_id(int(item_id))
+        if receipt and current and dict(current).get('status')=='published' and receipt['revision']==review_fingerprint(dict(current)):
+            return {'state':'synced','channel':'phone_bridge','public_url':receipt['public_url'],'checked_at':receipt['checked_at'],'archive_state':row.get('state'),'revision':receipt['revision']}
+    from app.live_publication import phone_enabled,public_id
+    if phone_enabled():
+        current=database.get_by_id(int(item_id))
+        if current and dict(current).get('status')=='published':
+            return {'state':'verifying','channel':'phone_bridge','configured':True,'revision':review_fingerprint(dict(current)),'public_id':public_id(item_id),'archive_state':row.get('state')}
     return {key: row.get(key) for key in
             ('state', 'attempts', 'updated_at', 'last_error', 'public_url', 'commit_sha')}
 
@@ -54,12 +65,15 @@ def deliver_publication(item_id, *, database):
         row = dict(record)
         if row.get('status') != 'published' or not row.get('approved_at'):
             return {'state': 'failed', 'last_error': 'Story has not been approved for publication'}
+        from app.live_publication import phone_enabled,promote,public_id
+        live=phone_enabled()
+        if live:promote(database,row)
         ensure_queue(database)
         revision = review_fingerprint(row)
         p = '%s' if database._postgres else '?'
         prior = database.conn.execute('SELECT revision,state FROM ph_public_delivery WHERE item_id='+p,
                                       (int(item_id),)).fetchone()
-        if prior and prior['revision'] == revision and prior['state'] == 'synced':
+        if not live and prior and prior['revision'] == revision and prior['state'] == 'synced':
             return delivery_status(database, item_id)
         public_url = SITE_ORIGIN + canonical_path(row)
         database.conn.execute(
@@ -75,6 +89,9 @@ def deliver_publication(item_id, *, database):
         if configured:
             start_delivery_worker()
         result = {**delivery_status(database, item_id), 'configured': configured}
+        if live:
+            status=delivery_status(database,item_id)
+            return {**result,**status,'configured':True,'channel':'phone_bridge','revision':revision,'public_id':public_id(item_id),'state':'synced' if status.get('channel')=='phone_bridge' and status.get('state')=='synced' else 'verifying'}
         if not configured:
             result['state'] = 'not_configured'
             result['last_error'] = 'Published in the phone database; public sync needs the existing phone SSH identity'
@@ -85,12 +102,18 @@ def deliver_publication(item_id, *, database):
         return {'state': 'failed', 'last_error': 'Delivery queue unavailable: '+type(exc).__name__}
 
 
-def public_export(row):
+def public_export(row, *, public_identity=False):
     fields = ('id', 'title', 'url', 'source_name', 'source_type', 'summary', 'bot_summary',
               'bot_article', 'published_at', 'published_at_site', 'category', 'image_url',
               'image_license', 'image_credit', 'status', 'approved_at', 'fact_check_status')
     result = {key: row.get(key) for key in fields}
     result['public_source'] = bool(row.get('public_source'))
+    for key in ('phone_public_id','canonical_public_id','editorial_featured','editorial_featured_at'):
+        if key in row:result[key]=row[key]
+    if public_identity:
+        from app.live_publication import public_id
+        result['phone_public_id']=public_id(row['id'])
+        if str(row.get('external_id') or '').startswith('archive-restored:'):result['canonical_public_id']=row['id']
     return result
 
 
@@ -113,7 +136,10 @@ def run_pending(database, uploader=None):
                                   (queued['item_id'],))
             continue
         row = dict(record)
-        exported = public_export(row)
+        from app.live_publication import phone_enabled,primary
+        top=primary(database)
+        if top and top['item_id']==row['id']:row.update(editorial_featured=True,editorial_featured_at=top['featured_at'])
+        exported = public_export(row,public_identity=phone_enabled())
         size = len(json.dumps(exported, ensure_ascii=False).encode())
         if rows and (len(rows) >= 10 or batch_bytes + size > 1_000_000):
             break
@@ -152,6 +178,7 @@ def run_pending(database, uploader=None):
 def start_delivery_worker():
     """Wake a singleton phone-only worker; restart resumes durable queued rows."""
     global _worker
+    if not (Path.home()/'.ssh/politicshub_mobile_sync').is_file():return
     if os.getenv('POLITICSHUB_LOCAL_ADMIN') != '1' or os.getenv('VERCEL') == '1':
         return
     from urllib.parse import urlsplit

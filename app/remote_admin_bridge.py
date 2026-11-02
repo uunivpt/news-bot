@@ -188,6 +188,17 @@ def proxy_public_admin():
         }:
             return jsonify({"error": "Phone admin rejected the secure gateway. Update and restart the Termux admin service, then retry.",
                             "code": "phone_admin_gateway_rejected"}), 503
+        if isinstance(data,dict) and data.get('channel')=='phone_bridge' and re.search(r'/story/\d+/delivery$',request.path):
+            match=re.search(r'/story/(\d+)/delivery$',request.path)
+            data={'id':int(match[1]),'status':'published','public_delivery':data}
+        if isinstance(data,dict):
+            from .live_publication import confirm_publication
+            if data.get('public_delivery',{}).get('channel')=='phone_bridge' and (data.get('status')=='published' or request.method=='GET'):
+                if not data.get('id'):
+                    match=re.search(r'/story/(\d+)/delivery$',request.path)
+                    if match:data=dict(data,id=int(match[1]),public_delivery=dict(data))
+                data=confirm_publication(data)
+                content=json.dumps(data,ensure_ascii=False,separators=(',',':')).encode()
         result = Response(content, status=response.status)
         result.headers["Content-Type"] = "application/pdf" if pdf else "application/json"
         if pdf:

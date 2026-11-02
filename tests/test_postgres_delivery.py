@@ -155,6 +155,31 @@ class PostgresDeliveryTests(unittest.TestCase):
             self.assertTrue(diagnosis_pdf(report).startswith(b'%PDF-'))
             database.conn.execute("DELETE FROM admin_users WHERE username IN ('pushkarthawari','pg_fixture_staff')")
 
+    def test_publish_now_and_signed_visibility_receipt_work_in_postgres_without_ssh(self):
+        import uuid
+        from werkzeug.security import generate_password_hash
+        from app.live_publication import public_id
+        from app.remote_admin_bridge import bridge_headers
+        from app.phone_publication import delivery_status
+        secret='postgres-publication-fixture-key-123456789'
+        api._PUBLIC_RATE.clear();api._ADMIN_LOGIN_RATE.clear()
+        database=self.database
+        with patch.dict(os.environ,{'POLITICSHUB_LOCAL_ADMIN':'1','VERCEL':'','POLITICSHUB_ADMIN_BRIDGE_SECRET':secret}),patch.object(api,'db',return_value=database),patch.object(database,'close'):
+            api._ensure_admin_users(database)
+            database.conn.execute("INSERT INTO admin_users(username,password_hash,role,created_at) VALUES (%s,%s,'owner','2026-11-02T00:00:00Z') ON CONFLICT(username) DO UPDATE SET password_hash=EXCLUDED.password_hash",('pushkarthawari',generate_password_hash('isolated-postgres-publish-password')))
+            database.conn.execute("SELECT setval(pg_get_serial_sequence('news_items','id'),(SELECT MAX(id) FROM news_items))")
+            client=api.app.test_client();login=client.post('/api/admin/login',json={'username':'pushkarthawari','password':'isolated-postgres-publish-password'});headers={'X-CSRF-Token':login.json['csrf_token']}
+            body={'title':'New original published report explains revised local services','summary':'The public notice explains the revised local services and provides information about official support channels.','article':'The public authority published a detailed notice about its revised local services and the available support channels. '*10,'source_url':'https://example.org/pg-immediate-publication','category':'india','publish_now':True,'request_id':str(uuid.uuid4())}
+            first=client.post('/api/admin/news/create',json=body,headers=headers);self.assertEqual(first.status_code,201,first.data);self.assertEqual(first.json['status'],'published')
+            sid=first.json['id'];pid=public_id(sid);revision=first.json['public_delivery']['revision']
+            path='/api/phone-public/article/'+str(pid)
+            public=client.get(path,headers=bridge_headers(secret,'GET',path,b''));self.assertEqual(public.status_code,200,public.data);self.assertEqual(public.json['story']['title'],body['title'])
+            path='/api/phone-public/receipt';payload=json.dumps({'item_id':sid,'revision':revision}).encode();signed=bridge_headers(secret,'POST',path,payload);signed['Content-Type']='application/json'
+            self.assertEqual(client.post(path,data=payload,headers=signed).status_code,200)
+            self.assertEqual(delivery_status(database,sid)['state'],'synced')
+            retry=client.post('/api/admin/news/create',json=body,headers=headers);self.assertEqual(retry.status_code,201);self.assertEqual(retry.json['id'],sid)
+            database.conn.execute('DELETE FROM news_items WHERE id=%s',(sid,));database.conn.execute("DELETE FROM admin_users WHERE username='pushkarthawari'")
+
     def test_editorial_studio_scopes_claims_and_public_updates_use_real_postgres(self):
         from werkzeug.security import generate_password_hash
         from app.models import NewsItem

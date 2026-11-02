@@ -84,6 +84,24 @@ class RealGitDeliveryTests(unittest.TestCase):
             final=json.loads(self.git(remote,'show','main:public/news-data.json'))
             self.assertIn('Editor added',final[0]['bot_article'])
 
+    def test_live_phone_identity_keeps_distinct_manual_articles_with_one_evidence_url(self):
+        from app.phone_publication import public_export
+        from app.live_publication import public_id
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);remote=root/'remote.git';seed=root/'seed';managed=root/'delivery'
+            subprocess.run(['git','init','--bare','--initial-branch=main',str(remote)],check=True,capture_output=True)
+            subprocess.run(['git','init','--initial-branch=main',str(seed)],check=True,capture_output=True)
+            (seed/'public').mkdir();(seed/'public/news-data.json').write_text('[]')
+            self.git(seed,'add','.');self.git(seed,'-c','user.name=Fixture','-c','user.email=fixture@example.org','commit','-m','seed');self.git(seed,'remote','add','origin',str(remote));self.git(seed,'push','origin','main')
+            one=public_export(reviewed(),public_identity=True)
+            two=public_export(dict(reviewed(),id=456,title='A separate original public report uses the same official evidence page'),public_identity=True)
+            result=sync_public_rows([one,two],managed,str(remote),now=NOW)
+            feed=json.loads(self.git(remote,'show','main:public/news-data.json'))
+            self.assertEqual({r['id'] for r in feed},{public_id(455),public_id(456)})
+            self.assertEqual(len(result['public_urls']),2)
+            archive=json.loads(gzip.decompress(subprocess.check_output(['git','-C',str(remote),'show','main:app/data/public-archive.json.gz'])))
+            self.assertEqual(len(archive),2)
+
     def test_unknown_existing_directory_is_never_reset(self):
         with tempfile.TemporaryDirectory() as folder:
             (Path(folder)/'private.txt').write_text('local file')

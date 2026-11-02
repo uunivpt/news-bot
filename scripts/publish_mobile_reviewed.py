@@ -46,13 +46,14 @@ def publish(root: Path = Path("."), now: datetime | None = None) -> dict:
     # malicious or partial record and claiming the export was verified.
     validated(incoming)
     from app.normalize import normalize_url
+    from app.live_publication import publication_key
     existing_ids = {}
     if archive_path.is_file():
         import gzip
         with gzip.open(archive_path, 'rt', encoding='utf-8') as archive:
-            existing_ids.update({normalize_url(row['url']):row['id'] for row in json.load(archive)})
-    existing_ids.update({normalize_url(row['url']):row['id'] for row in public if row.get('url')})
-    incoming = [{**row, 'id':existing_ids.get(normalize_url(row['url']),row['id'])}
+            existing_ids.update({publication_key(row):row['id'] for row in json.load(archive)})
+    existing_ids.update({publication_key(row):row['id'] for row in public if row.get('url')})
+    incoming = [{**row, 'id':existing_ids.get(publication_key(row),row['id'])}
                 for row in incoming]
     eligible = [story for row in incoming
                 if (story := mobile_reviewed_story(row, now)) is not None]
@@ -68,8 +69,8 @@ def publish(root: Path = Path("."), now: datetime | None = None) -> dict:
 
     # A source URL may already have a stable public ID that differs from the
     # phone's primary key. Keep the archive consistent with the public feed.
-    public_ids = {normalize_url(row["url"]): row["id"] for row in public + merged if row.get("url")}
-    eligible = [{**row, "id": public_ids.get(normalize_url(row["url"]), row["id"])}
+    public_ids = {publication_key(row): row["id"] for row in public + merged if row.get("url")}
+    eligible = [{**row, "id": public_ids.get(publication_key(row), row["id"])}
                 for row in eligible]
 
     # Preserve the approved story in the public archive even if the rotating

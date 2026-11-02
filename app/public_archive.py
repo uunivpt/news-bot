@@ -16,7 +16,7 @@ ARCHIVE_PATH = Path(__file__).parent / "data" / "public-archive.json.gz"
 _identity_cache = (None, {})
 FIELDS = ("id", "title", "summary", "bot_summary", "bot_article", "source_name",
           "source_type", "url", "published_at", "published_at_site", "category",
-          "image_url", "image_source", "image_license", "image_credit", "public_source", "legacy_ids", "news_number")
+          "image_url", "image_source", "image_license", "image_credit", "public_source", "legacy_ids", "news_number", "phone_public_id", "canonical_public_id", "editorial_featured", "editorial_featured_at")
 
 
 def timestamp(row):
@@ -67,7 +67,8 @@ def retain_public_records(incoming, path=ARCHIVE_PATH):
     withheld_path=Path(__file__).parent/'data/archive-withheld.json'
     withheld=set(json.loads(withheld_path.read_text())) if withheld_path.exists() else set()
     allowed=lambda row: hashlib.sha256(str(row.get('url') or '').encode()).hexdigest() not in withheld
-    merged = {row["url"]: row for row in saved if allowed(row)}
+    from app.live_publication import publication_key
+    merged = {publication_key(row): row for row in saved if allowed(row)}
     for row in incoming:
         if not isinstance(row, dict) or not row.get("url") or not row.get("title") or not allowed(row):
             continue
@@ -80,12 +81,12 @@ def retain_public_records(incoming, path=ARCHIVE_PATH):
         if item_id <= 0:
             continue
         safe = {key: row[key] for key in FIELDS if key in row}
-        previous = merged.get(row['url'], {})
+        previous = merged.get(publication_key(row), {})
         aliases = set(previous.get('legacy_ids', [])) | set(row.get('legacy_ids', []))
         if previous.get('id') and previous['id'] != item_id: aliases.add(previous['id'])
         safe.update(id=item_id, status="published", legacy_ids=sorted(aliases - {item_id}))
         safe['news_number'] = news_number(safe)
-        merged[row["url"]] = safe
+        merged[publication_key(row)] = safe
     result = sorted(merged.values(), key=lambda row: (timestamp(row), row["id"]), reverse=True)
     # A duplicate ID must not silently serve the wrong article.
     if len({row["id"] for row in result}) != len(result):
