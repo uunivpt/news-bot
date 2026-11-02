@@ -4,7 +4,8 @@ from datetime import datetime, timezone
 import hashlib
 import json
 
-EDITORIAL_FIELDS = ('title', 'summary', 'bot_summary', 'category')
+EDITORIAL_FIELDS = ('title', 'summary', 'bot_summary', 'bot_article', 'category',
+                    'image_url', 'status', 'approved_at', 'fact_check_status', 'fact_check_notes')
 
 
 def editorial_revision(row):
