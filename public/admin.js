@@ -3,7 +3,7 @@
 const $ = id => document.getElementById(id);
 const arr = value => Array.isArray(value) ? value : [];
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
-const views = {overview:'Overview',news:'Newsroom',sources:'Source coverage',operations:'Agent operations',upgrade:'Intelligence & QA',activity:'Activity',system:'System status',settings:'Settings',team:'Team & roles'};
+const views = {overview:'Overview',news:'Newsroom',sources:'Source coverage',operations:'Agent operations',upgrade:'Intelligence & QA',activity:'Activity',system:'System status',settings:'Settings',team:'Team & roles',events:'Events & sources',studio:'Marathi Studio',readiness:'AdSense readiness'};
 let csrf = '', settings = {}, workspace = null, rows = [], currentView = 'overview';
 let pageNumber = 1, pageTotal = 0, queue = 'all', selected = new Set(), visibleRows = [];
 let deliveryController = null;
@@ -18,6 +18,7 @@ function notice(message, type = 'ok') {
   noticeTimer = setTimeout(() => $('notice').classList.add('hidden'), 5500);
 }
 function showLogin(message = '') {
+  window.Editorial?.reset();
   clearStaffCredentials();
   $('teamMembers').replaceChildren();
   sessionVersion++;
@@ -126,6 +127,7 @@ function go(view, updateHash = true) {
   if (view === 'system') renderSystem();
   if (view === 'settings') loadSettings();
   if (view === 'team') loadTeam();
+  if (['events','studio','readiness'].includes(view)) window.Editorial?.load(view);
   window.scrollTo({top:0,behavior:'instant'});
 }
 function powerLabel(permission) {
@@ -138,7 +140,7 @@ function can(permission) {
 }
 function canView(view) {
   if (workspace?.access.read_only) return view !== 'team';
-  return !({team:'users.manage',settings:'settings.manage',activity:'activity.read',operations:'operations.read',upgrade:'operations.read'}[view]) || can({team:'users.manage',settings:'settings.manage',activity:'activity.read',operations:'operations.read',upgrade:'operations.read'}[view]);
+  return !({readiness:'reports.read',team:'users.manage',settings:'settings.manage',activity:'activity.read',operations:'operations.read',upgrade:'operations.read'}[view]) || can({readiness:'reports.read',team:'users.manage',settings:'settings.manage',activity:'activity.read',operations:'operations.read',upgrade:'operations.read'}[view]);
 }
 function controlPermission(node) {
   if (node.dataset.permission) return node.dataset.permission;
@@ -165,7 +167,7 @@ async function loadTeam() {
     teamRoles = data.roles;
     $('hireRole').innerHTML = '<option value="">Select a role…</option>' + teamRoles.map(role => `<option value="${esc(role.id)}">${esc(role.name)}</option>`).join('');
     $('hirePowers').textContent = 'Choose a job to see exactly which actions it permits.';
-    $('teamMembers').innerHTML = '<table class="table"><thead><tr><th>Username</th><th>Role / powers</th><th>Actions</th></tr></thead><tbody>' + data.users.map(user => `<tr><td>${esc(user.username)}</td><td>${user.protected ? '<b>Main owner · all permissions</b>' : `<select class="field" data-staff-role="${esc(user.username)}">${!user.enabled ? '<option value="">Disabled · select a role to restore</option>' : ''}${teamRoles.map(role => `<option value="${esc(role.id)}" ${user.role === role.id ? 'selected' : ''}>${esc(role.name)}</option>`).join('')}</select>`}<small>${esc(user.permissions.map(powerLabel).join(', ') || 'No access')}</small></td><td>${user.protected ? 'Protected owner' : `<button class="btn small" data-staff="role" data-user="${esc(user.username)}">Save role</button> <button class="btn small" data-staff="reset_password" data-user="${esc(user.username)}">Generate new password</button> <button class="btn small danger" data-staff="disable" data-user="${esc(user.username)}" ${!user.enabled ? 'disabled' : ''}>Disable access</button>`}</td></tr>`).join('') + '</tbody></table>';
+    $('teamMembers').innerHTML = '<table class="table"><thead><tr><th>Username</th><th>Role / powers</th><th>Actions</th></tr></thead><tbody>' + data.users.map(user => `<tr><td>${esc(user.username)}</td><td>${user.protected ? '<b>Main owner · all permissions</b>' : `<select class="field" data-staff-role="${esc(user.username)}">${!user.enabled ? '<option value="">Disabled · select a role to restore</option>' : ''}${teamRoles.map(role => `<option value="${esc(role.id)}" ${user.role === role.id ? 'selected' : ''}>${esc(role.name)}</option>`).join('')}</select>`}<small>${esc(user.permissions.map(powerLabel).join(', ') || 'No access')}</small></td><td>${user.protected ? 'Protected owner' : `<button class="btn small" data-policy-user="${esc(user.username)}">Exact permissions</button> <button class="btn small" data-staff="role" data-user="${esc(user.username)}">Save role</button> <button class="btn small" data-staff="reset_password" data-user="${esc(user.username)}">Generate new password</button> <button class="btn small danger" data-staff="disable" data-user="${esc(user.username)}" ${!user.enabled ? 'disabled' : ''}>Disable access</button>`}</td></tr>`).join('') + '</tbody></table>';
   } catch (error) { notice(error.message,'err'); }
 }
 async function downloadDiagnosis() {
@@ -273,7 +275,7 @@ function filteredSnapshot() {
 function storyActions(row) {
   if (workspace?.access.read_only) return `<button class="btn" data-inspect="${Number(row.id)}">Inspect ↗</button>`;
   const id = Number(row.id);
-  return `<button class="btn" data-inspect="${id}">Inspect</button>` + (!row.article_available ? `<button class="btn" data-permission="news.process" data-news="process" data-id="${id}" data-write>Process</button>` : '') + (row.status === 'pending' ? `<button class="btn" data-permission="news.publish" data-news="approve" data-id="${id}" data-write>Verify &amp; publish</button>` : '') + (row.status !== 'rejected' ? `<button class="btn danger" data-permission="news.reject" data-news="reject" data-id="${id}" data-write>Reject</button>` : '');
+  return `<button class="btn" data-inspect="${id}">Inspect</button><button class="btn" data-studio="${id}">Studio</button>` + (!row.article_available ? `<button class="btn" data-permission="news.process" data-news="process" data-id="${id}" data-write>Process</button>` : '') + (row.status === 'pending' ? `<button class="btn" data-permission="news.publish" data-news="approve" data-id="${id}" data-write>Verify &amp; publish</button>` : '') + (row.status !== 'rejected' ? `<button class="btn danger" data-permission="news.reject" data-news="reject" data-id="${id}" data-write>Reject</button>` : '');
 }
 function renderNews(list, total) {
   visibleRows = list; pageTotal = total;
@@ -484,7 +486,7 @@ function renderSources() {
   const complete = !!inventory && Array.isArray(inventory.items);
   const scope = complete ? inventory.scope : 'sample';
   const database = scope === 'database', snapshot = scope === 'snapshot';
-  const countScope = database ? 'Entire database' : snapshot ? 'Saved public snapshot only' : scope === 'sample' ? 'Loaded sample only' : 'Database counts unavailable';
+  const countScope = database ? workspace.access?.policy ? 'Your accessible database stories' : 'Entire database' : snapshot ? 'Saved public snapshot only' : scope === 'sample' ? 'Loaded sample only' : 'Database counts unavailable';
   const items = complete ? inventory.items : arr(workspace.coverage.sources).map(source => ({name:source.name,story_count:source.count,collection_status:'unknown'}));
   const total = complete ? inventory.total_stories : workspace.coverage.sample_size;
   const represented = complete ? inventory.represented_count : items.length;
@@ -589,7 +591,7 @@ function openCommands() {
 let commandIndex = 0;
 function renderCommands() {
   const query = $('commandInput').value.trim().toLowerCase(); commandIndex = 0;
-  $('commandResults').innerHTML = Object.entries(views).filter(([,label]) => label.toLowerCase().includes(query)).map(([key,label],index) => `<button class="command-item" data-command="${key}" aria-selected="${index === 0}"><span>${esc(label)}</span><small>Open ↵</small></button>`).join('') || '<p class="muted">No matching sections.</p>';
+  $('commandResults').innerHTML = Object.entries(views).filter(([key,label]) => canView(key) && label.toLowerCase().includes(query)).map(([key,label],index) => `<button class="command-item" data-command="${key}" aria-selected="${index === 0}"><span>${esc(label)}</span><small>Open ↵</small></button>`).join('') || '<p class="muted">No matching sections.</p>';
 }
 async function signedIn(data) {
   if (!data.authenticated) {

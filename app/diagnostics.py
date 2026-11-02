@@ -36,6 +36,10 @@ def diagnosis(database, days=None, actor=''):
     if database._postgres:
         sections['PostgreSQL durability'] = [dict(row) for row in database.conn.execute("SELECT name,setting FROM pg_settings WHERE name IN ('fsync','full_page_writes','synchronous_commit','transaction_read_only','server_version') ORDER BY name").fetchall()]
     checks = [
+        ('Editorial event groups','ph_editorial_events','updated_at','id,title,category,created_by,created_at,updated_at'),
+        ('Claim assessments','ph_story_claims','updated_at','id,item_id,statement,assessment,created_by,updated_at'),
+        ('Claim source evidence','ph_claim_evidence','created_at','claim_id,publisher,source_url,excerpt,stance,recorded_by,created_at'),
+        ('Updates and corrections','ph_editorial_updates','created_at','id,item_id,label,body,kind,source_url,status,created_by,created_at,published_by,published_at'),
         ('Agent run history','ph_agent_runs','started_at', 'agent_id,operation,status,duration_seconds,started_at'),
         ('Admin audit history','admin_activity','created_at','username,action,item_id,created_at'),
         ('Alerts','ph_alerts','created_at','severity,bot,step,item_id,resolved,created_at'),

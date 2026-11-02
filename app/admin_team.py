@@ -4,7 +4,8 @@ import re
 import secrets
 from flask import jsonify, request, session
 from werkzeug.security import generate_password_hash
-from .admin_roles import PRIMARY_OWNER, ROLES, effective_role, permissions
+from .admin_roles import PRIMARY_OWNER, ROLES, ALL, effective_role, permissions
+from .editorial_access import policy_for,save_policy,table_exists,DESKS
 
 
 def register_team_routes(app, database_factory, require_admin, require_csrf):
@@ -16,9 +17,11 @@ def register_team_routes(app, database_factory, require_admin, require_csrf):
         try:
             rows = database.conn.execute('SELECT username,role,created_at FROM admin_users ORDER BY username').fetchall()
             return jsonify({'primary_owner': PRIMARY_OWNER,
+                'available_permissions':sorted(ALL-{'users.manage'}),'desks':sorted(DESKS),
                 'roles': [{'id': key, 'name': value[0], 'permissions': sorted(value[1])} for key, value in ROLES.items()],
                 'users': [{'username': row['username'], 'role': effective_role(row['username'], row['role']),
-                           'permissions': permissions(row['username'], row['role']), 'created_at': row['created_at'],
+                           'policy':policy_for(database,row['username']),
+                           'permissions': (policy_for(database,row['username']) or {}).get('permissions',permissions(row['username'], row['role'])), 'created_at': row['created_at'],
                            'enabled': row['role'] != 'disabled', 'protected': row['username'] == PRIMARY_OWNER} for row in rows]})
         finally: database.close()
 
@@ -55,7 +58,7 @@ def register_team_routes(app, database_factory, require_admin, require_csrf):
         body = request.get_json(silent=True) or {}
         operation = body.get('operation')
         role = str(body.get('role') or '')
-        if operation not in {'role', 'disable', 'reset_password'}: return jsonify({'error': 'Invalid staff action.'}), 400
+        if operation not in {'role', 'disable', 'reset_password','policy'}: return jsonify({'error': 'Invalid staff action.'}), 400
         if operation == 'role' and role not in ROLES: return jsonify({'error': 'Select a staff role.'}), 400
         database = database_factory()
         try:
@@ -63,6 +66,14 @@ def register_team_routes(app, database_factory, require_admin, require_csrf):
             password = secrets.token_urlsafe(18) if operation == 'reset_password' else None
             transaction = database.conn.transaction() if database._postgres else database.conn
             with transaction:
+                if operation == 'policy':
+                    if not database.conn.execute('SELECT username FROM admin_users WHERE username='+p,(username,)).fetchone():return jsonify({'error':'Staff account not found.'}),404
+                    try:save_policy(database,username,body,commit=False)
+                    except ValueError as exc:return jsonify({'error':str(exc)}),400
+                    database.log_activity(session['admin_user'],'staff_policy',details=username)
+                    return jsonify({'ok':True,'username':username})
+                if operation == 'role' and table_exists(database,'ph_staff_policy'):
+                    database.conn.execute('DELETE FROM ph_staff_policy WHERE username='+p,(username,))
                 if operation == 'reset_password':
                     cursor = database.conn.execute(f'UPDATE admin_users SET password_hash={p} WHERE username={p}', (generate_password_hash(password), username))
                 else:

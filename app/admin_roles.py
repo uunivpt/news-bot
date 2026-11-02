@@ -32,6 +32,14 @@ def verifier_tag(verifier):
 
 
 def required_permission(path, method):
+    if path.startswith('/api/admin/editorial/readiness'): return 'reports.read'
+    if path.endswith('/assign') and path.startswith('/api/admin/editorial/story/'):return 'users.manage'
+    if path.startswith('/api/admin/studio/'):
+        return 'news.create' if path.endswith('/prepare') else 'news.edit' if path.endswith('/save') else 'news.read'
+    if path.startswith('/api/admin/editorial/'):
+        if method in {'GET','HEAD'}:return 'news.read'
+        if re.search(r'/updates/\d+/publish$',path):return 'news.publish'
+        return 'news.edit'
     if path.startswith('/api/admin/users'): return 'users.manage'
     if path.startswith('/api/admin/diagnostics') or path in {'/api/admin/report', '/api/admin/operations.pdf'}: return 'reports.read'
     if path == '/api/admin/activity': return 'activity.read'

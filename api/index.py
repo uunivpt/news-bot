@@ -123,6 +123,8 @@ def _ensure_admin_users(database):
  with schema_once(database,'admin-users:'+identity) as required:
   if not required:return
   database.conn.execute("CREATE TABLE IF NOT EXISTS admin_users (username TEXT PRIMARY KEY,password_hash TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'owner',created_at TEXT NOT NULL)")
+  from app.editorial_access import ensure_access_schema
+  ensure_access_schema(database)
   if configured:
    row=database.conn.execute('SELECT COUNT(*) AS count FROM admin_users').fetchone()
    if int(row['count'])==0:
@@ -422,7 +424,9 @@ def db():
 
 def admin_ok():
  if recovery_session():return False
- if session.get("admin_user"):return True
+ if session.get("admin_user"):
+  if request.method in {"GET","HEAD"} and request.path.startswith("/api/news") and getattr(g,"admin_policy",None):return False
+  return True
  token=os.getenv("ADMIN_TOKEN",""); supplied=request.headers.get("X-Admin-Token",""); return bool(token and supplied and secrets.compare_digest(supplied,token))
 
 def resolve_admin_identity():
@@ -434,6 +438,8 @@ def resolve_admin_identity():
    try:
     ph='%s' if database._postgres else '?'
     row=database.conn.execute('SELECT role,password_hash FROM admin_users WHERE username='+ph,(username,)).fetchone()
+    from app.editorial_access import policy_for
+    g.admin_policy=policy_for(database,username)
    finally:database.close()
    if not row or row['role']=='disabled' or not secrets.compare_digest(verifier_tag(row['password_hash']),session['admin_verifier_tag']):
     session.clear();return jsonify({'error':'Your account or password changed. Please sign in again.'}),401
@@ -441,6 +447,7 @@ def resolve_admin_identity():
   # Legacy signed sessions retain operating access until expiry, but cannot
   # hire or manage staff until a fresh database-authenticated login.
   g.admin_permissions=role_permissions(username,stored_role)
+  if getattr(g,'admin_policy',None) and stored_role!='disabled':g.admin_permissions=g.admin_policy['permissions']
   if not session.get('admin_verifier_tag') and 'users.manage' in g.admin_permissions:g.admin_permissions.remove('users.manage')
   g.admin_role=effective_role(username,stored_role)
   session['admin_role']=g.admin_role
@@ -461,6 +468,15 @@ def require_admin():
  if err:return err
  permission=required_permission(request.path,request.method)
  if permission not in g.admin_permissions:return jsonify({'error':'Your role does not permit this action.','permission':permission}),403
+ policy=getattr(g,'admin_policy',None)
+ if policy:
+  match=re.match(r'^/api/(?:news/|admin/(?:story/|studio/|editorial/story/))(\d+)(?:/|$)',request.path)
+  if match:
+   database=db()
+   try:
+    from app.editorial_access import allowed_story
+    if not allowed_story(database,int(match[1]),policy,session.get('admin_user')):return jsonify({'error':'This story is outside your assigned access.'}),403
+   finally:database.close()
  return None
 def require_csrf():
  if not session.get("admin_user"):return None
@@ -468,6 +484,8 @@ def require_csrf():
 
 from app.admin_team import register_team_routes
 register_team_routes(app,lambda:db(),require_admin,require_csrf)
+from app.editorial_routes import register_editorial_routes
+register_editorial_routes(app,lambda:db(),require_admin,require_csrf,_public_rate_allowed)
 
 @app.get('/api/admin/diagnostics')
 @app.get('/api/admin/diagnostics.pdf')
@@ -1200,14 +1218,17 @@ def admin_workspace():
   if not recovery_session():
    # Transfer a bounded projection, never 200 complete articles per refresh.
    fields=','.join(ADMIN_LIST_FIELDS)
-   raw=database.conn.execute(f"SELECT {fields},LENGTH(COALESCE(bot_article,'')) AS article_length FROM news_items ORDER BY id DESC LIMIT 200").fetchall()
-   counts=database.conn.execute("SELECT COUNT(*) AS total,COALESCE(SUM(CASE WHEN status='published' THEN 1 ELSE 0 END),0) AS published,COALESCE(SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END),0) AS pending,COALESCE(SUM(CASE WHEN fact_check_status='needs_review' THEN 1 ELSE 0 END),0) AS review_needed,MAX(collected_at) AS latest_collected_at,MAX(CASE WHEN status='published' THEN COALESCE(NULLIF(published_at_site,''),published_at) END) AS latest_published_at FROM news_items").fetchone()
+   from app.editorial_access import scope_sql
+   restriction,scope_args=scope_sql(database,getattr(g,'admin_policy',None),session.get('admin_user'))
+   scope_where=' WHERE '+restriction if restriction else ''
+   raw=database.conn.execute(f"SELECT {fields},LENGTH(COALESCE(bot_article,'')) AS article_length FROM news_items{scope_where} ORDER BY id DESC LIMIT 200",scope_args).fetchall()
+   counts=database.conn.execute("SELECT COUNT(*) AS total,COALESCE(SUM(CASE WHEN status='published' THEN 1 ELSE 0 END),0) AS published,COALESCE(SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END),0) AS pending,COALESCE(SUM(CASE WHEN fact_check_status='needs_review' THEN 1 ELSE 0 END),0) AS review_needed,MAX(collected_at) AS latest_collected_at,MAX(CASE WHEN status='published' THEN COALESCE(NULLIF(published_at_site,''),published_at) END) AS latest_published_at FROM news_items"+scope_where,scope_args).fetchone()
    stats={key:int(counts[key]) for key in ('total','published','pending','review_needed')}
    latest_collected=counts['latest_collected_at']; latest_published=counts['latest_published_at']
    settings=database.get_settings()
    activity=[dict(row) for row in database.recent_activity(8)] if 'activity.read' in getattr(g,'admin_permissions',[]) else []
    rows=admin_project_rows(raw)
-   inventory=source_inventory(database)
+   inventory=source_inventory(database,where=scope_where,params=scope_args)
  except (DatabaseUnavailable,PostgresError):
   connected=False
  finally:
@@ -1223,7 +1244,7 @@ def admin_workspace():
  writable=connected and not recovery_session()
  return jsonify({'version':2,'generated_at':now.isoformat(),'mode':'snapshot' if snapshot else 'live',
    'data_origin':'termux_database' if writable and os.getenv('POLITICSHUB_LOCAL_ADMIN')=='1' else 'termux_github' if os.getenv("VERCEL")=="1" or os.getenv("POLITICSHUB_GITHUB_FEED_ONLY")=="1" else 'local_database',
-  'access':{'username':session.get('admin_user') or 'API token','role':getattr(g,'admin_role','recovery'),'permissions':getattr(g,'admin_permissions',[]),'scope':'recovery' if recovery_session() else 'owner','read_only':not writable,'expires_at':session.get('admin_expires_at')},
+  'access':{'username':session.get('admin_user') or 'API token','role':getattr(g,'admin_role','recovery'),'policy':getattr(g,'admin_policy',None),'permissions':getattr(g,'admin_permissions',[]),'scope':'recovery' if recovery_session() else 'owner','read_only':not writable,'expires_at':session.get('admin_expires_at')},
   'capabilities':{'publish':writable and 'news.publish' in getattr(g,'admin_permissions',[]),'settings':writable and 'settings.manage' in getattr(g,'admin_permissions',[]),'telemetry':writable and 'operations.read' in getattr(g,'admin_permissions',[]),'export':True},
   'health':{'database':'connected' if connected else 'unavailable','snapshot_available':bool(rows) if snapshot else None,
    'latest_published_at':datetime.fromtimestamp(latest,timezone.utc).isoformat() if latest else None,
@@ -1251,6 +1272,9 @@ def admin_story_queue():
  database=db()
  try:
   ph='%s' if database._postgres else '?'; clauses=[]; params=[]
+  from app.editorial_access import scope_sql
+  restriction,scope_args=scope_sql(database,getattr(g,'admin_policy',None),session.get('admin_user'))
+  if restriction:clauses.append(restriction);params.extend(scope_args)
   for key,column in (('category','category'),('source','source_name'),('status','status'),('review','fact_check_status')):
    if filters[key]!='all':clauses.append(f'{column}={ph}');params.append(filters[key])
   if query:
@@ -1343,6 +1367,9 @@ def news():
    records=database.latest_public(max(limit*3,limit),"all" if category in ("india","entertainment") else category,search)
   else:
    records=database.latest(max(limit*6,limit),"all" if category in ("india","entertainment") else category,status,search,review)
+  if getattr(g,'admin_policy',None):
+   from app.editorial_access import allowed_story
+   records=[row for row in records if allowed_story(database,row['id'],g.admin_policy,session.get('admin_user'))]
   rows=_rank_public(records,threshold=0.78)
   if category!="all":rows=[x for x in rows if x.get("category")==category]
   # A healthy database is authoritative; never resurrect removed stories.
@@ -1824,6 +1851,8 @@ def create_manual_story():
         "collected_at","category","image_url","public_source","bot_summary",
         "bot_article","image_source","image_license","image_credit","image_source_url",
         "fact_check_status","status")
+  policy=getattr(g,"admin_policy",None)
+  if policy and policy["categories"] and category not in policy["categories"]:return jsonify({"error":"That desk is outside your assigned access."}),403
   params=(source,"manual",title,original,normalized,now,summary,
           "manual-"+unique,url_hash,title_hash,now,category,image,1,summary,
           article,"article-source" if image else "",image_license,image_credit,
@@ -1843,6 +1872,8 @@ def create_manual_story():
     "INSERT INTO admin_activity (username,action,item_id,details,created_at) VALUES ("
     +",".join([ph]*5)+")",
     (session.get("admin_user"),"news.manual.create",item_id,"Manual editorial draft created, verification pending",now))
+   from app.editorial_access import assign_story
+   assign_story(database,item_id,session.get("admin_user"),commit=False)
    if not database._postgres:database.conn.commit()
   return jsonify({"ok":True,"id":item_id,"status":"pending","message":"Draft saved. Verify and approve before publishing."}),201
  finally:database.close()
@@ -1856,6 +1887,8 @@ def edit_news(item_id):
  if err:return err
  body=request.get_json(silent=True) or {}; fields={k:str(body[k] or "").strip() for k in ("title","summary","category","image_url","bot_summary","bot_article") if k in body}
  if not fields:return jsonify({"error":"no editable fields supplied"}),400
+ policy=getattr(g,"admin_policy",None)
+ if policy and policy["categories"] and fields.get("category") and fields["category"] not in policy["categories"]:return jsonify({"error":"That desk is outside your assigned access."}),403
  if "title" in fields and not fields["title"]:return jsonify({"error":"title cannot be empty"}),400
  if 'title' in fields and len(fields['title'])>500:return jsonify({'error':'Headline must be at most 500 characters'}),400
  if any(len(fields.get(key,''))>6000 for key in ('summary','bot_summary')):return jsonify({'error':'Summary must be at most 6000 characters'}),400
