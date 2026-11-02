@@ -26,14 +26,22 @@ def assess_automatic_publication(title: str, summary: str, article: str, researc
         for packet in packets
     }
     hosts.discard("")
+    rich_hosts = {
+        (urlparse(str(packet.get("url") or "")).hostname or "").lower().removeprefix("www.")
+        for packet in packets if word_count(str(packet.get("excerpt") or "")) >= 80
+    }
+    rich_hosts.discard("")
     evidence = " ".join(str(p.get("excerpt") or "") for p in packets)
     article_text = str(article or "")
-    if len(hosts) < 2:
-        errors.append("two_distinct_publisher_domains_required")
+    if len(rich_hosts) < 2:
+        errors.append("two_substantive_publisher_sources_required")
     if int(research.get("evidence_words") or 0) < 500:
         errors.append("insufficient_source_material")
     if word_count(article_text) < 800:
         errors.append("insufficient_article_length")
+    # English-only screening must never be silently treated as multilingual.
+    if any(ord(c) > 127 and c.isalpha() for c in f"{title} {summary} {article_text}"):
+        errors.append("non_english_screening_not_yet_supported")
     if _UNSAFE.search(f"{title} {summary} {article_text}") or risk_flags(title, summary):
         errors.append("sensitive_claims_need_manual_or_official_confirmation")
     normalized_evidence = set(w.casefold() for w in words(evidence) if len(w) > 3)
