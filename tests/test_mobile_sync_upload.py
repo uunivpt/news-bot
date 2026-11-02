@@ -1,6 +1,10 @@
 import unittest
+import tempfile
+from pathlib import Path
+from unittest.mock import patch
 
 from scripts.mobile_sync_upload import validated
+from scripts import mobile_sync_upload
 
 
 def story():
@@ -19,6 +23,25 @@ def story():
 
 
 class MobileUploadSafetyTests(unittest.TestCase):
+    def test_scheduler_reads_actual_local_body_and_uses_shared_immediate_delivery(self):
+        row={**story(),'bot_article':'A complete locally saved manuscript. '*20,'internal_access_token':'private fixture'}
+        with tempfile.TemporaryDirectory() as folder:
+            private=Path(folder)/'.politicshub-worker.pgpass'
+            private.write_text('synthetic fixture'); private.chmod(0o600)
+            with patch.object(Path,'home',return_value=Path(folder)), patch('psycopg.connect') as connect:
+                connection=connect.return_value.__enter__.return_value
+                connection.execute.return_value.fetchall.return_value=[row]
+                rows=mobile_sync_upload.read_local_reviewed()
+                self.assertEqual(rows[0]['bot_article'],row['bot_article'])
+                self.assertNotIn('internal_access_token',rows[0])
+                self.assertEqual(connect.call_args.kwargs['host'],'127.0.0.1')
+                self.assertEqual(connection.execute.call_args_list[0].args[0],'SET TRANSACTION READ ONLY')
+        with patch('sys.argv',['mobile_sync_upload.py','--push']), \
+             patch.object(mobile_sync_upload,'read_local_reviewed',return_value=rows), \
+             patch.object(mobile_sync_upload,'upload_immediate',return_value={'commit_sha':'a'*40}) as upload:
+            mobile_sync_upload.main()
+        upload.assert_called_once_with(rows)
+
     def test_empty_export_is_safe(self):
         self.assertEqual(validated([]), 0)
 

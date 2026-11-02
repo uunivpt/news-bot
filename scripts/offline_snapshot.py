@@ -171,12 +171,15 @@ def mobile_reviewed_story(row, now):
     title = clean_text(row.get("title"))
     source = clean_text(row.get("source_name"))
     summary = clean_text(row.get("bot_summary") or row.get("summary"))
-    published = parse_date(row.get("published_at_site") or row.get("published_at"))
-    if not (title and source and 20 <= len(title) <= 210 and 55 <= len(summary) <= 4200 and published):
+    published = parse_date(row.get("published_at") or row.get("published_at_site"))
+    if not (title and source and 20 <= len(title) <= 210 and 30 <= len(summary) <= 4200 and published):
         return None
-    if published > now + timedelta(minutes=30) or now - published > ARCHIVE_AGE:
+    if published > now + timedelta(minutes=30):
         return None
     stamp = published.isoformat()
+    body = source_text(row.get("bot_article") or row.get("article") or "", paragraphs=True)
+    licensed_image = bool(row.get("image_url") and row.get("image_credit") and
+                          str(row.get("image_license") or "").lower() in {"cc0", "pdm", "licensed", "rights-owned"})
     return {
         "id": story_id,
         "title": title,
@@ -187,9 +190,11 @@ def mobile_reviewed_story(row, now):
         "published_at_site": stamp,
         "summary": summary,
         "bot_summary": summary,
-        "bot_article": "",
+        "bot_article": body,
         "category": normalize_category(row.get("category") or "india", title, summary),
-        "image_url": None,
+        "image_url": row.get("image_url") if licensed_image else None,
+        "image_license": row.get("image_license") if licensed_image else None,
+        "image_credit": row.get("image_credit") if licensed_image else None,
         "public_source": True,
         "status": "published",
     }
@@ -207,8 +212,15 @@ def merge_mobile_reviewed(current, incoming, now):
             continue
         key = normalize_url(story["url"])
         if key in indexed:
-            # Existing public stories may contain full articles and verified metadata.
-            # Never downgrade or change their stable ID using phone excerpts.
+            # Keep the canonical public identity while publishing reviewed edits.
+            # A summary-only export must not erase an existing full manuscript.
+            previous = indexed[key]
+            if previous.get("bot_article") and not story.get("bot_article"):
+                continue
+            story["id"] = previous["id"]
+            if previous != story:
+                indexed[key] = story
+                changed += 1
             continue
         if identities.get(str(story["id"]), key) != key:
             log.warning("Mobile feed ID conflict; skipping story %s", story["id"])
