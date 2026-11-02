@@ -34,3 +34,21 @@ test('corrupt data and blocked or full browser storage are recoverable',()=>{
  const blocked=create({getItem(){throw Error('blocked')},setItem(){throw Error('full')},removeItem(){throw Error('blocked')}},origin,()=>true);
  assert.deepEqual(blocked.read(),[]);assert.equal(blocked.add(story()),false);assert.equal(blocked.clear(),false);
 });
+
+test('numeric news links keep reading tools and saved stories available',()=>{
+ for(const desk of ['india','politics','world','hindi','maharashtra']){
+  const url='/'+desk+'/617958005290';
+  assert.equal(clean({title:'Numeric report',url},origin)?.url,url);
+  const storage=memory(),list=create(storage,origin,()=>true);
+  assert.equal(list.add({title:'Numeric report',url:url+'?revision=updated'}),true);
+  assert.equal(create(storage,origin,()=>true).read()[0].url,url);
+  assert.equal(list.add({title:'Same report',url}),true);
+  assert.equal(list.read().length,1);
+ }
+});
+
+test('numeric link support does not permit other routes or external origins',()=>{
+ for(const url of ['/admin/617958005290','/india/not-a-number','/india/617958005290/extra','https://evil.example/india/617958005290','https://user:secret@www.politicshub.in/india/617958005290']){
+  assert.equal(clean({title:'Rejected report',url},origin),null,url);
+ }
+});

@@ -265,6 +265,14 @@ def run(base, output,admin_fixture=False):
             page.route('https://www.googletagmanager.com/**', lambda route: route.fulfill(
                 status=200, content_type='application/javascript', body='/* intercepted measurement fixture */'))
             visit('/nana-patekar-tribute.html')
+            require(page.locator('script[src*="/assets/measurement.js"]').count() == 0, 'Withheld notice enables measurement')
+            require(page.locator('script[src*="pagead2.googlesyndication.com"]').count() == 0, 'Withheld notice enables advertising')
+            # The withheld report is intentionally ad-free. Exercise the real
+            # consent module on a local test document without changing eligibility.
+            page.route(base + '/__audit_measurement__', lambda route: route.fulfill(
+                status=200, content_type='text/html',
+                body='<!doctype html><html lang="en"><head><script src="/assets/measurement.js?v=consent1" defer></script></head><body>Consent module fixture</body></html>'))
+            visit('/__audit_measurement__')
             page.wait_for_function('() => !!window.googlefc?.callbackQueue?.length')
             require(not requests, 'Measurement requested before consent data')
             page.evaluate("""() => {
