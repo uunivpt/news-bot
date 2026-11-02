@@ -9,6 +9,7 @@ from app.database import NewsDatabase
 from app.news_text import clean_news_text
 from app.newsroom import process_news, validate_news_copy
 from app.editorial_gate import longform_review, longform_mode_enabled
+from app.editorial_research import Evidence, build_research_brief
 from app.publish_policy import risk_flags
 from app.phase_system import ensure_schema, run as agent_run, quality_gate, manager_route
 from app.advanced_ops import audit_stage, state_transition, record_verification, find_duplicate_story
@@ -31,7 +32,26 @@ def _process_content(db,row):
  try:
   source=enrich_source_text(row.get("title") or "",row.get("summary") or "",row.get("url") or "")
   material=source.get("text") or row.get("summary") or row.get("title") or ""
-  result=process_news(row.get("title") or "",material,row.get("category") or "general")
+  if longform_mode_enabled():
+   from app.phi4 import enabled as phi4_enabled, generate_longform_draft
+   research=build_research_brief(row.get("title") or "", [
+    Evidence(str(row.get("source_name") or "Source"), str(source.get("url") or row.get("url") or ""), material,
+             str(row.get("source_type") or "").lower()=="government")
+   ])
+   audit_stage(db,int(row["id"]),"RESEARCH","completed",{
+    "source_count":research["source_count"],"evidence_words":research["evidence_words"],
+    "ready_for_longform_draft":research["ready_for_longform_draft"]})
+   if not research["ready_for_longform_draft"] or not phi4_enabled():
+    print(f"Long-form draft held: insufficient evidence or model unavailable for {row.get('id')}")
+    return False
+   draft=generate_longform_draft(research,row.get("category") or "general")
+   if not draft.get("ready"):
+    print(f"Long-form draft held for {row.get('id')}: {draft.get('reason')}")
+    return False
+   result={"headline":draft["headline"],"summary":draft["summary"],"article":draft["article"],
+           "ai_summary":draft["summary"],"ai_article":draft["article"]}
+  else:
+   result=process_news(row.get("title") or "",material,row.get("category") or "general")
   if not result:return False
   fields={"title":result["headline"],"summary":result["summary"],"bot_summary":result["summary"],"bot_article":result["article"],"ai_summary":result.get("ai_summary") or None,"ai_article":result.get("ai_article") or None}
   state_transition(db,int(row["id"]),"PROCESSING")
@@ -98,7 +118,9 @@ def _needs_content_repair(row):
 def publish_website_first(db,row,now):
  # Website policy: display only images supplied by the originating source.
  # Do not search/acquire replacement images for text-only source stories.
- flags=risk_flags(row["title"],row.get("bot_summary") or row.get("summary") or ""); review="reviewed" if row.get("source_type")=="x" and row.get("fact_check_status")=="reviewed" else ("needs_review" if flags else "pending")
+ flags=risk_flags(row["title"],row.get("bot_summary") or row.get("summary") or "")
+ existing_review=str(row.get("fact_check_status") or "").lower()
+ review=existing_review if existing_review in {"reviewed","approved"} else ("needs_review" if flags else "pending")
  db.update(int(row["id"]),status="published",published_at_site=now,fact_check_status=review,fact_check_notes=", ".join(flags) if flags else None); row["status"]="published"; return row
 
 def repair_published_content(db,limit):
@@ -170,7 +192,11 @@ def main():
   with agent_run(db, "manager", "route_story", int(row["id"]), {"route":route}):
    pass
   with agent_run(db, "writer", "prepare_story", int(row["id"]), {"route":route}):
-   ready=prepare_content(db,row)
+   # Never overwrite the author's already approved copy with source extraction.
+   if longform_mode_enabled() and str(row.get("fact_check_status") or "").lower() in {"reviewed","approved"} and row.get("bot_article"):
+    ready=True
+   else:
+    ready=prepare_content(db,row)
   if not ready:held+=1; print(f"Website publish held for item {row['id']}: no usable source text"); continue
   if longform_mode_enabled():
    editorial=longform_review(row)
@@ -179,6 +205,10 @@ def main():
     audit_stage(db,int(row["id"]),"EDITORIAL_REVIEW","held",editorial)
     print(f"Website publish held for item {row['id']}: {editorial['errors']} ({editorial['words']} words)")
     continue
+  if duplicate and duplicate[0] >= 0.9 and str(duplicate[1].get("status") or "").lower()=="published":
+   held+=1
+   audit_stage(db,int(row["id"]),"DUPLICATE_CHECK","held",{"existing_id":duplicate[1].get("id")})
+   continue
   if not publish_lock(db,int(row["id"]),event_id):
    held+=1; audit_stage(db,int(row["id"]),"PUBLISH_LOCK","blocked",{"story_key":event_id}); print(f"Website duplicate lock blocked item {row['id']}"); continue
   with agent_run(db, "publisher", "publish_website", int(row["id"])):
