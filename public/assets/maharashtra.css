@@ -38,3 +38,9 @@
 .mh-compact-head{padding:14px 0 5px}
 .mh-compact-head .mh-overline{font-size:11px}
 @media(max-width:700px){.mh-latest .mh-heading h1{font-size:26px}.mh-compact-head{align-items:center}}
+
+/* Phase 2: readable, crawlable Maharashtra desk context on every device. */
+.mh-editorial-intro{margin:17px 0 4px;padding:18px 21px;border:1px solid var(--line);border-left:3px solid var(--red);border-radius:0 8px 8px 0;background:#fbfbfc;max-width:100%}
+.mh-editorial-intro h2{margin:0 0 8px;color:var(--ink);font:750 17px/1.35 Inter,Mukta,sans-serif;letter-spacing:-.02em}
+.mh-editorial-intro p{margin:0;max-width:94ch;font:450 13px/1.75 Inter,Mukta,sans-serif;color:#50555c;overflow-wrap:break-word}
+@media(max-width:700px){.mh-editorial-intro{padding:14px 15px;margin:14px 0 1px}.mh-editorial-intro h2{font-size:16px}.mh-editorial-intro p{font-size:12.5px;line-height:1.7}}
