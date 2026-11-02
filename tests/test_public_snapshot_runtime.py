@@ -49,6 +49,32 @@ class PublicSnapshotRuntimeTests(unittest.TestCase):
   api._snapshot_remote_cache.update(until=0,payload=[{'id':2,'title':'Last good story'}])
   with patch.dict(os.environ,{'VERCEL':'1'}),patch.object(api.app,'_static_folder',self.tmp.name),patch('requests.get',side_effect=RuntimeError('offline')):
    self.assertEqual(api._snapshot_rows()[0]['id'],2)
+ def test_politics_view_includes_india_articles_without_changing_canonical_links(self):
+  from pathlib import Path
+  import json
+  entries=[
+   {"id":77,"title":"Three AAP MLAs join BJP in Punjab","category":"india",
+    "status":"published","url":"https://example.org/political-report"},
+   {"id":78,"title":"New hospital opens in district","category":"india",
+    "status":"published","url":"https://example.org/health-report"}
+  ]
+  Path(self.tmp.name,'news-data.json').write_text(json.dumps(entries))
+  with patch.dict(os.environ,{'VERCEL':''}),patch.object(api.app,'_static_folder',self.tmp.name),patch.object(api,'db',side_effect=DatabaseUnavailable('down')):
+   response=self.client.get('/api/news?category=politics')
+   self.assertEqual(response.status_code,200)
+   self.assertEqual([row['id'] for row in response.json],[77])
+   self.assertEqual(response.json[0]['category'],'india')
+   self.assertTrue(api.article_path(entries[0]).startswith('/india/'))
+   section=self.client.get('/politics/')
+   self.assertEqual(section.status_code,200)
+   self.assertIn('Three AAP MLAs join BJP',section.get_data(as_text=True))
+ def test_missing_category_returns_empty_list_when_global_feed_is_healthy(self):
+  def rows(category="all", search=None):
+   return [{"id":12,"title":"Valid India public report","category":"india"}] if category=="all" else []
+  with patch.object(api,'db',side_effect=DatabaseUnavailable('down')),patch.object(api,'_snapshot_rows',side_effect=rows):
+   response=self.client.get('/api/news?category=politics')
+   self.assertEqual(response.status_code,200)
+   self.assertEqual(response.json,[])
  def test_unavailable_public_snapshot_stays_503(self):
   response=Mock(status_code=404,content=b'')
   response.raise_for_status.side_effect=RuntimeError('not found')

@@ -23,7 +23,7 @@ from app.source_http import fetch_source, public_http_url
 from app.admin_access import configured_users, verify_recovery_owner
 from app.admin_workspace import LIST_FIELDS as ADMIN_LIST_FIELDS, EDITORIAL_FIELDS, editorial_revision, project_rows as admin_project_rows, coverage as admin_coverage
 from app.source_inventory import source_inventory
-from app.category_routing import normalize_category
+from app.category_routing import normalize_category, is_political_headline
 from app.seo_indexing import is_indexable, eligible_articles, news_sitemap_xml, google_news_sitemap_xml, standalone_sitemap_url_xml, STANDALONE_NEWS, SITE_ORIGIN as CANONICAL_ORIGIN
 from app.models import NewsItem
 from app import public_archive
@@ -254,6 +254,14 @@ def _official_exam_rows():
  payload=_official_exam_payload() or {}
  return [dict(r) for r in payload.get('items',[]) if r.get('status')=='published' and r.get('public_source') and r.get('source_type')=='official_exam']
 
+def _matches_public_desk(row, category):
+ # Politics is a topical view, not a recategorization of India articles.
+ # Keep original article IDs, categories, canonical URLs and archive history.
+ if not category or category=="all":return True
+ actual=str(row.get("category") or "").lower()
+ return actual==category or (category=="politics" and actual=="india"
+                            and is_political_headline(row.get("title")))
+
 def _snapshot_rows(category="all", search=None):
  path=Path(app.static_folder or "public") / "news-data.json"
  payload=read_json_rows(path)
@@ -282,7 +290,7 @@ def _snapshot_rows(category="all", search=None):
  for row in rows:
   row.setdefault("status","published")
   row["category"]=normalize_category(row.get("category"), row.get("title"), row.get("bot_summary") or row.get("summary") or "")
- if category and category!="all":rows=[x for x in rows if str(x.get("category") or "general").lower()==category]
+ if category and category!="all":rows=[x for x in rows if _matches_public_desk(x,category)]
  if search:
   rows=matching_news(rows,search)
  return rows
@@ -324,9 +332,9 @@ def _public_rows_for_section(category="all",limit=200):
  try:
   database=db()
   try:
-   rows=[dict(x) for x in database.latest_public(max(limit*3,limit),"all" if category in ("india","entertainment") else category)]
+   rows=[dict(x) for x in database.latest_public(max(limit*6,limit),"all" if category in ("india","entertainment","politics") else category)]
    rows=_rank_public(rows)
-   return [x for x in rows if category=="all" or x.get("category")==category][:limit]
+   return [x for x in rows if _matches_public_desk(x,category)][:limit]
   finally:database.close()
  except RuntimeError:
   return _rank_public(_snapshot_rows(category))[:limit]
@@ -382,7 +390,7 @@ def _section_html(category="all"):
  if category in ("india","all"):
   body+='<section aria-label="Editorial guides" style="margin:20px 0"><h2>Understand the news</h2><p><a href="/guides/election-results.html">How to verify election results</a></p></section>'
  body+='<div class="sh"><h2>Latest stories</h2><span class="lbl">'+str(len(rows))+' stories</span></div><div class="grid">'+"".join(cards)+'</div>'
- return '<!doctype html><html lang="'+language+'" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta name="google-adsense-account" content="ca-pub-1752666987448533"><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/editorial.css?v=phui19"><link rel="stylesheet" href="/assets/polish.css?v=phui30"><script src="/assets/ui.js?v=phui30" defer></script></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/archive/">All News Archive</a></p><p><a href="/guides/maharashtra-mlc.html">Maharashtra Council explainer</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="/settings.html">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=livepublish1"></script><script src="/assets/editorial-home.js?v=livepublish1"></script></body></html>'
+ return '<!doctype html><html lang="'+language+'" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta name="google-adsense-account" content="ca-pub-1752666987448533"><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/editorial.css?v=phui19"><link rel="stylesheet" href="/assets/polish.css?v=phui30"><script src="/assets/ui.js?v=phui30" defer></script></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/archive/">All News Archive</a></p><p><a href="/guides/maharashtra-mlc.html">Maharashtra Council explainer</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="/settings.html">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=phase1politics2"></script><script src="/assets/editorial-home.js?v=livepublish1"></script></body></html>'
 
 
 def _enhance_section_seo(document, category):
@@ -1424,7 +1432,9 @@ def news():
  except Exception:
   # When the database is unavailable, publish only a valid saved snapshot.
   rows=_snapshot_rows(category,search)
-  if not rows:return jsonify({"error":"news backend unavailable"}),503
+  # A category or search can have zero matches while the snapshot is healthy.
+  if not rows and not _snapshot_rows("all"):
+   return jsonify({"error":"news backend unavailable"}),503
   rows=_rank_public(rows,threshold=0.78)
   payload=rows_json(rows[:limit],compact=compact)
   if not admin_ok():
@@ -1438,14 +1448,14 @@ def news():
   public_listing=not admin_ok()
   if public_listing:
    # Listing cards never need the full editorial article/AI fields.
-   records=database.latest_public(max(limit*3,limit),"all" if category in ("india","entertainment") else category,search)
+   records=database.latest_public(max(limit*6,limit),"all" if category in ("india","entertainment","politics") else category,search)
   else:
    records=database.latest(max(limit*6,limit),"all" if category in ("india","entertainment") else category,status,search,review)
   if getattr(g,'admin_policy',None):
    from app.editorial_access import allowed_story
    records=[row for row in records if allowed_story(database,row['id'],g.admin_policy,session.get('admin_user'))]
   rows=_rank_public(records,threshold=0.78)
-  if category!="all":rows=[x for x in rows if x.get("category")==category]
+  if category!="all":rows=[x for x in rows if (_matches_public_desk(x,category) if public_listing else x.get("category")==category)]
   # A healthy database is authoritative; never resurrect removed stories.
   payload=rows_json(rows[:limit],compact=compact)
   if public_listing:

@@ -72,6 +72,14 @@ test('Nana Patekar and Indian obituaries are India news, not Entertainment',()=>
  assert.equal(vm.runInContext("inCat({category:'india'},'entertainment')",ctx),false);
 });
 
+test('Politics desk includes political India headlines without rewriting canonical story URLs',()=>{
+ const ctx=harness({'/api/news?category=all&limit=120':[],'/news-data.json':[]});
+ assert.equal(vm.runInContext("inCat({category:'india',title:'Three AAP MLAs join BJP in Punjab'},'politics')",ctx),true);
+ assert.equal(vm.runInContext("inCat({category:'india',title:'New hospital opens in district'},'politics')",ctx),false);
+ assert.equal(vm.runInContext("inCat({category:'world',title:'Congress meets in Europe'},'politics')",ctx),false);
+ assert.equal(vm.runInContext("articleHref({id:'77',news_number:'8765',category:'india',title:'Three AAP MLAs join BJP in Punjab'})",ctx),'/india/8765');
+});
+
 test('source snapshot supersedes stale browser cache and stays source-fed',async()=>{
  const ctx=harness({'/api/news?category=all&limit=120':new Error('database quota'),
   '/news-data.json':[{id:123,title:'Fresh source-linked story',category:'india'}]});
