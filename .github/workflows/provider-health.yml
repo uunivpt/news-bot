@@ -2,6 +2,8 @@ name: Public News Delivery Health (No Neon)
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
 
 permissions:
   contents: read
@@ -9,10 +11,11 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 4
     steps:
-      - name: Verify public website without database credentials
-        shell: bash
-        run: |
-          curl --fail --silent --show-error --max-time 15 https://www.politicshub.in/api/news?limit=1 >/dev/null
-          curl --fail --silent --show-error --max-time 15 https://www.politicshub.in/api/health >/dev/null
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.12"
+      - name: Check public feed, editorial privacy, Politics counters and article URLs
+        run: PYTHONPATH=. python scripts/check_public_reliability.py
