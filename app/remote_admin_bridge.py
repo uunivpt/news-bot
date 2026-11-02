@@ -27,7 +27,7 @@ _SECRET_NAME = "POLITICSHUB_ADMIN_BRIDGE_SECRET"
 _URL_NAME = "POLITICSHUB_ADMIN_BRIDGE_URL"
 _NOUNCE = re.compile(r"^[A-Za-z0-9_-]{20,80}$")
 _STORY = re.compile(r"^/api/news/[0-9]+/(?:edit|process|approve|reject|publish)$")
-_REVIEW = re.compile(r"^/api/admin/(?:story/[0-9]+(?:/article)?|(?:me|login|logout|workspace|stories|activity|settings|training|dashboard|health|live|upgrade|history|report|operations(?:\.pdf)?))$")
+_REVIEW = re.compile(r"^/api/admin/(?:story/[0-9]+(?:/(?:article|delivery))?|(?:me|login|logout|workspace|stories|activity|settings|training|dashboard|health|live|upgrade|history|report|operations(?:\.pdf)?))$")
 _REPLAY_LOCK = threading.Lock()
 _REPLAY = {}
 _MAX_BODY = 1024 * 1024
@@ -153,7 +153,7 @@ def proxy_public_admin():
     try:
         opener = build_opener(_NoRedirect)
         response = opener.open(Request(url, data=payload if request.method == "POST" else None,
-                                       method=request.method, headers=headers), timeout=12)
+                                       method=request.method, headers=headers), timeout=20)
     except HTTPError as exc:
         response = exc
     except (URLError, TimeoutError, OSError):

@@ -132,7 +132,10 @@ class OfflineNewsFallbackTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["id"], prior["id"])
         self.assertEqual(rows[0]["bot_article"], prior["bot_article"])
-        self.assertEqual(changed, 0)
+        self.assertEqual(changed, 1)  # Reviewed metadata updates once while preserving the canonical ID.
+        again, changed_again = merge_mobile_reviewed(rows, [approved], NOW)
+        self.assertEqual(changed_again, 0)
+        self.assertEqual(again, rows)
 
     def test_mobile_merge_blocks_id_collision(self):
         prior = public_story(item(), NOW)

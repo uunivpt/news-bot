@@ -85,7 +85,7 @@ def run(output):
         def bulk_limit():
             page.locator('#selectAll').check()
             assert '25 selected' in page.locator('#selectedCount').inner_text()
-            page.locator('[data-bulk="publish"]').click()
+            page.locator('[data-bulk="approve"]').click()
             assert 'at most 10' in page.locator('#notice').inner_text()
             assert not page.locator('#confirmDialog').is_visible()
             page.locator('#clearSelection').click()
@@ -121,6 +121,101 @@ def run(output):
             page.locator('#editStoryForm [type="submit"]').click()
             page.wait_for_function("() => !document.querySelector('#inspector').open && document.querySelector('#newsList').textContent.includes('Local fixture editorial headline')")
         check('headline and summary edits persist through the server',editing)
+        def stale_refresh():
+            before=page.locator('#newsList .story').count()
+            page.route('**/api/admin/workspace', lambda route:route.fulfill(
+                status=503,content_type='application/json',body='{"error":"Synthetic temporary phone interruption"}'))
+            page.locator('#refresh').click()
+            page.wait_for_function("() => document.querySelector('#connectionBadge').textContent==='Refresh failed' && !document.querySelector('#refresh').disabled")
+            assert page.locator('#newsList .story').count()==before
+            assert 'out of date' in page.locator('#workspaceBanner').inner_text()
+            page.unroute('**/api/admin/workspace')
+            page.locator('#newsRefresh').click()
+            page.wait_for_function("() => document.querySelector('#connectionBadge').textContent==='Live database' && !document.querySelector('#newsList').hasAttribute('aria-busy')")
+        check('temporary refresh failure retains readable data and recovers',stale_refresh)
+        def verify_and_publish():
+            from app.models import NewsItem
+            database=api.db()
+            try:
+                url='https://example.org/single-action-publication-fixture'
+                database.insert(NewsItem(source_name='Fixture News',source_type='rss',
+                    title='Local review fixture explains new district water supply arrangements',
+                    url=url,category='india',published_at=NewsItem.now_iso(),public_source=True,
+                    summary='The district notice explains its updated water supply arrangements and the official support channels for residents.'))
+                row=database.conn.execute('SELECT id FROM news_items WHERE url=?',(url,)).fetchone()
+                sid=row['id']
+                database.update(sid,status='pending',bot_article='The district notice explains revised public water arrangements and identifies the published timetable. '*8)
+            finally:
+                database.close()
+            page.locator('#resetFilters').click()
+            page.locator('#status').select_option('pending')
+            button=page.locator(f'[data-news="approve"][data-id="{sid}"]')
+            button.wait_for(state='visible')
+            assert button.inner_text()=='Verify & publish'
+            dialogs=[]
+            def reject_dialog(dialog):
+                dialogs.append(dialog.type)
+                dialog.dismiss()
+            page.on('dialog',reject_dialog)
+            requests=[]
+            def record_request(request):
+                if request.method=='POST' and request.url.endswith('/'+str(sid)+'/approve'):
+                    requests.append(request)
+            page.on('request',record_request)
+            button.click()
+            page.wait_for_function("() => !mutationBusy && document.querySelector('#notice').textContent.toLowerCase().includes('publish')")
+            assert not dialogs,dialogs
+            assert len(requests)==1
+            assert not page.locator('#confirmDialog').is_visible()
+            database=api.db()
+            try:
+                saved=database.get_by_id(sid)
+                assert saved['status']=='published'
+                assert saved['approved_at']
+            finally:
+                database.close()
+            page.remove_listener('dialog',reject_dialog)
+            page.remove_listener('request',record_request)
+            page.locator('#resetFilters').click()
+            page.wait_for_function("() => document.querySelectorAll('#newsList .story').length===25 && !document.querySelector('#newsList').hasAttribute('aria-busy')")
+        check('one Verify click publishes and persists without any question',verify_and_publish)
+        def bulk_verify_and_publish():
+            from app.models import NewsItem
+            database=api.db()
+            ids=[]
+            try:
+                for index in range(2):
+                    url='https://example.org/bulk-publication-fixture-'+str(index)
+                    database.insert(NewsItem(source_name='Fixture News',source_type='rss',
+                        title='Selected review fixture explains district transport notice number '+str(index),
+                        url=url,category='india',published_at=NewsItem.now_iso(),public_source=True,
+                        summary='The district transport notice identifies the affected routes and explains where residents can read the published schedules.'))
+                    sid=database.conn.execute('SELECT id FROM news_items WHERE url=?',(url,)).fetchone()['id']
+                    database.update(sid,status='pending',bot_article='The district transport notice identifies updated routes and schedules for residents. '*10)
+                    ids.append(sid)
+            finally:
+                database.close()
+            page.locator('#status').select_option('pending')
+            for sid in ids:
+                page.locator(f'[data-select="{sid}"]').wait_for(state='visible')
+                page.locator(f'[data-select="{sid}"]').check()
+            dialogs=[]
+            def reject_dialog(dialog):
+                dialogs.append(dialog.type)
+                dialog.dismiss()
+            page.on('dialog',reject_dialog)
+            page.locator('[data-bulk="approve"]').click()
+            page.wait_for_function("() => !mutationBusy && document.querySelector('#notice').textContent.includes('2 stories published')")
+            assert not dialogs,dialogs
+            database=api.db()
+            try:
+                assert all(database.get_by_id(sid)['status']=='published' for sid in ids)
+            finally:
+                database.close()
+            page.remove_listener('dialog',reject_dialog)
+            page.locator('#resetFilters').click()
+            page.wait_for_function("() => document.querySelectorAll('#newsList .story').length===25 && !document.querySelector('#newsList').hasAttribute('aria-busy')")
+        check('explicit selected Verify publishes each story without more questions',bulk_verify_and_publish)
         def telemetry():
             nav('operations')
             page.wait_for_selector('#opsTotals .metric')

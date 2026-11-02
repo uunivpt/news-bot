@@ -14,7 +14,7 @@ ARCHIVE_PATH = Path(__file__).parent / "data" / "public-archive.json.gz"
 _identity_cache = (None, {})
 FIELDS = ("id", "title", "summary", "bot_summary", "bot_article", "source_name",
           "source_type", "url", "published_at", "published_at_site", "category",
-          "image_url", "image_source", "image_license", "public_source")
+          "image_url", "image_source", "image_license", "image_credit", "public_source")
 
 
 def timestamp(row):

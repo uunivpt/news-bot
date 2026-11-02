@@ -6,7 +6,8 @@ const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp
 const views = {overview:'Overview',news:'Newsroom',sources:'Source coverage',operations:'Agent operations',upgrade:'Intelligence & QA',activity:'Activity',system:'System status',settings:'Settings'};
 let csrf = '', settings = {}, workspace = null, rows = [], currentView = 'overview';
 let pageNumber = 1, pageTotal = 0, queue = 'all', selected = new Set(), visibleRows = [];
-let workspacePromise = null, newsController = null, newsSequence = 0, inspectorSequence = 0;
+let deliveryController = null;
+let workspacePromise = null, workspaceController = null, workspaceSequence = 0, newsController = null, newsSequence = 0, inspectorSequence = 0;
 let newsTimer, liveTimer, noticeTimer, loginBusy = false, mutationBusy = false, sessionVersion = 0;
 const pending = new Map();
 
@@ -20,7 +21,8 @@ function showLogin(message = '') {
   sessionVersion++;
   closeMenu();
   clearInterval(liveTimer); liveTimer = null;
-  newsController?.abort(); inspectorSequence++; newsSequence++;
+  deliveryController?.abort(); deliveryController = null; mutationBusy = false;
+  workspaceController?.abort(); workspaceSequence++; newsController?.abort(); inspectorSequence++; newsSequence++;
   pending.clear(); workspacePromise = null;
   for (const id of ['inspector','commandDialog','confirmDialog']) if ($(id).open) $(id).close();
   workspace = null; rows = []; visibleRows = []; settings = {}; selected.clear(); csrf = '';
@@ -32,22 +34,34 @@ async function api(url, options = {}) {
   const method = options.method || 'GET';
   const request = async () => {
     const version = sessionVersion;
-    const response = await fetch(url, {credentials:'same-origin', cache:'no-store', signal:AbortSignal.timeout(15000), ...options});
-    let data = {};
-    try { data = await response.json(); } catch {
-      if (response.ok) throw new Error('Admin service returned an invalid response. Please retry when the phone admin is available.');
+    const {signal, ...requestOptions} = options;
+    const deadline = AbortSignal.timeout(30000);
+    const requestSignal = signal ? AbortSignal.any([signal,deadline]) : deadline;
+    // Retry a transient read once. Mutations are never automatically repeated.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (requestSignal.aborted) throw requestSignal.reason || new DOMException('Request cancelled','AbortError');
+      if (version !== sessionVersion) throw new DOMException('Session changed','AbortError');
+      try {
+        const response = await fetch(url, {credentials:'same-origin', cache:'no-store', ...requestOptions, signal:requestSignal});
+        let data = {};
+        try { data = await response.json(); } catch {
+          if (response.ok) throw new Error('Admin service returned an invalid response. Please retry when the phone admin is available.');
+        }
+        if (version !== sessionVersion) throw new DOMException('Session changed','AbortError');
+        if (!response.ok) {
+          if (response.status === 401 && !url.endsWith('/login')) showLogin('Your session has ended. Please sign in again.');
+          const error = new Error(data?.error || `Request failed (${response.status})`);
+          error.status = response.status;
+          throw error;
+        }
+        if (!data || typeof data !== 'object') throw new Error('Admin service returned an invalid response. Please retry.');
+        return data;
+      } catch (error) {
+        const retryable = error.name === 'TypeError' || [502,503,504].includes(error.status);
+        if (method !== 'GET' || attempt || !retryable || requestSignal.aborted || version !== sessionVersion || error.name === 'AbortError') throw error;
+        await new Promise(resolve => setTimeout(resolve,250));
+      }
     }
-    if (version !== sessionVersion) throw new DOMException('Session changed','AbortError');
-    if (!response.ok) {
-      if (response.status === 401 && !url.endsWith('/login')) showLogin('Your session has ended. Please sign in again.');
-      const error = new Error(data?.error || `Request failed (${response.status})`);
-      error.status = response.status;
-      throw error;
-    }
-    if (!data || typeof data !== 'object') {
-      throw new Error('Admin service returned an invalid response. Please retry.');
-    }
-    return data;
   };
   // Share identical read requests; search requests have their own abort lifecycle.
   if (method !== 'GET' || options.signal) return request();
@@ -119,7 +133,7 @@ function applyCapabilities() {
 }
 function renderWorkspace() {
   const data = workspace, health = data.health, stats = data.stats, sample = data.coverage.sample_size;
-  const githubOnly = data.data_origin === 'termux_github';
+  const githubOnly = data.data_origin === 'termux_github' && data.mode !== 'live';
   rows = data.stories;
   settings = data.settings || {};
   $('userName').textContent = data.access.username;
@@ -155,16 +169,33 @@ function fillOptions(id, items, label) {
   $(id).innerHTML = `<option value="all">${label}</option>` + arr(items).map(item => `<option value="${esc(item.name)}">${esc(item.name)}</option>`).join('');
   if ([...$(id).options].some(option => option.value === value)) $(id).value = value;
 }
-async function loadOverview(silent = false) {
-  if (workspacePromise) return workspacePromise;
-  const version = sessionVersion;
+async function loadOverview(silent = false, {fresh = false} = {}) {
+  if (workspacePromise && !fresh) return workspacePromise;
+  if (fresh) workspaceController?.abort();
+  const version = sessionVersion, sequence = ++workspaceSequence;
+  const controller = new AbortController(); workspaceController = controller;
   $('refresh').disabled = true;
-  workspacePromise = (async () => {
-    try { const data = await api('/api/admin/workspace'); if ($('shell').classList.contains('hidden')) return; workspace = data; renderWorkspace(); return data; }
-    catch (error) { if (version === sessionVersion && error.status !== 401) { if (!silent) notice(error.message,'err'); $('connectionBadge').className = 'pill amber'; $('connectionBadge').textContent = 'Refresh failed'; $('workspaceBanner').classList.remove('hidden'); $('workspaceBanner').textContent = 'Workspace refresh failed. Displayed data may be out of date. Retry with Refresh.'; } }
-    finally { if (version === sessionVersion) { workspacePromise = null; $('refresh').disabled = false; } }
+  const promise = (async () => {
+    try {
+      const data = await api('/api/admin/workspace',{signal:controller.signal});
+      if (version !== sessionVersion || sequence !== workspaceSequence || $('shell').classList.contains('hidden')) return null;
+      workspace = data; renderWorkspace(); return data;
+    } catch (error) {
+      if (version === sessionVersion && sequence === workspaceSequence && error.status !== 401 && error.name !== 'AbortError') {
+        if (!silent) notice(error.name === 'TimeoutError' ? 'Workspace refresh timed out. Displayed data is retained; retry with Refresh.' : error.message,'err');
+        $('connectionBadge').className = 'pill amber'; $('connectionBadge').textContent = 'Refresh failed';
+        $('workspaceBanner').classList.remove('hidden');
+        $('workspaceBanner').textContent = 'Workspace refresh failed. Displayed data may be out of date. Retry with Refresh.';
+      }
+      return null;
+    } finally {
+      if (version === sessionVersion && sequence === workspaceSequence) {
+        workspacePromise = null; workspaceController = null; $('refresh').disabled = false;
+      }
+    }
   })();
-  return workspacePromise;
+  workspacePromise = promise;
+  return promise;
 }
 function filteredSnapshot() {
   const query = $('search').value.trim().toLowerCase();
@@ -175,7 +206,7 @@ function filteredSnapshot() {
 function storyActions(row) {
   if (workspace?.access.read_only) return `<button class="btn" data-inspect="${Number(row.id)}">Inspect ↗</button>`;
   const id = Number(row.id);
-  return `<button class="btn" data-inspect="${id}">Inspect</button>` + (!row.article_available ? `<button class="btn" data-news="process" data-id="${id}">Process</button>` : '') + (row.status === 'pending' && !['reviewed','verified','passed','approved'].includes(row.fact_check_status) ? `<button class="btn" data-news="approve" data-id="${id}">Verify &amp; approve</button>` : '') + (row.status === 'pending' && ['reviewed','verified','passed','approved'].includes(row.fact_check_status) ? `<button class="btn" data-news="publish" data-id="${id}">Publish</button>` : '') + (row.status !== 'rejected' ? `<button class="btn danger" data-news="reject" data-id="${id}">Reject</button>` : '');
+  return `<button class="btn" data-inspect="${id}">Inspect</button>` + (!row.article_available ? `<button class="btn" data-news="process" data-id="${id}" data-write>Process</button>` : '') + (row.status === 'pending' ? `<button class="btn" data-news="approve" data-id="${id}" data-write>Verify &amp; publish</button>` : '') + (row.status !== 'rejected' ? `<button class="btn danger" data-news="reject" data-id="${id}" data-write>Reject</button>` : '');
 }
 function renderNews(list, total) {
   visibleRows = list; pageTotal = total;
@@ -187,18 +218,19 @@ function renderNews(list, total) {
   $('nextPage').disabled = pageNumber * 25 >= total;
   $('pageInfo').textContent = `Page ${pageNumber} of ${Math.max(1,Math.ceil(total/25))}`;
   updateSelection();
+  applyCapabilities();
 }
-async function loadNews(reset = false) {
-  if (!workspace) return;
+async function loadNews(reset = false, {silent = false} = {}) {
+  if (!workspace) return false;
   if (reset) { pageNumber = 1; selected.clear(); }
   const sequence = ++newsSequence;
   newsController?.abort();
-  if (workspace.mode === 'snapshot') { const result = filteredSnapshot(); renderNews(result.slice((pageNumber-1)*25,pageNumber*25),result.length); return; }
+  if (workspace.mode === 'snapshot') { const result = filteredSnapshot(); renderNews(result.slice((pageNumber-1)*25,pageNumber*25),result.length); return true; }
   newsController = new AbortController();
   $('newsList').setAttribute('aria-busy','true');
   const query = new URLSearchParams({page:pageNumber,search:$('search').value.trim(),category:$('category').value,source:$('source').value,status:$('status').value,review:$('review').value,sort:$('sort').value,quality:queue === 'quality' ? '1' : '0'});
-  try { const data = await api('/api/admin/stories?' + query,{signal:AbortSignal.any([newsController.signal,AbortSignal.timeout(15000)])}); if (sequence === newsSequence) renderNews(data.stories,data.total); }
-  catch (error) { if (sequence === newsSequence && error.name !== 'AbortError') { notice(error.message,'err'); if (error.status === 503) { await loadOverview(); if (workspace?.mode === 'snapshot') loadNews(true); } } }
+  try { const data = await api('/api/admin/stories?' + query,{signal:newsController.signal}); if (sequence === newsSequence) { renderNews(data.stories,data.total); return true; } return false; }
+  catch (error) { if (sequence === newsSequence && error.name !== 'AbortError') { if (!silent) notice(error.name === 'TimeoutError' ? 'News refresh timed out. Displayed stories are retained.' : error.message,'err'); $('newsScope').textContent = 'News refresh failed. Displayed stories may be out of date; use Refresh to retry.'; } return false; }
   finally { if (sequence === newsSequence) $('newsList').removeAttribute('aria-busy'); }
 }
 function updateSelection() {
@@ -212,36 +244,132 @@ function confirmAction(title, message) {
   const dialog = $('confirmDialog'); dialog.returnValue = ''; dialog.showModal();
   return new Promise(resolve => dialog.addEventListener('close',() => resolve(dialog.returnValue === 'yes'),{once:true}));
 }
-async function newsAction(kind, id) {
-  if (mutationBusy || workspace?.access.read_only || !['process','approve','publish','reject'].includes(kind)) return;
-  if (['publish','reject'].includes(kind) && !await confirmAction(`${kind === 'publish' ? 'Publish' : 'Reject'} this story?`,`Story #${id}. This changes its publication state in the live database.`)) return;
-  let payload = {};
-  if (kind === 'approve') {
-    const evidence = prompt('Independently verified source URLs (one per line; conflict/Telegram news needs at least two different publishers):');
-    if (evidence === null) return;
-    const sources = evidence.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
-    const notes = prompt('Verification notes: which facts, dates, sources, republication rights and original added value did you personally check? (40+ characters)');
-    if (notes === null) return;
-    const confirmation = prompt(`After checking the FULL article, type APPROVE ${id} to confirm this exact story:`);
-    if (confirmation !== `APPROVE ${id}`) return notice('Approval cancelled; no changes made.','err');
-    payload = {evidence_urls:sources,notes,confirm:confirmation,confirmed_facts:true,confirmed_originality:true};
+function markPublished(id) {
+  const previous = [...visibleRows,...rows].find(row => Number(row.id) === id)?.status;
+  for (const list of [rows,visibleRows]) for (const row of list) if (Number(row.id) === id) {
+    row.status = 'published'; row.fact_check_status = 'reviewed';
   }
+  selected.delete(id);
+  if (workspace && previous && previous !== 'published') {
+    if (workspace.stats.pending != null && previous === 'pending') workspace.stats.pending = Math.max(0,workspace.stats.pending-1);
+    if (workspace.stats.published != null) workspace.stats.published++;
+  }
+  if (currentView === 'news') {
+    const statusFilter = $('status').value, reviewFilter = $('review').value;
+    const publishedExcluded = (statusFilter !== 'all' && statusFilter !== 'published') || (reviewFilter !== 'all' && reviewFilter !== 'reviewed');
+    const list = publishedExcluded ? visibleRows.filter(row => Number(row.id) !== id) : visibleRows;
+    renderNews(list,Math.max(0,pageTotal-(publishedExcluded && previous !== 'published' ? 1 : 0)));
+  }
+}
+async function refreshAfterMutation() {
+  const checks = [loadOverview(true,{fresh:true})];
+  if (currentView === 'news') checks.push(loadNews(false,{silent:true}));
+  const results = await Promise.allSettled(checks);
+  return results.every(result => result.status === 'fulfilled' && !!result.value);
+}
+function publicationMessage(result) {
+  const state = result.public_delivery?.state;
+  if (state === 'synced') return 'Story published on the website.';
+  if (result.public_delivery?.configured === false) return 'Story published on the phone. Website sync is not configured.';
+  if (state === 'queued') return 'Story published on the phone. Website sync is queued automatically.';
+  if (state === 'not_configured') return 'Story published on the phone. Website sync is not configured.';
+  if (state === 'failed') return 'Story published on the phone. Website sync failed; publication is saved.';
+  return 'Story published.';
+}
+async function waitForPublicationDelivery(id, result, version) {
+  if (result.public_delivery?.state !== 'queued' || result.public_delivery.configured !== true) return result;
+  const controller = new AbortController(); deliveryController = controller;
+  const signal = AbortSignal.any([controller.signal,AbortSignal.timeout(20000)]);
+  const end = Date.now()+20000;
+  try {
+    while (Date.now() < end && !signal.aborted && version === sessionVersion) {
+      await new Promise(resolve => setTimeout(resolve,2000));
+      if (signal.aborted || version !== sessionVersion) break;
+      try {
+        const response = await api('/api/admin/story/'+id+'/delivery',{signal});
+        if (version !== sessionVersion) break;
+        const delivery = response.public_delivery || response;
+        result = {...result,public_delivery:{...result.public_delivery,...delivery}};
+        if (['synced','failed','not_configured','not_queued'].includes(delivery.state)) return result;
+      } catch (error) {
+        if (signal.aborted || error.status === 401 || version !== sessionVersion) break;
+        // Publication is saved. A failed status read never repeats the write.
+      }
+    }
+  } finally { if (deliveryController === controller) deliveryController = null; }
+  return result;
+}
+function showPublicationNotice(message, result, type = 'ok') {
+  notice(message,type);
+  if (result.public_delivery?.state !== 'synced') return;
+  const raw = result.public_delivery.public_url || result.public_url || result.url;
+  if (!raw) return;
+  let url;
+  try { url = new URL(raw,location.origin); } catch { return; }
+  if (!['https://www.politicshub.in',location.origin].includes(url.origin)) return;
+  const link = document.createElement('a');
+  link.href = url.href; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'View article ↗';
+  $('notice').append(' ',link);
+  clearTimeout(noticeTimer); noticeTimer = setTimeout(() => $('notice').classList.add('hidden'),15000);
+}
+async function newsAction(kind, id) {
+  if (mutationBusy || !workspace || workspace.access.read_only || !['process','approve','publish','reject'].includes(kind)) return;
+  if (kind === 'reject' && !await confirmAction('Reject this story?',`Story #${id}. This changes its publication state in the live database.`)) return;
+  const publication = kind === 'approve' || kind === 'publish', version = sessionVersion;
+  const row = [...visibleRows,...rows].find(item => Number(item.id) === id);
+  const payload = row?.revision ? {revision:row.revision} : {};
   mutationBusy = true; applyCapabilities();
-  try { await action(`/api/news/${id}/${kind}`, payload); notice(kind === 'approve' ? 'Human verification saved; publish only after final review.' : 'Action completed'); await loadOverview(); await loadNews(); }
-  catch (error) { notice(error.message,'err'); }
-  finally { mutationBusy = false; applyCapabilities(); }
+  try {
+    let result = await action(`/api/news/${id}/${publication ? 'approve' : kind}`,payload);
+    if (publication && (result.ok !== true || result.status !== 'published')) throw new Error('Publication was not confirmed by the server. Refresh the story before retrying.');
+    if (publication) {
+      markPublished(id);
+      notice(publicationMessage(result));
+      result = await waitForPublicationDelivery(id,result,version);
+      if (version !== sessionVersion) return;
+    }
+    const message = publication ? publicationMessage(result) : kind === 'process' ? 'Story processed.' : 'Story rejected.';
+    if (publication) showPublicationNotice(message,result); else notice(message);
+    const refreshed = await refreshAfterMutation();
+    if (version !== sessionVersion) return;
+    if (!refreshed) {
+      const warning = message + ' Latest lists could not be refreshed; use Refresh.';
+      if (publication) showPublicationNotice(warning,result,'warn'); else notice(warning,'warn');
+    }
+  } catch (error) { if (version === sessionVersion && error.name !== 'AbortError') notice(error.message,'err'); }
+  finally { if (version === sessionVersion) { mutationBusy = false; applyCapabilities(); } }
 }
 async function bulkAction(kind) {
-  if (mutationBusy || workspace?.access.read_only || !selected.size) return;
+  if (mutationBusy || !workspace || workspace.access.read_only || !selected.size || !['approve','publish','reject'].includes(kind)) return;
   if (selected.size > 10) return notice('Select at most 10 stories per action.','err');
-  if (['approve','publish'].includes(kind)) return notice('Approve and publish one verified story at a time; bulk publication is disabled.','err');
-  const ids = [...selected];
-  if (!await confirmAction(`${kind === 'approve' ? 'Mark reviewed' : kind === 'publish' ? 'Publish' : 'Reject'} ${ids.length} stories?`,'Actions run sequentially. Processing stops at the first failure; completed changes stay saved.')) return;
+  const ids = [...selected], publication = kind === 'approve' || kind === 'publish', version = sessionVersion;
+  if (!publication && !await confirmAction(`Reject ${ids.length} stories?`,'Actions run sequentially. Processing stops at the first failure; completed changes stay saved.')) return;
   mutationBusy = true; applyCapabilities();
-  let completed = 0;
-  try { for (const id of ids) { await action(`/api/news/${id}/${kind}`); selected.delete(id); completed++; } notice(`${completed} stories updated`); }
-  catch (error) { notice(`${completed} updated. Stopped: ${error.message}`,'err'); }
-  finally { mutationBusy = false; await loadOverview(); await loadNews(); applyCapabilities(); }
+  let completed = 0, failure = '', websitePending = false;
+  try {
+    for (const id of ids) {
+      if (version !== sessionVersion) return;
+      const row = [...visibleRows,...rows].find(item => Number(item.id) === id);
+      const result = await action(`/api/news/${id}/${publication ? 'approve' : kind}`,row?.revision ? {revision:row.revision} : {});
+      if (publication && (result.ok !== true || result.status !== 'published')) throw new Error(`Publication of story #${id} was not confirmed. Refresh before retrying.`);
+      if (publication) {
+        markPublished(id);
+        if (result.public_delivery && result.public_delivery.state !== 'synced') websitePending = true;
+      } else selected.delete(id);
+      completed++;
+    }
+  } catch (error) { failure = error.message; }
+  finally {
+    if (version !== sessionVersion) return;
+    const refreshed = await refreshAfterMutation();
+    if (version !== sessionVersion) return;
+    mutationBusy = false; applyCapabilities();
+    let message = `${completed} ${completed === 1 ? 'story' : 'stories'} ${publication ? 'published' : 'rejected'}.`;
+    if (websitePending) message += ' Website sync is pending for some stories.';
+    if (failure) notice(message + ' Stopped: ' + failure,'err');
+    else if (!refreshed) notice(message + ' Latest lists could not be refreshed; use Refresh.','warn');
+    else notice(message);
+  }
 }
 async function inspectStory(id) {
   const row = [...visibleRows,...rows].find(item => Number(item.id) === id);
@@ -277,7 +405,7 @@ async function inspectStory(id) {
     $('editStoryForm').onsubmit = async event => {
       event.preventDefault(); const button = event.currentTarget.querySelector('[type=submit]'); button.disabled = true;
       if (!revision) { button.disabled = false; return notice('Load the full editorial draft before saving.','err'); }
-      try { await action('/api/news/' + id + '/edit',{title:$('editTitle').value.trim(),category:$('editCategory').value,summary:$('editSummary').value.trim(),bot_summary:$('editSummary').value.trim()},{'If-Match':revision}); $('inspector').close(); notice('Story changes saved'); await loadOverview(); await loadNews(); }
+      try { await action('/api/news/' + id + '/edit',{title:$('editTitle').value.trim(),category:$('editCategory').value,summary:$('editSummary').value.trim(),bot_summary:$('editSummary').value.trim()},{'If-Match':revision}); $('inspector').close(); notice('Story changes saved'); if (!await refreshAfterMutation()) notice('Story changes saved. Latest lists could not be refreshed; use Refresh.','warn'); }
       catch (error) { notice(error.message,'err'); }
       finally { button.disabled = false; }
     };
@@ -314,9 +442,10 @@ async function loadActivity() {
 function renderSystem() {
   if (!workspace) return;
   const health = workspace.health, access = workspace.access;
-  $('systemChecks').innerHTML = (workspace.data_origin === 'termux_github' ? metric('Primary storage','Termux PostgreSQL','Private phone database; not remotely checked') + metric('Public delivery','GitHub feed','Approved phone exports plus attributed public sources') : metric('Database',health.database === 'connected' ? 'Connected' : 'Unavailable',health.database === 'connected' ? 'Connection verified' : 'Persistent writes are paused') + metric('Data mode',workspace.mode === 'live' ? 'Live' : 'Snapshot',workspace.mode === 'live' ? 'Database-backed newsroom' : 'Saved public reports')) + metric('Latest report age',age(health.latest_age_seconds),date(health.latest_published_at)) + metric('Workspace response',health.response_ms + ' ms','Server processing time, not browser latency');
+  const githubOnly = workspace.data_origin === 'termux_github' && workspace.mode !== 'live';
+  $('systemChecks').innerHTML = (githubOnly ? metric('Primary storage','Termux PostgreSQL','Private phone database; not remotely checked') + metric('Public delivery','GitHub feed','Approved phone exports plus attributed public sources') : metric('Database',health.database === 'connected' ? 'Connected' : 'Unavailable',health.database === 'connected' ? 'Connection verified' : 'Persistent writes are paused') + metric('Data mode',workspace.mode === 'live' ? 'Live' : 'Snapshot',workspace.mode === 'live' ? 'Database-backed newsroom' : 'Saved public reports')) + metric('Latest report age',age(health.latest_age_seconds),date(health.latest_published_at)) + metric('Workspace response',health.response_ms + ' ms','Server processing time, not browser latency');
   $('lastSync').textContent = 'Checked ' + date(workspace.generated_at);
-  $('sessionDetails').innerHTML = detail('Signed in as',access.username) + detail('Access scope',access.scope === 'recovery' ? 'Recovery · read-only' : access.read_only ? 'Owner · writes unavailable' : 'Owner') + detail('Session expires',access.expires_at ? date(access.expires_at*1000) : 'Legacy session') + detail(workspace.data_origin === 'termux_github' ? 'Public website edits' : 'Database writes',workspace.data_origin === 'termux_github' ? 'Disabled — manage locally in Termux' : access.read_only ? 'Blocked' : 'Allowed with CSRF protection') + detail('Private data storage','Session cookie only; no admin records in local storage') + detail('Coverage limit',workspace.limits.stories + ' loaded stories; charts describe this sample');
+  $('sessionDetails').innerHTML = detail('Signed in as',access.username) + detail('Access scope',access.scope === 'recovery' ? 'Recovery · read-only' : access.read_only ? 'Owner · writes unavailable' : 'Owner') + detail('Session expires',access.expires_at ? date(access.expires_at*1000) : 'Legacy session') + detail(githubOnly ? 'Public website edits' : 'Database writes',githubOnly ? 'Disabled — manage locally in Termux' : access.read_only ? 'Blocked' : 'Allowed with CSRF protection') + detail('Private data storage','Session cookie only; no admin records in local storage') + detail('Coverage limit',workspace.limits.stories + ' loaded stories; charts describe this sample');
 }
 function fillSettings(value) { settings = value || {}; $('websiteEnabled').checked = settings.website_enabled !== 'false'; }
 async function loadSettings() {
@@ -404,7 +533,8 @@ $('createArticleForm').onsubmit = async event => {
   const result = await action('/api/admin/news/create',manualPayload());
   $('createArticleForm').reset(); $('manualMessage').textContent = 'Draft #' + result.id + ' saved for human review.';
   notice('New article draft #' + result.id + ' saved. Verify before publishing.');
-  await loadOverview(); await loadNews(true);
+  pageNumber = 1; selected.clear();
+  if (!await refreshAfterMutation()) notice('Draft saved. Latest lists could not be refreshed; use Refresh.','warn');
  } catch(error) { $('manualMessage').textContent = error.message; notice(error.message,'err'); }
  finally { button.disabled = false; applyCapabilities(); }
 };
@@ -422,8 +552,8 @@ $('logout').onclick = async () => {
   catch (error) { notice('Sign-out was not confirmed. Please retry.','err'); }
   finally { $('logout').disabled = false; }
 };
-$('refresh').onclick = async () => { await loadOverview(); go(currentView,false); };
-$('newsRefresh').onclick = async () => { await loadOverview(); loadNews(); };
+$('refresh').onclick = async () => { const view = currentView; await loadOverview(false,{fresh:true}); if (workspace && currentView === view) go(view,false); };
+$('newsRefresh').onclick = async () => { await Promise.allSettled([loadOverview(false,{fresh:true}),loadNews()]); };
 $('search').oninput = () => { newsSequence++; newsController?.abort(); clearTimeout(newsTimer); newsTimer = setTimeout(() => loadNews(true),250); };
 for (const id of ['category','source','status','review','sort']) $(id).onchange = () => loadNews(true);
 $('resetFilters').onclick = () => { $('search').value = ''; for (const id of ['category','source','status','review']) $(id).value = 'all'; $('sort').value = 'newest'; queue = 'all'; document.querySelectorAll('[data-queue]').forEach(node => node.classList.toggle('active',node.dataset.queue === 'all')); loadNews(true); };
@@ -436,7 +566,7 @@ $('downloadDiagnostics').onclick = () => { if (workspace) download('politicshub-
 $('saveSettings').onclick = saveSettings;
 $('siteToggle').onclick = async () => { if (!await confirmAction('Change website publishing?', 'This updates the persistent publication setting.')) return; try { const data = await action('/api/admin/settings',{website_enabled:settings.website_enabled === 'false'}); fillSettings(data.settings); notice('Publishing controls saved'); } catch (error) { notice(error.message,'err'); } };
 $('trainBtn').onclick = async () => { const notes = $('trainNotes').value.trim(); if (!notes) return notice('Enter a reviewed operating instruction.','err'); $('trainBtn').disabled = true; try { await action('/api/admin/training',{agent_id:$('trainAgent').value,event_type:'knowledge_update',notes}); $('trainNotes').value = ''; notice('Knowledge event recorded'); } catch (error) { notice(error.message,'err'); } finally { applyCapabilities(); } };
-$('factBtn').onclick = async () => { if (mutationBusy) return; mutationBusy = true; applyCapabilities(); try { const data = await action('/api/fact-check'); notice('Verification precheck completed: ' + (data.checked || 0) + ' stories'); await loadOverview(); await loadNews(); } catch (error) { notice(error.message,'err'); } finally { mutationBusy = false; applyCapabilities(); } };
+$('factBtn').onclick = async () => { if (mutationBusy) return; mutationBusy = true; applyCapabilities(); try { const data = await action('/api/fact-check'); notice('Verification precheck completed: ' + (data.checked || 0) + ' stories'); if (!await refreshAfterMutation()) notice('Source precheck completed. Latest lists could not be refreshed; use Refresh.','warn'); } catch (error) { notice(error.message,'err'); } finally { mutationBusy = false; applyCapabilities(); } };
 $('activityRefresh').onclick = loadActivity;
 $('menuToggle').onclick = () => { const open = !$('sidebar').classList.contains('open'); closeMenu(); if (open) { $('sidebar').inert = false; $('sidebar').classList.add('open'); $('sidebarBackdrop').classList.remove('hidden'); $('menuToggle').setAttribute('aria-expanded','true'); document.body.style.overflow = 'hidden'; $('commandOpen').focus(); } };
 $('sidebarBackdrop').onclick = () => closeMenu(true);
@@ -454,7 +584,7 @@ document.addEventListener('click',event => {
   const actionButton = event.target.closest('[data-news]'); if (actionButton) newsAction(actionButton.dataset.news,Number(actionButton.dataset.id));
   const bulk = event.target.closest('[data-bulk]'); if (bulk) bulkAction(bulk.dataset.bulk);
   const filter = event.target.closest('[data-queue]'); if (filter && !filter.disabled) { queue = filter.dataset.queue; $('status').value = ['pending','published'].includes(queue) ? queue : 'all'; $('review').value = queue === 'needs_review' ? 'needs_review' : 'all'; document.querySelectorAll('[data-queue]').forEach(node => node.classList.toggle('active',node === filter)); loadNews(true); }
-  const source = event.target.closest('[data-source-filter]'); if (source) { $('resetFilters').click(); $('source').value = source.dataset.sourceFilter; go('news'); }
+  const source = event.target.closest('[data-source-filter]'); if (source) { $('search').value = ''; for (const id of ['category','status','review']) $(id).value = 'all'; $('sort').value = 'newest'; queue = 'all'; pageNumber = 1; selected.clear(); $('source').value = source.dataset.sourceFilter; go('news'); }
 });
 document.addEventListener('change',event => { if (event.target.matches('[data-select]')) { const id = Number(event.target.dataset.select); event.target.checked ? selected.add(id) : selected.delete(id); updateSelection(); } });
 document.addEventListener('keydown',event => {

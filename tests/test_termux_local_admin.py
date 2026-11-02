@@ -120,7 +120,7 @@ class LocalAdminAccessTests(unittest.TestCase):
                 termux_local_admin.start(reset=True, username="not a valid username")
         listening.assert_not_called()
 
-    def test_approve_requires_explicit_editor_confirmation(self):
+    def test_verify_still_requires_csrf_without_extra_editor_prompts(self):
         with patch.dict(os.environ, {"POLITICSHUB_LOCAL_ADMIN": "1"}):
             client = api.app.test_client()
             with client.session_transaction() as session:
@@ -128,12 +128,11 @@ class LocalAdminAccessTests(unittest.TestCase):
                                admin_scope="owner", csrf_token="securecsrf")
             with patch.object(api, "db") as db:
                 response = client.post("/api/news/455/approve",
-                    json={"notes": "I checked the facts.", "evidence_urls": []},
-                    headers={"X-CSRF-Token": "securecsrf"})
-                self.assertEqual(response.status_code, 400)
+                    json={})
+                self.assertEqual(response.status_code, 403)
                 db.assert_not_called()
 
-    def test_unapproved_story_cannot_be_published(self):
+    def test_unreadable_source_record_cannot_be_published(self):
         record = {
             "id": 455, "status": "pending", "approved_at": None,
             "fact_check_status": "pending", "source_type": "rss",

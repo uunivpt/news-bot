@@ -3,13 +3,6 @@ const assert=require('node:assert/strict');
 const vm=require('node:vm');
 const fs=require('node:fs');
 const source=fs.readFileSync('public/assets/site.js','utf8');
-test('editorial evidence input preserves URLs containing n and separates real newlines',()=>{
- const admin=fs.readFileSync('public/admin.js','utf8');
- const statement=admin.split('\n').find(line=>line.includes('const sources = evidence.split'));
- const context=vm.createContext({evidence:'https://news.example.net/report\nhttps://independent.example.org/notice'});
- vm.runInContext(statement+'\nglobalThis.parsedSources=sources;',context);
- assert.deepEqual(Array.from(context.parsedSources),['https://news.example.net/report','https://independent.example.org/notice']);
-});
 // Execute the real data-loading functions without the browser UI bootstrap.
 const prefix=source.slice(0,source.indexOf('function setActive'));
 const feeds=source.slice(source.indexOf('function mergeFeeds'),source.indexOf('function home'));

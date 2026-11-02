@@ -90,11 +90,11 @@ class EditorialApprovalFlowTests(unittest.TestCase):
                 isolated = urlunsplit(parsed._replace(path='/' + name))
                 with patch.object(sys.modules[__name__], 'NewsDatabase',
                                   side_effect=lambda path: factory(database_url=isolated)):
-                    self.test_remote_owner_must_verify_and_edits_invalidate_review()
+                    self.test_verify_publishes_without_granting_ads_and_edits_invalidate_review()
             finally:
                 server.execute(sql.SQL('DROP DATABASE {} WITH (FORCE)').format(sql.Identifier(name)))
 
-    def test_remote_owner_must_verify_and_edits_invalidate_review(self):
+    def test_verify_publishes_without_granting_ads_and_edits_invalidate_review(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = str(Path(tmp) / 'editorial.db')
             NewsDatabase(path).close()
@@ -111,19 +111,15 @@ class EditorialApprovalFlowTests(unittest.TestCase):
                 self.assertEqual(created.status_code, 201, created.data)
                 sid = created.json['id']
                 url = '/api/news/' + str(sid)
-                self.assertEqual(client.post(url+'/approve', json={}, headers=headers).status_code, 400)
-                self.assertEqual(client.post(url+'/publish', json={}, headers=headers).status_code, 409)
-                evidence = dict(confirm='APPROVE '+str(sid), confirmed_facts=True, confirmed_originality=True,
-                                evidence_urls=['https://example.net/record', 'https://example.edu/notice'],
-                                notes='Compared the public records and checked the original explanatory context and republication rights.')
-                approved = client.post(url+'/approve', json=evidence, headers=headers)
+                approved = client.post(url+'/approve', json={}, headers=headers)
                 self.assertEqual(approved.status_code, 200, approved.data)
+                self.assertEqual(approved.json['status'], 'published')
                 self.assertEqual(client.post(url+'/publish', json={}, headers=headers).status_code, 200)
                 db = NewsDatabase(path)
                 record = dict(db.get_by_id(sid)); db.close()
-                self.assertTrue(is_monetizable(record))
+                self.assertFalse(is_monetizable(record))
                 article = client.get(api.article_path(record))
-                self.assertIn('adsbygoogle.js', article.get_data(as_text=True))
+                self.assertNotIn('adsbygoogle.js', article.get_data(as_text=True))
                 revision = client.get('/api/admin/story/'+str(sid)).json['revision']
                 edited = client.post(url+'/edit', json={'bot_article': row['bot_article']+' New unreviewed material.'},
                                      headers=dict(headers, **{'If-Match': revision}))
@@ -133,4 +129,4 @@ class EditorialApprovalFlowTests(unittest.TestCase):
                 self.assertIsNone(record['approved_at'])
                 self.assertEqual(record['status'], 'pending')
                 self.assertFalse(is_monetizable(record))
-                self.assertEqual(client.post(url+'/publish', json={}, headers=headers).status_code, 409)
+                self.assertEqual(client.post(url+'/approve', json={}, headers=headers).json['status'], 'published')

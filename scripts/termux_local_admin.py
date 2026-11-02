@@ -187,6 +187,8 @@ def serve():
 
     from werkzeug.serving import make_server
     app = configure_private_app()
+    from app.phone_publication import start_delivery_worker
+    start_delivery_worker()
     print(f"PRIVATE TERMUX ADMIN STARTED: {BASE}/admin/", flush=True)
     make_server(HOST, PORT, app, threaded=True).serve_forever()
 
