@@ -148,6 +148,35 @@ def run(base, output,admin_fixture=False):
             require(page.locator('#sp').get_attribute('aria-hidden') == 'true', 'Search did not close')
         check('search, date/publisher controls and short-query recovery', search)
 
+        if admin_fixture:
+            def topical_politics_search():
+                from api import index as api
+                now = datetime.now(timezone.utc).isoformat()
+                reports = [{'id': 88111 + index, 'title': title, 'category': category,
+                            'summary': 'Source-linked fixture for a topical search regression.',
+                            'source_name': 'Search fixture', 'url': f'https://example.org/search-fixture/{index}',
+                            'published_at': now, 'status': 'published', 'public_source': True}
+                           for index, (title, category) in enumerate([
+                               ('politicsfixture Parliament debate report', 'india'),
+                               ('politicsfixture hospital opening report', 'india'),
+                               ('politicsfixture Congress meets in Europe', 'world')])]
+                with patch.object(api.public_archive, '_load', return_value=tuple(reports)):
+                    home()
+                    page.locator('#sbtn').click()
+                    page.locator('#si').fill('politicsfixture')
+                    page.locator('[data-search-cat="politics"]').click()
+                    page.wait_for_function("expected => document.querySelector('#sres h3')?.textContent === expected && !document.querySelector('#sc').textContent.includes('Searching')", arg=reports[0]['title'])
+                    require(page.locator('#sres .sr').count() == 1, 'Politics search included another desk')
+                    href = page.locator('#sres .sr').get_attribute('href')
+                    require(href == api.article_path(reports[0]) and href.startswith('/india/'), 'Search changed the canonical desk')
+                    result = page.evaluate("async () => (await fetch('/api/search?q=politicsfixture&category=politics')).json()")
+                    require(len(result) == 1 and result[0]['category'] == 'india', 'Search rewrote the source category')
+                    page.locator('#sres .sr').click()
+                    require(page.locator('.art h1').inner_text() == reports[0]['title'], 'Search opened another report')
+                    require(page.get_by_role('link', name='Read the original report', exact=True).get_attribute('href') == reports[0]['url'], 'Search lost source attribution')
+                home()
+            check('Politics search includes India reports and preserves canonical article links', topical_politics_search)
+
         def ticker():
             page.locator('#pz').click()
             require(page.locator('#pz').get_attribute('aria-pressed') == 'true', 'Ticker pause failed')
