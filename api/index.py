@@ -1552,7 +1552,7 @@ def public_search():
   if str(row["id"]) in ids or row.get("url") in urls:continue
   ids.add(str(row["id"])); urls.add(row.get("url"))
   row["category"]=normalize_category(row.get("category"),row.get("title"),row.get("bot_summary") or row.get("summary"))
-  if category!="all" and row["category"]!=category:continue
+  if not _matches_public_desk(row,category):continue
   if source and str(row.get("source_name") or row.get("source") or "").casefold()!=source:continue
   if cutoff and _public_timestamp(row)<cutoff:continue
   unique.append(row)

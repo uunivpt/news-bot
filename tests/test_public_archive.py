@@ -67,6 +67,36 @@ class ArchiveTests(unittest.TestCase):
             result=self.client.get('/api/search?q=Parliament&limit=50&category=india')
             self.assertEqual([r['id'] for r in result.json],[990])
 
+    def test_politics_search_uses_topical_desk_without_changing_canonical_category(self):
+        political = dict(story(991), title='Three AAP MLAs join BJP in Punjab')
+        unrelated = dict(story(992), title='Public hospital report in Punjab')
+        world = dict(story(993, category='world'), title='Congress meets in Europe')
+        explicit = dict(story(994, category='politics'), title='Election commission public report')
+        with self.context([political, unrelated, world, explicit]), \
+             patch.object(api, 'db', return_value=self.db), patch.object(self.db, 'close'), \
+             patch.object(api, '_hindi_rows', return_value=[]), patch.object(api, '_official_exam_rows', return_value=[]):
+            result = self.client.get('/api/search?q=public&category=politics')
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.headers['X-Search-Total'], '2')
+        self.assertEqual({row['id'] for row in result.json}, {991, 994})
+        row = next(row for row in result.json if row['id'] == 991)
+        self.assertEqual(row['category'], 'india')
+        self.assertTrue(api.article_path(row).startswith('/india/'))
+        self.assertEqual(row['url'], political['url'])
+        self.assertEqual(row['published_at_iso'], '2026-09-20T10:00:00Z')
+
+    def test_politics_search_applies_topical_source_date_and_pagination_together(self):
+        recent = datetime.now(timezone.utc).isoformat()
+        records = [story(991, date=recent), story(992, date=recent),
+                   dict(story(993, date=recent), source_name='Other publisher'), story(994)]
+        with self.context(records), patch.object(api, 'db', side_effect=DatabaseUnavailable('down')), \
+             patch.object(api, '_snapshot_rows', return_value=[]), patch.object(api, '_hindi_rows', return_value=[]), \
+             patch.object(api, '_official_exam_rows', return_value=[]):
+            result = self.client.get('/api/search?q=Parliament&category=politics&source=Archive%20Source&period=week&limit=1&offset=1')
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.headers['X-Search-Total'], '2')
+        self.assertEqual([row['id'] for row in result.json], [991])
+
     def test_source_and_date_filters_apply_before_pagination(self):
         recent=datetime.now(timezone.utc).isoformat()
         records=[story(991,date=recent),dict(story(992,date=recent),source_name='Other publisher'),story(993)]
