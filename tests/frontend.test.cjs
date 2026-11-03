@@ -10,7 +10,7 @@ function harness(responses){
  const context=vm.createContext({URL,Date,AbortSignal,fetch:async url=>{
   const result=responses[url];if(result instanceof Error)throw result;
   return {ok:true,headers:{get:()=>null},json:async()=>result};
- },document:{addEventListener(){}},ticker(){},render(){},updateFeedStatus(){}});
+ },document:{addEventListener(){}},ticker(){},render(){},updateFeedStatus(){},updateSearchSources(){}});
  vm.runInContext(prefix+feeds,context);return context;
 }
 test('healthy API removes stale snapshot items and preserves full article',async()=>{
