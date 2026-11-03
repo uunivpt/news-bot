@@ -171,7 +171,7 @@ async function load(opts={}){
  const early=!!opts.early;
  const paintFirst=(rows,mode)=>{
   if(!early||painted||S.items.length||!rows?.length)return;
-  painted=true;S.items=rows.map(norm).sort((x,y)=>ts(y.date)-ts(x.date)||0);S.mode=mode;cacheSave(S.items);ticker();render(true);
+  painted=true;S.items=rows.map(norm).sort((x,y)=>ts(y.date)-ts(x.date)||0);S.mode=mode;cacheSave(S.items);ticker();updateSearchSources();render(true);
  };
  // The API is authoritative. Download the full saved snapshot only when the
  // API fails, rather than transferring it alongside every healthy refresh.
@@ -187,7 +187,7 @@ async function load(opts={}){
   S.mode=apiOK?(S.apiMode==='snapshot'?'snapshot':'api'):(b.length||h.length?'snapshot':'cached');
   if(hasServerFeed)cacheSave(S.items);
  } else {S.mode='empty'}
- updateFeedStatus();
+ updateSearchSources();updateFeedStatus();
 }
 function home(c){document.documentElement.lang=c==='hindi'?'hi':'en';setActive(c);document.title=(c==='all'?'':CATS.find(x=>x[0]===c)?.[1]+' — ')+'PoliticsHub.in';
  const list=S.items.filter(i=>inCat(i,c));const f=list[0];const rest=list.filter(i=>i!==f);
@@ -342,16 +342,27 @@ async function enhanceHome(category){
  }catch(e){}
 }
 function trackView(id){try{navigator.sendBeacon('/api/news/'+encodeURIComponent(id)+'/view',new Blob(['{}'],{type:'application/json'}))}catch(e){}}
+function updateSearchSources(){
+ const select=$('#searchSource');if(!select)return;
+ // Add newly loaded publishers without replacing the reader's selected option.
+ const known=new Set([...select.options].map(option=>option.value));
+ const sources=[...new Set(S.items.map(item=>item.source).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+ for(const source of sources){
+  if(known.has(source))continue;
+  const option=document.createElement('option');option.value=source;option.textContent=source;
+  const before=[...select.options].find(item=>item.value&&item.value.localeCompare(source)>0);
+  select.add(option,before||null);known.add(source);
+ }
+}
 function ensureSearchFilters(){
  const sb=$('.sb'); if(!sb||$('#searchFilters'))return;
  const box=document.createElement('div'); box.id='searchFilters'; box.className='search-filters';
  box.innerHTML=CATS.map(x=>'<button type="button" data-search-cat="'+x[0]+'" class="'+((window.searchCat||'all')===x[0]?'on':'')+'" aria-pressed="'+((window.searchCat||'all')===x[0])+'">'+(x[0]==='all'?'All':esc(x[1]))+'</button>').join('');
  sb.insertBefore(box,$('#sc'));
  box.onclick=e=>{const b=e.target.closest('[data-search-cat]');if(!b)return;window.searchCat=b.dataset.searchCat;$$('[data-search-cat]',box).forEach(x=>{x.classList.toggle('on',x===b);x.setAttribute('aria-pressed',String(x===b))});doS()};
- const sources=[...new Set(S.items.map(i=>i.source).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
  const options=document.createElement('div');options.className='search-options';
- options.innerHTML='<label>Publisher<select id="searchSource"><option value="">All publishers</option>'+sources.map(s=>'<option value="'+esc(s)+'">'+esc(s)+'</option>').join('')+'</select></label><label>Published<select id="searchPeriod"><option value="all">Any time</option><option value="day">Past 24 hours</option><option value="week">Past 7 days</option><option value="month">Past 30 days</option></select></label>';
- sb.insertBefore(options,$('#sc'));options.addEventListener('change',()=>doS());
+ options.innerHTML='<label>Publisher<select id="searchSource"><option value="">All publishers</option></select></label><label>Published<select id="searchPeriod"><option value="all">Any time</option><option value="day">Past 24 hours</option><option value="week">Past 7 days</option><option value="month">Past 30 days</option></select></label>';
+ sb.insertBefore(options,$('#sc'));options.addEventListener('change',()=>doS());updateSearchSources();
 }
 const __openS=openS; openS=function(){__openS();ensureSearchFilters()};
 let searchRequest=0,searchTimer,searchOffset=0,searchResults=[],searchController;

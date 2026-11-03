@@ -189,6 +189,7 @@ def run(base, output,admin_fixture=False):
                         cold_page.locator('#searchPeriod').select_option('week')
                         cold_page.wait_for_function("() => document.querySelectorAll('#sres .sr').length > 0 && !document.querySelector('#sc').textContent.includes('Searching')")
                     focused = cold_page.evaluate('document.activeElement.id')
+                    selected_source = ''
                     require(set(held) == {'english', 'hindi'}, 'Startup feeds were not held')
                     for feed in ('english', 'hindi'):
                         held.pop(feed).continue_()
@@ -203,6 +204,18 @@ def run(base, output,admin_fixture=False):
                             require(cold_page.locator('#si').input_value() == 'India', 'Startup paint lost search query')
                             require(cold_page.locator('#searchPeriod').input_value() == 'week', 'Startup paint lost date filter')
                             require(cold_page.locator('#sres .sr').count() > 0, 'Startup paint lost search results')
+                            publishers = cold_page.locator('#searchSource option').evaluate_all('(nodes) => nodes.map(node => node.value)')
+                            loaded_sources = cold_page.evaluate('() => [...new Set(S.items.map(item => item.source).filter(Boolean))]')
+                            require(all(source in publishers for source in loaded_sources), f'{feed} publishers missing from open search')
+                            require(len(publishers) == len(set(publishers)), 'Publisher options duplicated')
+                            require(cold_page.locator('#searchSource').input_value() == selected_source, 'Feed arrival reset publisher selection')
+                            if feed == 'english':
+                                selected_source = cold_page.locator('#sres .sr small').first.text_content()
+                                selected_source = next(source for source in loaded_sources if selected_source.startswith(source))
+                                cold_page.locator('#searchSource').select_option(selected_source)
+                                cold_page.wait_for_function("() => document.querySelectorAll('#sres .sr').length > 0 && !document.querySelector('#sc').textContent.includes('Searching')")
+                                cold_page.locator('#searchSource').focus()
+                                focused = 'searchSource'
                     cold_page.keyboard.press('Escape')
                     trigger = '#sbtn' if control == 'search' else '#bg'
                     require(cold_page.locator(trigger).evaluate('(node) => node === document.activeElement'), 'Startup paint lost trigger focus restoration')
