@@ -430,7 +430,7 @@ document.addEventListener('error',event=>{
   if(event.key!=='Tab')return;
   const root=document.querySelector('#sp.open')||(document.body.classList.contains('dro')?document.querySelector('#dr'):null);
   if(!root)return;
-  const nodes=[...root.querySelectorAll('a[href],button,input')].filter(el=>!el.disabled&&el.getClientRects().length);
+  const nodes=[...root.querySelectorAll('a[href],button,input,select,textarea')].filter(el=>!el.disabled&&el.getClientRects().length);
   const first=nodes[0],last=nodes[nodes.length-1];if(!first)return;
   if(event.shiftKey&&(document.activeElement===first||!root.contains(document.activeElement))){event.preventDefault();last.focus()}
   else if(!event.shiftKey&&(document.activeElement===last||!root.contains(document.activeElement))){event.preventDefault();first.focus()}

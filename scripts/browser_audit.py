@@ -148,6 +148,24 @@ def run(base, output,admin_fixture=False):
             require(page.locator('#sp').get_attribute('aria-hidden') == 'true', 'Search did not close')
         check('search, date/publisher controls and short-query recovery', search)
 
+        def search_keyboard_filters():
+            page.locator('#sbtn').click()
+            page.wait_for_function("() => document.activeElement === document.querySelector('#si')")
+            page.locator('#si').fill('')
+            page.wait_for_function("() => document.querySelectorAll('#sres .sr').length === 0")
+            page.locator('[data-search-cat="hindi"]').focus()
+            page.keyboard.press('Tab')
+            require(page.locator('#searchSource').evaluate('(node) => node === document.activeElement'), 'Tab skips publisher filter')
+            page.keyboard.press('Tab')
+            require(page.locator('#searchPeriod').evaluate('(node) => node === document.activeElement'), 'Tab skips publication-date filter')
+            page.keyboard.press('Tab')
+            require(page.locator('#si').evaluate('(node) => node === document.activeElement'), 'Search focus escapes the last filter')
+            page.keyboard.press('Shift+Tab')
+            require(page.locator('#searchPeriod').evaluate('(node) => node === document.activeElement'), 'Reverse Tab skips the last filter')
+            page.keyboard.press('Escape')
+            require(page.locator('#sbtn').evaluate('(node) => node === document.activeElement'), 'Closing search loses its trigger focus')
+        check('keyboard search reaches publisher/date filters and wraps within the dialog', search_keyboard_filters)
+
         if admin_fixture:
             def topical_politics_search():
                 from api import index as api
