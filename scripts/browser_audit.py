@@ -166,6 +166,52 @@ def run(base, output,admin_fixture=False):
             require(page.locator('#sbtn').evaluate('(node) => node === document.activeElement'), 'Closing search loses its trigger focus')
         check('keyboard search reaches publisher/date filters and wraps within the dialog', search_keyboard_filters)
 
+        def startup_keeps_reader_controls():
+            # Release the independent startup feeds one at a time so both the
+            # early English paint and the final combined paint happen mid-use.
+            for control in ('search', 'drawer'):
+                cold = browser.new_context(viewport={'width': 390, 'height': 844},
+                                           reduced_motion='reduce', service_workers='block')
+                cold.route('**/*', lambda route: route.continue_() if route.request.url.startswith(base + '/') else route.abort())
+                held = {}
+                cold.route('**/api/news?category=all&limit=120', lambda route: held.update(english=route))
+                cold.route('**/api/hindi-feed', lambda route: held.update(hindi=route))
+                try:
+                    cold_page = cold.new_page()
+                    cold_page.on('pageerror', lambda error: errors.append(str(error)))
+                    cold_page.goto(base + '/', wait_until='domcontentloaded')
+                    consent = cold_page.locator('#privacyConsent [data-consent-choice="essential"]')
+                    consent.wait_for(state='visible')
+                    consent.click()
+                    cold_page.locator('#sbtn' if control == 'search' else '#bg').click()
+                    if control == 'search':
+                        cold_page.locator('#si').fill('India')
+                        cold_page.locator('#searchPeriod').select_option('week')
+                        cold_page.wait_for_function("() => document.querySelectorAll('#sres .sr').length > 0 && !document.querySelector('#sc').textContent.includes('Searching')")
+                    focused = cold_page.evaluate('document.activeElement.id')
+                    require(set(held) == {'english', 'hindi'}, 'Startup feeds were not held')
+                    for feed in ('english', 'hindi'):
+                        held.pop(feed).continue_()
+                        if feed == 'english':
+                            cold_page.locator('.ph14-lead').wait_for()
+                        else:
+                            cold_page.wait_for_function('() => lastRefreshAt > 0')
+                        root = cold_page.locator('#sp' if control == 'search' else '#dr')
+                        require(root.get_attribute('aria-hidden') == 'false', f'{feed} startup paint closed {control}')
+                        require(cold_page.evaluate('document.activeElement.id') == focused, f'{feed} startup paint moved {control} focus')
+                        if control == 'search':
+                            require(cold_page.locator('#si').input_value() == 'India', 'Startup paint lost search query')
+                            require(cold_page.locator('#searchPeriod').input_value() == 'week', 'Startup paint lost date filter')
+                            require(cold_page.locator('#sres .sr').count() > 0, 'Startup paint lost search results')
+                    cold_page.keyboard.press('Escape')
+                    trigger = '#sbtn' if control == 'search' else '#bg'
+                    require(cold_page.locator(trigger).evaluate('(node) => node === document.activeElement'), 'Startup paint lost trigger focus restoration')
+                finally:
+                    for route in held.values():
+                        route.abort()
+                    cold.close()
+        check('independent startup feeds preserve active search and drawer controls', startup_keeps_reader_controls)
+
         if admin_fixture:
             def topical_politics_search():
                 from api import index as api
