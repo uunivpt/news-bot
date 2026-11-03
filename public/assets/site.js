@@ -171,7 +171,7 @@ async function load(opts={}){
  const early=!!opts.early;
  const paintFirst=(rows,mode)=>{
   if(!early||painted||S.items.length||!rows?.length)return;
-  painted=true;S.items=rows.map(norm).sort((x,y)=>ts(y.date)-ts(x.date)||0);S.mode=mode;cacheSave(S.items);ticker();render();
+  painted=true;S.items=rows.map(norm).sort((x,y)=>ts(y.date)-ts(x.date)||0);S.mode=mode;cacheSave(S.items);ticker();render(true);
  };
  // The API is authoritative. Download the full saved snapshot only when the
  // API fails, rather than transferring it alongside every healthy refresh.
@@ -446,6 +446,7 @@ const qcat=new URLSearchParams(location.search).get('category');if(!location.has
 setActive('all');
 const hadCache=hydrateCache();
 if(hadCache){ticker();render();}
-load({early:!hadCache}).then(()=>{ticker();render();updateFeedStatus()}).finally(()=>{liveRefreshBusy=false;lastRefreshAt=Date.now()});
+// Feed arrival is a background update: keep controls opened during startup.
+load({early:!hadCache}).then(()=>{ticker();render(true);updateFeedStatus()}).finally(()=>{liveRefreshBusy=false;lastRefreshAt=Date.now()});
 }
 boot();
