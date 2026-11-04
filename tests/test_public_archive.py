@@ -26,6 +26,9 @@ class ArchiveTests(unittest.TestCase):
         self.db = NewsDatabase(str(Path(self.tmp.name) / "news.db"))
         self.client = api.app.test_client()
         api._PUBLIC_RATE.clear()
+        # Archive expectations must not depend on rotating independent feeds.
+        for loader in ('_hindi_rows', '_official_exam_rows'):
+            self.enterContext(patch.object(api, loader, return_value=[]))
 
     def tearDown(self):
         self.db.close()
