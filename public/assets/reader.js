@@ -6,6 +6,7 @@
  try{storage=window.localStorage}catch(_){storage={getItem:()=>null,setItem:()=>{throw Error('Unavailable')},removeItem:()=>{}}}
  const allowed=()=>{try{return storage.getItem('ph-consent-v1')==='preferences'}catch(_){return false}};
  const list=window.PHReadingList.create(storage,location.origin,allowed);
+ const storageError="Your browser couldn't update saved stories. Check browser storage settings.";
  let current=null,scheduled=false;
  function notice(text){let node=$('#readerNotice');if(!node){node=document.createElement('p');node.id='readerNotice';node.className='reader-notice';node.setAttribute('role','status');$('.reader-tools')?.append(node)}if(node)node.textContent=text}
  function sync(){
@@ -35,15 +36,15 @@
    if(!allowed()){notice('Allow preferences in Settings to save stories on this device.');return}
    const saved=list.read().some(x=>x.url===current?.url);
    const ok=saved?list.remove(current.url):list.add(current);
-   sync();notice(ok?(saved?'Removed from saved stories.':'Saved on this device.'):"Your browser couldn't save this story. Check available storage.");
+   sync();notice(ok?(saved?'Removed from saved stories.':'Saved on this device.'):storageError);
   }
   const remove=event.target.closest('[data-reader-remove]');
-  if(remove){list.remove(remove.dataset.readerRemove);renderSaved();$('#savedCount')?.focus()}
-  if(event.target.closest('[data-reader-clear]')){list.clear();renderSaved()}
+  if(remove){const ok=list.remove(remove.dataset.readerRemove);if(ok){renderSaved();$('#savedCount')?.focus()}notice(ok?'Removed from saved stories.':storageError)}
+  if(event.target.closest('[data-reader-clear]')){const ok=list.clear();if(ok){renderSaved();$('#savedCount')?.focus()}notice(ok?'Saved stories cleared.':storageError)}
   if(event.target.closest('[data-reader-print]'))window.print();
   if(event.target.closest('[data-reader-consent]')){
-   try{storage.setItem('ph-consent-v1','preferences')}catch(_){return}
-   renderSaved();sync();
+   try{storage.setItem('ph-consent-v1','preferences')}catch(_){notice("Your browser couldn't enable preferences. Check browser storage settings.");return}
+   renderSaved();sync();notice('Preferences enabled. You can now save stories on this device.');
   }
  });
  document.addEventListener('change',event=>{if(event.target.matches('[data-reader-size]'))$('article.art')?.setAttribute('data-reader-size',event.target.value)});
