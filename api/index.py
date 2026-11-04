@@ -1180,7 +1180,7 @@ def quick_briefing():
  if desk not in dict(BRIEFING_DESKS) or period not in {"day","week"}:
   return redirect("/briefing/",code=302)
  selected=select_briefing(_public_rows_for_section(desk,200),timestamp=_public_timestamp,
-                         desk=desk,days=7 if period=="week" else 1)
+                         desk=desk,days=7 if period=="week" else 1,matches_desk=_matches_public_desk)
  stories=[]
  for row in selected:
   published=datetime.fromtimestamp(_public_timestamp(row),timezone.utc)

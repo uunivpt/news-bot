@@ -86,6 +86,31 @@ class BriefingTests(unittest.TestCase):
         self.assertIn("No reports in this window", page.get_text())
         self.assertIsNotNone(page.select_one('a[href="/briefing/?desk=all&period=week"]'))
 
+    def test_politics_briefing_includes_topical_india_reports_and_preserves_metadata(self):
+        political = report(1, title='Three AAP MLAs join BJP in Punjab')
+        unrelated = report(2, title='New hospital opens in Punjab')
+        world = report(3, category='world', title='Congress meets in Europe')
+        explicit = report(4, category='politics')
+        older = report(5, hours=48, title='Parliament debates election rules')
+        pending = report(6, status='pending', title='Parliament debates election rules')
+        private = report(7, public_source=False, title='Parliament debates election rules')
+        rows = [political, unrelated, world, explicit, older, pending, private]
+        client = api.app.test_client()
+        with patch.object(api, '_public_rows_for_section', return_value=rows):
+            day = BeautifulSoup(client.get('/briefing/?desk=politics&period=day').data, 'html.parser')
+            week = BeautifulSoup(client.get('/api/briefing?desk=politics&period=week').data, 'html.parser')
+        self.assertEqual({node.get_text() for node in day.select('.briefing-story h2')},
+                         {political['title'], explicit['title']})
+        self.assertEqual({node.get_text() for node in week.select('.briefing-story h2')},
+                         {political['title'], explicit['title'], older['title']})
+        card = next(node for node in day.select('.briefing-story') if node.h2.get_text() == political['title'])
+        self.assertTrue(card.select_one('h2 a')['href'].startswith('/india/'))
+        self.assertEqual(card.select_one('.lbl').get_text(), 'India')
+        self.assertIn(political['source_name'], card.select_one('.briefing-meta').get_text())
+        self.assertEqual(card.select_one('a[target="_blank"]')['href'], political['url'])
+        self.assertEqual(datetime.fromisoformat(card.select_one('time')['datetime']),
+                         datetime.fromisoformat(political['published_at']))
+
     def test_invalid_filters_redirect_and_authenticated_responses_are_private(self):
         client = api.app.test_client()
         for query in ("desk=unknown", "period=forever", "desk=%3Cscript%3E"):
