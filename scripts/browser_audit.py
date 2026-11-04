@@ -594,14 +594,19 @@ def run(base, output,admin_fixture=False):
 
         def bounded_cache():
             offline_page.goto(base,wait_until='domcontentloaded')
+            # Activation removes obsolete shell caches. Inspect that cache
+            # rather than creating a cache for an old hardcoded worker version.
+            shell_caches = offline_page.evaluate("async () => (await caches.keys()).filter(name => name.startsWith('politicshub-shell-'))")
+            require(len(shell_caches) == 1, f'Expected one active shell cache, found {shell_caches!r}')
+            print('Active service-worker shell cache: ' + shell_caches[0], flush=True)
             offline_page.evaluate("""async () => {
                 for(let i=0;i<90;i++)await fetch('/assets/site.css?audit='+i);
             }""")
-            offline_page.wait_for_function("""async () => {
-                const cache=await caches.open('politicshub-shell-v19');
+            offline_page.wait_for_function("""async name => {
+                const cache=await caches.open(name);
                 const keys=await cache.keys();
                 return keys.length<=80 && keys.some(key=>key.url.endsWith('?audit=89'));
-            }""")
+            }""", arg=shell_caches[0])
         check('service-worker cache remains bounded after 90 distinct assets',bounded_cache)
         offline.close()
         browser.close()
