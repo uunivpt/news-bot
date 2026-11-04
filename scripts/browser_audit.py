@@ -364,6 +364,47 @@ def run(base, output,admin_fixture=False):
             page.locator('[data-reader-save]').click()
         check('reading list persists, deduplicates and removes stories', saved)
 
+        def saved_storage_failures():
+            seed = [{'url': '/india/123456789012', 'title': 'Browser storage fixture', 'savedAt': 1}]
+            for action in ('remove', 'clear', 'consent'):
+                blocked = browser.new_context(viewport={'width': 390, 'height': 844}, service_workers='block')
+                blocked.route('**/*', lambda route: route.continue_() if route.request.url.startswith(base + '/') else route.abort())
+                script = """(() => {if(location.origin!==ORIGIN)return;
+                    const set=Storage.prototype.setItem, remove=Storage.prototype.removeItem, key='ph-reading-list-v1';
+                    if(ACTION!=='consent'){set.call(localStorage,'ph-consent-v1','preferences');set.call(localStorage,key,JSON.stringify(SEED));}
+                    window.allowFixtureStorage=false;
+                    Storage.prototype.setItem=function(k,v){if(!window.allowFixtureStorage&&[key,'ph-consent-v1'].includes(k))throw new DOMException('Storage fixture denied','SecurityError');return set.call(this,k,v)};
+                    Storage.prototype.removeItem=function(k){if(!window.allowFixtureStorage&&k===key)throw new DOMException('Storage fixture denied','SecurityError');return remove.call(this,k)};
+                })();""".replace('ORIGIN', json.dumps(base)).replace('ACTION', json.dumps(action)).replace('SEED', json.dumps(seed))
+                blocked.add_init_script(script)
+                try:
+                    reader = blocked.new_page()
+                    reader.on('pageerror', lambda error: errors.append(str(error)))
+                    reader.goto(base + '/saved.html', wait_until='networkidle')
+                    button = reader.locator('[data-reader-' + action + ']')
+                    button.click()
+                    notice = reader.locator('#readerNotice')
+                    require(notice.count() == 1 and notice.is_visible(), action + ' storage failure has no visible feedback')
+                    require(notice.get_attribute('role') == 'status' and "couldn't" in notice.inner_text(), action + ' failure is not announced')
+                    require(button.evaluate('(node) => node === document.activeElement'), action + ' failure lost retry focus')
+                    if action == 'consent':
+                        require(reader.evaluate("localStorage.getItem('ph-consent-v1')") is None, 'Failed preference write changed consent')
+                        require(reader.locator('#savedConsent').is_visible(), 'Failed preference write hid the choice')
+                    else:
+                        require(reader.locator('.saved-story').count() == 1, 'Failed storage mutation lost a saved story')
+                    reader.evaluate('window.allowFixtureStorage=true')
+                    button.click()
+                    require("couldn't" not in notice.inner_text(), action + ' retry left a stale error')
+                    if action == 'consent':
+                        require(reader.evaluate("localStorage.getItem('ph-consent-v1')") == 'preferences', 'Preference retry failed')
+                        require(not reader.locator('#savedConsent').is_visible(), 'Preference retry did not update choices')
+                    else:
+                        require(reader.locator('.saved-story').count() == 0, action + ' retry failed')
+                        require(reader.locator('#savedCount').evaluate('(node) => node === document.activeElement'), action + ' success lost status focus')
+                finally:
+                    blocked.close()
+        check('saved-list storage failures show feedback, preserve data and allow retry', saved_storage_failures)
+
         def sharing():
             page.locator('.article-share').click()
             page.wait_for_selector('.ph-share-panel')
