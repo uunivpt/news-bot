@@ -12,13 +12,15 @@ def briefing_excerpt(value):
     return text if len(text) <= 320 else text[:317].rsplit(" ", 1)[0] + "…"
 
 
-def select_briefing(rows, *, timestamp, desk="all", days=1, now=None, limit=6):
+def select_briefing(rows, *, timestamp, desk="all", days=1, now=None, limit=6,
+                    matches_desk=None):
     current = (now or datetime.now(timezone.utc)).timestamp()
     candidates, identities, urls = [], set(), set()
     for row in rows:
         if row.get("status", "published") != "published" or not row.get("public_source"):
             continue
-        if desk != "all" and row.get("category") != desk:
+        if desk != "all" and not (matches_desk(row, desk) if matches_desk
+                                  else row.get("category") == desk):
             continue
         try:
             identity = int(row.get("id") or 0)
