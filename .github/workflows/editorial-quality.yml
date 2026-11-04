@@ -1,0 +1,26 @@
+name: Editorial quality gate tests
+on:
+  pull_request:
+    paths:
+      - "app/editorial_*.py"
+      - "app/phi4.py"
+      - "scripts/auto_publish.py"
+      - "tests/test_editorial_*.py"
+      - ".github/workflows/editorial-quality.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Compile changed modules
+        run: python -m py_compile app/editorial_gate.py app/editorial_research.py app/phi4.py scripts/auto_publish.py
+      - name: Editorial unit tests
+        run: python -m unittest discover -s tests -p 'test_editorial_*.py' -v
