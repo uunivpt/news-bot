@@ -301,6 +301,35 @@ def run(base, output,admin_fixture=False):
             home()
         check('quick briefing entry, dates, source links, filters and no-JavaScript reading', briefing)
 
+        def normal_motion_navigation():
+            normal = browser.new_context(viewport={'width': 390, 'height': 844},
+                                         reduced_motion='no-preference', service_workers='block')
+            normal.route('**/*', lambda route: route.continue_() if route.request.url.startswith(base + '/') else route.abort())
+            normal_errors = []
+            try:
+                reader = normal.new_page()
+                reader.on('pageerror', lambda error: normal_errors.append(str(error)))
+                reader.goto(base + '/', wait_until='domcontentloaded')
+                reader.locator('#privacyConsent [data-consent-choice="essential"]').click()
+                reader.wait_for_load_state('networkidle')
+                reader.locator('.ph-briefing-entry').click()
+                reader.wait_for_load_state('networkidle')
+                reader.locator('[name="desk"]').select_option('politics')
+                reader.locator('[name="period"]').select_option('week')
+                reader.get_by_role('button', name='Update briefing').click()
+                reader.wait_for_load_state('networkidle')
+                link = reader.locator('.briefing-story h2 a').first
+                title = link.inner_text()
+                link.click()
+                reader.wait_for_load_state('networkidle')
+                require(reader.locator('h1').inner_text() == title, 'Normal navigation opened the wrong report')
+                require(bool(reader.locator('.body').inner_text().strip()), 'Normal navigation lost article text')
+                require(reader.locator('.art').evaluate('(node) => getComputedStyle(node).animationName') != 'none', 'Normal page-entry animation was disabled')
+                require(not normal_errors, 'Normal navigation browser errors: ' + repr(normal_errors))
+            finally:
+                normal.close()
+        check('normal-motion homepage, briefing form and article navigation has no browser errors', normal_motion_navigation)
+
         def article():
             visit(article_href)
             page.wait_for_selector('[data-reader-save]')
