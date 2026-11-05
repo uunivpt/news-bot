@@ -496,6 +496,44 @@ def run(base, output,admin_fixture=False):
                 require(page.locator('.article-share').evaluate('(node) => node === document.activeElement'), 'Share close lost its trigger focus')
         check('clipboard fallback preserves share-dialog keyboard focus and URL', share_clipboard_keyboard)
 
+        def share_pending_actions():
+            reports = page.request.get(base + '/api/news?category=india&limit=20').json()
+            other = next(row for row in reports if row['title'] != page.locator('.art h1').inner_text())
+            story = {'title': other['title'], 'url': '/india/' + str(other.get('news_number') or other['id'])}
+            page.evaluate("""() => {
+                window.fixtureCopyCalls=0;window.fixtureLegacyCalls=0;
+                Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:()=>{
+                    window.fixtureCopyCalls++;
+                    return new Promise((resolve,reject)=>{window.finishFixtureCopy=resolve;window.rejectFixtureCopy=()=>reject(new DOMException('Permission denied','NotAllowedError'))});
+                }}});
+                Object.defineProperty(navigator,'share',{configurable:true,value:()=>new Promise((resolve,reject)=>{window.rejectFixtureShare=()=>reject(new Error('Share unavailable'))})});
+                document.execCommand=()=>{window.fixtureLegacyCalls++;return true};
+            }""")
+            for action in ('copy_success', 'copy_denied', 'more_unavailable'):
+                before = page.evaluate('window.fixtureCopyCalls')
+                page.locator('.article-share').click()
+                page.locator('[data-ph-more]' if action == 'more_unavailable' else '[data-ph-copy]').click()
+                page.keyboard.press('Escape')
+                page.evaluate('story => window.PoliticsHubShare.open(story.title,story.url,document.querySelector(".article-share"))', story)
+                settle = {'copy_success': 'finishFixtureCopy', 'copy_denied': 'rejectFixtureCopy', 'more_unavailable': 'rejectFixtureShare'}[action]
+                page.evaluate('async settle => { window[settle](); await new Promise(resolve=>setTimeout(resolve,0)); }', settle)
+                require(page.locator('[data-ph-message]').inner_text() == '', 'Old share action changed the new story status')
+                require(page.evaluate('window.fixtureLegacyCalls') == 0, 'Old share action copied a stale link through fallback')
+                require(page.evaluate('window.fixtureCopyCalls') == before + (action != 'more_unavailable'), 'Closed native share started a stale clipboard request')
+                require(page.locator('[data-ph-close]').evaluate('(node) => node === document.activeElement'), 'Old share action stole new dialog focus')
+                page.locator('[data-ph-copy]').click()
+                page.evaluate('async () => { window.finishFixtureCopy(); await new Promise(resolve=>setTimeout(resolve,0)); }')
+                require(page.locator('[data-ph-message]').inner_text() == 'Link copied.', 'Current dialog lost copy feedback')
+                page.keyboard.press('Escape')
+            page.locator('.article-share').click()
+            page.locator('[data-ph-more]').click()
+            page.evaluate('async () => { window.rejectFixtureShare(); await new Promise(resolve=>setTimeout(resolve,0)); window.rejectFixtureCopy(); await new Promise(resolve=>setTimeout(resolve,0)); }')
+            require(page.evaluate('window.fixtureLegacyCalls') == 1, 'Current native-share failure lost its clipboard fallback')
+            require(page.locator('[data-ph-message]').inner_text() == 'Link copied. Open another app to paste it.', 'Current native-share failure lost feedback')
+            require(page.locator('[data-ph-more]').evaluate('(node) => node === document.activeElement'), 'Current native-share fallback lost focus')
+            page.keyboard.press('Escape')
+        check('pending share actions cannot update or copy for a replacement dialog', share_pending_actions)
+
         def settings():
             visit('/#/settings')
             page.wait_for_selector('[data-th="dark"]')
