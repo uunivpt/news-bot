@@ -366,13 +366,13 @@ function ensureSearchFilters(){
 }
 const __openS=openS; openS=function(){__openS();ensureSearchFilters()};
 let searchRequest=0,searchTimer,searchOffset=0,searchResults=[],searchController;
-const __doS=doS; doS=async function(append=false){
+const __doS=doS; doS=async function(append=false,restoreFocus=false){
  const requestId=++searchRequest;
  searchController?.abort();searchController=new AbortController();
  const q=$('#si')?.value.trim()||'',cat=window.searchCat||'all';
  const source=$('#searchSource')?.value||'',period=$('#searchPeriod')?.value||'all';
  if(!append){searchOffset=0;searchResults=[]}
- const offset=searchOffset;
+ const offset=searchOffset,previousCount=searchResults.length;
  if(q.length<2){$('#sc').textContent='Enter at least 2 characters to search the archive';$('#sres').innerHTML='';return}
  $('#sc').textContent='Searching…';
  let r=[],localFallback=false,totalMatches=null;
@@ -391,8 +391,11 @@ const __doS=doS; doS=async function(append=false){
  searchResults=searchResults.concat(r.map(norm).filter(i=>{if((cat!=='all'&&!inCat(i,cat))||seen.has(i.id))return false;seen.add(i.id);return true}));
  r=searchResults;
  $('#sc').textContent=(r.length?(r.length+(totalMatches!==null?' of '+totalMatches:'')+' '+(r.length===1?'story':'stories')+' found'):'No stories match your search.')+(localFallback?' Archive unavailable; searching loaded stories only.':'');
+ // Continue past the replaced More button unless the reader moved focus while waiting.
+ const resumeFocus=restoreFocus&&$('#sp').classList.contains('open')&&(document.activeElement===document.body||document.activeElement===$('#searchMore'));
  $('#sres').innerHTML=r.map(i=>'<a class="sr" href="'+esc(articleHref(i))+'">'+(i.image?'<img src="'+esc(i.image)+'" alt="" loading="lazy">':'')+'<div><span class="lbl red">'+esc(i.category)+'</span><h3>'+esc(i.title)+'</h3><small>'+esc(i.source)+' '+ago(i.date)+'</small></div></a>').join('')+(hasMore?'<button type="button" class="btn" id="searchMore">Load more stories</button>':'');
- const more=$('#searchMore');if(more)more.onclick=()=>{more.disabled=true;doS(true)};
+ const more=$('#searchMore');if(more)more.onclick=()=>{const restoreFocus=more===document.activeElement;more.disabled=true;doS(true,restoreFocus)};
+ if(resumeFocus){const links=$$('.sr',$('#sres'));(links[previousCount]||more||links.at(-1)||$('#si')).focus()}
 };
 const __article=article; article=async function(id){const loaded=await __article(id);if(loaded===id&&/^\d+$/.test(id))trackView(id)};
 

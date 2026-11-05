@@ -18,7 +18,7 @@ import threading
 from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 from unittest.mock import patch
 
 from playwright.sync_api import sync_playwright
@@ -165,6 +165,57 @@ def run(base, output,admin_fixture=False):
             page.keyboard.press('Escape')
             require(page.locator('#sbtn').evaluate('(node) => node === document.activeElement'), 'Closing search loses its trigger focus')
         check('keyboard search reaches publisher/date filters and wraps within the dialog', search_keyboard_filters)
+
+        def search_pagination_focus():
+            rows = [{'id': 990000 + index, 'title': f'focusfixture report {index + 1}',
+                     'category': 'india', 'source_name': 'Pagination fixture',
+                     'published_at': datetime.now(timezone.utc).isoformat()}
+                    for index in range(52)]
+            pending, hold = [], False
+            pattern = base + '/api/search?*'
+
+            def respond(route):
+                offset = int(parse_qs(urlsplit(route.request.url).query).get('offset', ['0'])[0])
+                if hold and offset:
+                    pending.append(route)
+                else:
+                    route.fulfill(json=rows[offset:offset + 50], headers={'X-Search-Total': '52'})
+
+            page.route(pattern, respond)
+            try:
+                page.locator('#sbtn').click()
+                page.locator('#si').fill('focusfixture')
+                page.wait_for_function("() => document.querySelectorAll('#sres .sr').length === 50 && !document.querySelector('#sc').textContent.includes('Searching')")
+                page.locator('#searchMore').focus()
+                page.keyboard.press('Enter')
+                page.wait_for_function("() => document.querySelectorAll('#sres .sr').length === 52")
+                require(page.locator('#sres .sr').nth(50).evaluate('(node) => node === document.activeElement'), 'Loading more search results lost keyboard continuation')
+                page.keyboard.press('Tab')
+                require(page.locator('#sres .sr').nth(51).evaluate('(node) => node === document.activeElement'), 'Tab skipped the next new result')
+                page.keyboard.press('Tab')
+                require(page.locator('#si').evaluate('(node) => node === document.activeElement'), 'Final search result did not wrap to the query')
+                page.keyboard.press('Escape')
+                page.locator('#sp').wait_for(state='hidden')
+                page.locator('#sbtn').click()
+                page.locator('#si').fill('focusfixture')
+                page.wait_for_function("() => document.querySelectorAll('#sres .sr').length === 50")
+                hold = True
+                page.locator('#searchMore').focus()
+                page.keyboard.press('Enter')
+                deadline = time.monotonic() + 5
+                while not pending and time.monotonic() < deadline:
+                    page.wait_for_timeout(10)
+                require(len(pending) == 1, 'Pagination request was not held')
+                page.locator('#si').focus()
+                pending.pop().fulfill(json=rows[50:], headers={'X-Search-Total': '52'})
+                page.wait_for_function("() => document.querySelectorAll('#sres .sr').length === 52")
+                require(page.locator('#si').evaluate('(node) => node === document.activeElement'), 'Pagination stole focus after the reader moved it')
+                page.keyboard.press('Escape')
+            finally:
+                for route in pending:
+                    route.abort()
+                page.unroute(pattern, respond)
+        check('keyboard search pagination continues at new results and respects moved focus', search_pagination_focus)
 
         def startup_keeps_reader_controls():
             # Release the independent startup feeds one at a time so both the
