@@ -465,6 +465,37 @@ def run(base, output,admin_fixture=False):
             require(page.locator('.ph-share-panel').count() == 0, 'Share did not close')
         check('article share sheet and keyboard dismissal', sharing)
 
+        def share_clipboard_keyboard():
+            page.evaluate("""() => {
+                Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:()=>Promise.reject(new DOMException('Clipboard fixture denied','NotAllowedError'))}});
+                window.fixtureCopyResult=false;window.fixtureCopyValues=[];
+                document.execCommand=command=>{if(command==='copy')window.fixtureCopyValues.push(document.activeElement.value);return window.fixtureCopyResult};
+            }""")
+            for copied in (False, True):
+                page.evaluate('value => window.fixtureCopyResult=value', copied)
+                page.locator('.article-share').click()
+                copy = page.locator('[data-ph-copy]')
+                copy.focus()
+                page.keyboard.press('Enter')
+                message = 'Link copied.' if copied else 'Please copy the URL from your browser.'
+                page.wait_for_function('expected => document.querySelector("[data-ph-message]").textContent === expected', arg=message)
+                require(copy.evaluate('(node) => node === document.activeElement'), 'Clipboard fallback lost Copy link focus')
+                require(page.evaluate('window.fixtureCopyValues.at(-1)') == page.url, 'Clipboard fallback selected the wrong URL')
+                require(page.locator('textarea').count() == 0, 'Clipboard fallback left a temporary control')
+                page.keyboard.press('Tab')
+                require(page.locator('[data-ph-more]').evaluate('(node) => node === document.activeElement'), 'Tab skipped More apps')
+                page.keyboard.press('Tab')
+                require(page.locator('[data-ph-close]').evaluate('(node) => node === document.activeElement'), 'Share dialog did not wrap focus')
+                page.locator('.article-share').focus()
+                page.keyboard.press('Tab')
+                require(page.locator('[data-ph-close]').evaluate('(node) => node === document.activeElement'), 'Tab escaped share dialog')
+                page.locator('.article-share').focus()
+                page.keyboard.press('Shift+Tab')
+                require(page.locator('[data-ph-more]').evaluate('(node) => node === document.activeElement'), 'Reverse Tab escaped share dialog')
+                page.keyboard.press('Escape')
+                require(page.locator('.article-share').evaluate('(node) => node === document.activeElement'), 'Share close lost its trigger focus')
+        check('clipboard fallback preserves share-dialog keyboard focus and URL', share_clipboard_keyboard)
+
         def settings():
             visit('/#/settings')
             page.wait_for_selector('[data-th="dark"]')
