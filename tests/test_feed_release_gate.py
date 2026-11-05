@@ -48,6 +48,8 @@ class FeedReleaseDecisionTests(unittest.TestCase):
                 channels.append("news")
             if minute % 180 == 0:
                 channels.append("news")  # Recovery and collector can both run.
+            if minute % 10 == 0:
+                channels.append("hindi")  # Collector completions check between releases.
             if minute % 60 == 0:
                 channels.append("hindi")
             for channel in channels:
