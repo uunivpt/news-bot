@@ -25,9 +25,10 @@ Both collection paths receive news API keys. Source failures appear in the Actio
 
 The collector runs every 30 minutes and refreshes the emergency source feed when
 the database is quota-blocked. Independent recovery runs every three hours; both
-English paths share a persisted hourly publication gate. Hindi remains hourly
-with its own gate. Changed source data can therefore create at most 48 commits
-per 24 hours (24 English + 24 Hindi), including recovery/manual refreshes while
+English paths share a persisted hourly publication gate. Hindi keeps its hourly
+schedule and also checks sources after successful main-branch collector runs,
+with its own persisted hourly release gate. Changed source data can therefore
+create at most 48 commits per 24 hours (24 English + 24 Hindi), including recovery/manual refreshes while
 the gate state is retained. Collection checks continue between publication
 windows; held snapshot changes are rebuilt from the next available source feeds.
 GitHub schedules are best-effort. Code releases and other projects also use
