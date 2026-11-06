@@ -1,10 +1,13 @@
 import copy
+import json
 from datetime import datetime, timedelta, timezone
 import unittest
 from unittest.mock import patch
+from bs4 import BeautifulSoup
 
 from api import index as api
 from app.newsroom import dedupe_story_rows
+from app.database import DatabaseUnavailable
 
 
 def story(identity, title, *, category="hindi", score=10):
@@ -64,6 +67,47 @@ class MultilingualHeadlineTests(unittest.TestCase):
         for original, actual in zip(rows, response.json):
             for field in ("title", "published_at", "source_name", "url"):
                 self.assertEqual(actual[field], original[field])
+
+    def test_long_hindi_rss_headline_matches_feed_detail_article_and_share(self):
+        title = 'धनतेरस 2026 Live: शुभ संयोग में धनतेरस आज, जानें खरीदारी का शुभ मुहूर्त और किन बातों का रखें ध्यान'
+        row = story(762, title)
+        row['source_type'] = 'rss'
+        original = copy.deepcopy(row)
+        client = api.app.test_client()
+        with patch.object(api, '_hindi_rows', return_value=[row]), \
+             patch.object(api, '_official_exam_rows', return_value=[]), \
+             patch.object(api, '_snapshot_rows', return_value=[]), \
+             patch.object(api.public_archive, 'by_id', return_value=None), \
+             patch.object(api, 'db', side_effect=DatabaseUnavailable('fixture unavailable')):
+            feed = client.get('/api/hindi-feed')
+            detail = client.get('/api/news/762')
+            page = client.get('/hindi/' + api.news_number(row))
+        self.assertEqual(feed.status_code, 200)
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(feed.json[0]['title'], title)
+        self.assertEqual(detail.json['title'], title)
+        self.assertEqual(detail.json['url'], row['url'])
+        self.assertEqual(detail.json['source_name'], row['source_name'])
+        self.assertEqual(datetime.fromisoformat(detail.json['published_at_iso'].replace('Z', '+00:00')),
+                         datetime.fromisoformat(row['published_at']))
+        document = BeautifulSoup(page.data, 'html.parser')
+        self.assertEqual(document.select_one('.art h1').get_text(), title)
+        self.assertEqual(document.select_one('.article-share')['data-share-title'], title)
+        self.assertEqual(document.select_one('meta[property="og:title"]')['content'], title)
+        metadata = json.loads(document.select_one('script[type="application/ld+json"]').string)
+        self.assertEqual(metadata['headline'], title)
+        self.assertEqual(metadata['datePublished'], detail.json['published_at_iso'])
+        self.assertEqual(row, original)
+
+    def test_hindi_rss_headline_is_still_cleaned_and_other_rss_policy_is_unchanged(self):
+        title = 'धनतेरस 2026 Live: शुभ संयोग में धनतेरस आज, जानें खरीदारी का शुभ मुहूर्त और किन बातों का रखें ध्यान'
+        row = story(763, title)
+        row.update(source_type='rss', title='<strong>' + title + '</strong><script>unsafe()</script>')
+        with api.app.test_request_context('/'):
+            self.assertEqual(api._publicize(row)['title'], title)
+            row['category'] = 'india'
+            self.assertEqual(api._publicize(row)['title'], api._public_title(row['title'], row['summary']))
 
 
 if __name__ == "__main__":
