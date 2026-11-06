@@ -166,6 +166,57 @@ def run(base, output,admin_fixture=False):
             require(page.locator('#sbtn').evaluate('(node) => node === document.activeElement'), 'Closing search loses its trigger focus')
         check('keyboard search reaches publisher/date filters and wraps within the dialog', search_keyboard_filters)
 
+        def search_new_tab():
+            page = context.new_page()
+            page.on('pageerror', lambda error: errors.append(str(error)))
+            try:
+                page.goto(base + '/', wait_until='networkidle')
+                page.locator('#sbtn').click()
+                page.locator('#si').fill('India')
+                page.wait_for_function("() => !document.querySelector('#sc').textContent.includes('Searching') && document.querySelectorAll('#sres .sr').length > 0")
+                original_url = page.url
+                count = page.locator('#sres .sr').count()
+                period = page.locator('#searchPeriod').input_value()
+                source = page.locator('#searchSource').input_value()
+                result = page.locator('#sres .sr').first
+                href = result.get_attribute('href')
+                with context.expect_page() as opened:
+                    result.click(modifiers=['Control'])
+                article = opened.value
+                article.on('pageerror', lambda error: errors.append(str(error)))
+                try:
+                    article.wait_for_url(base + href, wait_until='domcontentloaded')
+                    require(article.locator('.art h1').is_visible(), 'Ctrl+click did not open a readable article')
+                    require(page.url == original_url, 'Ctrl+click navigated the original tab')
+                    require(page.locator('#sp').get_attribute('aria-hidden') == 'false', 'Ctrl+click closed the original search')
+                    require(page.locator('#si').input_value() == 'India', 'Ctrl+click lost the search query')
+                    require(page.locator('#searchPeriod').input_value() == period and page.locator('#searchSource').input_value() == source, 'Ctrl+click changed search filters')
+                    require(page.locator('#sres .sr').count() == count, 'Ctrl+click changed search results')
+                finally:
+                    article.close()
+                # Cancel native navigation after the app handler so OS-specific
+                # modifiers can be checked without opening windows/downloads.
+                for modifier in ('metaKey', 'shiftKey', 'altKey'):
+                    result.evaluate("""(link,modifier) => {
+                        document.addEventListener('click',event=>event.preventDefault(),{once:true});
+                        link.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,button:0,[modifier]:true}));
+                    }""", modifier)
+                    require(page.locator('#sp').get_attribute('aria-hidden') == 'false', modifier + ' closed the original search')
+                for activation in ('click', 'Enter'):
+                    page.evaluate("document.addEventListener('click',event=>event.preventDefault(),{once:true})")
+                    if activation == 'click':
+                        result.click()
+                    else:
+                        result.focus()
+                        page.keyboard.press('Enter')
+                    require(page.locator('#sp').get_attribute('aria-hidden') == 'true', activation + ' no longer closes search')
+                    if activation == 'click':
+                        page.locator('#sbtn').click()
+                        page.wait_for_function("() => !document.querySelector('#sc').textContent.includes('Searching') && document.querySelectorAll('#sres .sr').length > 0")
+            finally:
+                page.close()
+        check('opening search results in another tab preserves the original search', search_new_tab)
+
         def search_pagination_focus():
             rows = [{'id': 990000 + index, 'title': f'focusfixture report {index + 1}',
                      'category': 'india', 'source_name': 'Pagination fixture',
