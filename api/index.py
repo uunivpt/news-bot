@@ -597,7 +597,10 @@ def _publicize(row):
     r["published_at_iso"]=dt.astimezone(timezone.utc).isoformat().replace("+00:00","Z")
    except ValueError:pass
   source_text=_strip_promo_nav(dict(row).get("bot_article") or dict(row).get("bot_summary") or dict(row).get("summary") or "")
-  r["title"]=plain_source_text(r.get("title")) if r.get("source_type")=="manual" else _public_title(r.get("title"),source_text)
+  # The Hindi feed already bounds and cleans publisher headline metadata.
+  # An editorial word cap can remove its final fact or qualifier.
+  source_headline=r.get("source_type")=="rss" and r.get("category")=="hindi"
+  r["title"]=plain_source_text(r.get("title")) if r.get("source_type")=="manual" or source_headline else _public_title(r.get("title"),source_text)
   r["summary"]=plain_source_text(_strip_promo_nav(dict(row).get("bot_summary") or dict(row).get("summary") or ""))
   article_text=plain_source_text(_strip_promo_nav(source_text),paragraphs=True)
   article_text=re.sub(r"(?:\n|\s)*Why it matters:\s*$","",article_text,flags=re.I).strip()

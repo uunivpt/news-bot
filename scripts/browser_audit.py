@@ -612,15 +612,15 @@ def run(base, output,admin_fixture=False):
             def devanagari_feed():
                 from api import index as api
                 now = datetime.now(timezone.utc)
-                titles = ['रेल सेवाओं में बदलाव के बारे में नई सूचना', 'विद्यालयों में प्रवेश की प्रक्रिया का विवरण']
+                titles = ['धनतेरस 2026 Live: शुभ संयोग में धनतेरस आज, जानें खरीदारी का शुभ मुहूर्त और किन बातों का रखें ध्यान', 'विद्यालयों में प्रवेश की प्रक्रिया का विवरण']
                 rows = [{'id': 88001 + index, 'title': title, 'category': 'hindi',
                          'summary': 'मूळ प्रकाशकाच्या वृत्ताचा संक्षिप्त संदर्भ.',
-                         'source_name': 'Browser RSS fixture', 'url': f'https://example.org/hindi/{index}',
+                         'source_name': 'Browser RSS fixture', 'source_type': 'rss', 'url': f'https://example.org/hindi/{index}',
                          'published_at': (now - timedelta(minutes=index)).isoformat(),
                          'status': 'published', 'public_source': True} for index, title in enumerate(titles)]
                 with patch.object(api, '_hindi_rows', return_value=rows):
                     visit('/hindi/')
-                    page.wait_for_function("expected => document.querySelector('.ph14-lead h1')?.textContent === expected", arg=titles[0])
+                    page.wait_for_function("titles => document.querySelector('.ph14-lead h1')?.textContent === titles[0] && document.querySelector('#app').textContent.includes(titles[1])", arg=titles)
                     require(page.locator('.ph14-lead h1').inner_text() == titles[0], 'Devanagari-only lead was dropped')
                     require(titles[1] in page.locator('#app').inner_text(), 'Second Hindi report was dropped')
                     result = page.evaluate("async () => (await fetch('/api/hindi-feed')).json()")
