@@ -262,7 +262,7 @@ async function doS(){const q=$('#si').value.trim();if(!q){$('#sc').textContent='
  $('#sc').textContent=r.length?(r.length+' '+(r.length===1?'story':'stories')+' found in the archive'):'No stories match your search.';
  $('#sres').innerHTML=r.slice(0,50).map(i=>`<a class="sr" href="${articleHref(i)}">${i.image?`<img src="${esc(i.image)}" alt="" loading="lazy" onerror="this.remove()">`:''}<div><span class="lbl red">${esc(i.category)}</span><h3>${esc(i.title)}</h3><small>${esc(i.source)} ${ago(i.date)}</small></div></a>`).join('')}
 $('#bg').onclick=openD;$('#dx').onclick=closeD;$('#bd').onclick=closeD;$('#sbtn').onclick=()=>openS();$('#sx').onclick=closeS;$('#si').oninput=()=>{searchRequest++;searchController?.abort();clearTimeout(searchTimer);searchTimer=setTimeout(()=>doS(),250)};$('#sf').onsubmit=e=>e.preventDefault();
-$('#sres').onclick=e=>{if(e.target.closest('a'))closeS()};
+$('#sres').onclick=e=>{if(!e.defaultPrevented&&e.button===0&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey&&!e.altKey&&e.target.closest('a'))closeS()};
 addEventListener('keydown',e=>{if(e.key==='Escape')closeAll();if(e.key==='/'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)&&!document.activeElement.isContentEditable){e.preventDefault();openS()}});
 $('#pz').onclick=e=>{const p=$('#tk').classList.toggle('pz');e.currentTarget.setAttribute('aria-pressed',p);e.currentTarget.setAttribute('aria-label',p?'Play ticker':'Pause ticker')};
 /* theme + prefs */
