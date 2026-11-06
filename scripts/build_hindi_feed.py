@@ -24,6 +24,8 @@ log = logging.getLogger(__name__)
 
 
 def story_from_rss(item, now):
+    if getattr(item, "public_source", False) is not True:
+        return None
     title = clean_text(item.title)
     if not 15 <= len(title) <= 220 or not HINDI.search(title) or not valid_url(item.url):
         return None
@@ -73,7 +75,7 @@ def main():
             by_url[record["url"]] = record
     successful = 0
     for source in load_sources().get("hindi_rss", []):
-        if not source.get("enabled", True):
+        if not source.get("enabled", True) or source.get("public_source") is not True:
             continue
         try:
             for item in collect_rss(source):
