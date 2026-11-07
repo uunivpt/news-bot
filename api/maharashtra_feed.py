@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlsplit
 import feedparser
 import requests
+from app.source_http import fetch_source
 
 CACHE_SECONDS = 20 * 60
 FEEDS = (
@@ -34,13 +35,10 @@ def _when(entry: dict) -> str | None:
     return None
 
 def _read_one(name: str, feed_url: str, hosts: tuple[str, ...], language="mr") -> list[dict]:
-    response = requests.get(
-        feed_url, timeout=(3,7),
+    response = fetch_source(
+        feed_url, timeout=10, max_bytes=2_000_000, allowed_hosts=hosts,
         headers={"User-Agent": "PoliticsHubNewsBot/1.0 (attributed RSS reader)", "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml"},
     )
-    response.raise_for_status()
-    if len(response.content) > 2_000_000:
-        raise ValueError("RSS feed exceeds size budget")
     parsed = feedparser.parse(response.content)
     if not parsed.entries or not getattr(parsed,"version",""):
         raise ValueError("Publisher returned no valid RSS or Atom entries")
