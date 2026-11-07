@@ -49,6 +49,22 @@ class RSSCollectorTests(unittest.TestCase):
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0].summary, "A public source report.")
 
+    def test_unexpected_html_declaration_does_not_drop_a_public_feed(self):
+        feed = b'''<rss version="2.0"><channel><title>Source</title>
+        <item><title>Public parser regression report</title>
+        <link>https://example.com/report</link>
+        <pubDate>Fri, 06 Nov 2026 12:00:00 GMT</pubDate>
+        <description><![CDATA[Before <![bad]> after.]]></description>
+        </item></channel></rss>'''
+        with patch("app.rss.fetch_source", return_value=SourceDocument("https://example.com/feed", feed, "application/rss+xml")):
+            items = collect_rss({"name": "Permitted fixture", "url": "https://example.com/feed", "public_source": True})
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].title, "Public parser regression report")
+        self.assertEqual(items[0].url, "https://example.com/report")
+        self.assertEqual(items[0].published_at, "Fri, 06 Nov 2026 12:00:00 GMT")
+        self.assertEqual(items[0].source_name, "Permitted fixture")
+        self.assertTrue(items[0].public_source)
+
 
 if __name__ == "__main__":
     unittest.main()
