@@ -520,7 +520,7 @@ def run(base, output,admin_fixture=False):
                 require(choices.locator('#savedConsent').is_hidden(), 'Saved page still requests its own accepted preference')
                 choices.evaluate('localStorage.clear()')
                 choices.reload(wait_until='networkidle')
-                choices.evaluate("""() => {const set=Storage.prototype.setItem;window.restoreConsentStorage=()=>Storage.prototype.setItem=set;Storage.prototype.setItem=function(k,v){if(k==='ph-consent-v1')throw new DOMException('Fixture denied','SecurityError');return set.call(this,k,v)}}""")
+                choices.evaluate("""() => {const set=Storage.prototype.setItem;window.restoreConsentStorage=()=>{Storage.prototype.setItem=set};Storage.prototype.setItem=function(k,v){if(k==='ph-consent-v1')throw new DOMException('Fixture denied','SecurityError');return set.call(this,k,v)}}""")
                 choices.locator('[data-site-preference="preferences"]').click()
                 require(choices.locator('#privacyConsent').is_visible(), 'Storage denial dismissed privacy choices')
                 require("couldn't save" in choices.locator('#privacyConsent [role="status"]').inner_text(), 'Storage denial gives no explanation')
