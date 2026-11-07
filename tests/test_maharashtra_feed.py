@@ -1,8 +1,10 @@
 import json
+import socket
 import unittest
 from unittest.mock import Mock, patch
 
 from api import maharashtra_feed as mh
+from app.source_http import SourceDocument, UnsafeSourceURL
 
 SAMPLE = """<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>Test</title><item><title>पुण्यात महत्त्वाची बातमी</title><link>https://www.tv9marathi.com/maharashtra/pune-1.html</link><pubDate>Tue, 27 Oct 2026 12:00:00 GMT</pubDate></item><item><title>English headline</title><link>https://www.tv9marathi.com/maharashtra/english.html</link></item><item><title>दुसरी बातमी</title><link>https://malicious.example/bad</link></item></channel></rss>""".encode("utf-8")
 
@@ -12,12 +14,68 @@ class MaharashtraFeedTests(unittest.TestCase):
         mh._cache.clear()
 
     def test_source_feed_remains_marathi_and_allowlisted(self):
-        with patch.object(mh.requests, "get", return_value=Mock(content=SAMPLE, raise_for_status=lambda: None)):
+        with patch.object(mh, "fetch_source", return_value=SourceDocument("https://www.tv9marathi.com/maharashtra/feed", SAMPLE, "application/rss+xml")) as fetch:
             rows = mh._read_one("TV9 Marathi", "https://www.tv9marathi.com/maharashtra/feed", ("www.tv9marathi.com",))
+        self.assertEqual(fetch.call_args.kwargs['allowed_hosts'], ('www.tv9marathi.com',))
+        self.assertEqual(fetch.call_args.kwargs['max_bytes'], 2_000_000)
+        self.assertEqual(fetch.call_args.kwargs['timeout'], 10)
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["title"], "पुण्यात महत्त्वाची बातमी")
         self.assertEqual(rows[0]["category"], "maharashtra")
         self.assertEqual(rows[0]["source_name"], "TV9 Marathi")
+
+    def test_source_redirects_cannot_leave_publisher_boundary(self):
+        for target in ('https://127.0.0.1/private', 'https://other.example/feed', 'http://www.tv9marathi.com/feed'):
+            response = Mock(status_code=302, headers={'Location': target}, content=SAMPLE)
+            response.raise_for_status.return_value = None
+            response.iter_content.return_value = iter([SAMPLE])
+            with self.subTest(target=target), \
+                 patch('app.source_http.socket.getaddrinfo', return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))]), \
+                 patch('requests.get', return_value=response) as get:
+                with self.assertRaises(UnsafeSourceURL):
+                    mh._read_one('TV9 Marathi', 'https://www.tv9marathi.com/maharashtra/feed', ('www.tv9marathi.com',))
+                self.assertEqual(get.call_count, 1)
+                self.assertFalse(get.call_args.kwargs['allow_redirects'])
+                response.close.assert_called_once()
+
+    def test_source_body_is_bounded_before_reading_it_all(self):
+        class StreamingResponse:
+            status_code = 200
+            headers = {'Content-Type': 'application/rss+xml'}
+            consumed = 0
+            closed = False
+            @property
+            def content(self):
+                raise AssertionError('Maharashtra RSS must not eagerly read the full response')
+            def raise_for_status(self):
+                pass
+            def iter_content(self, chunk_size):
+                for chunk in (b'x' * 1_000_000, b'y' * 1_000_000, b'z', b'unread'):
+                    self.consumed += 1
+                    yield chunk
+            def close(self):
+                self.closed = True
+        response = StreamingResponse()
+        with patch('app.source_http.socket.getaddrinfo', return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))]), \
+             patch('requests.get', return_value=response):
+            with self.assertRaises(ValueError):
+                mh._read_one('TV9 Marathi', 'https://www.tv9marathi.com/maharashtra/feed', ('www.tv9marathi.com',))
+        self.assertEqual(response.consumed, 3)
+        self.assertTrue(response.closed)
+
+    def test_permitted_redirect_keeps_publisher_metadata(self):
+        redirect = Mock(status_code=302, headers={'Location': '/canonical-feed'}, content=SAMPLE)
+        final = Mock(status_code=200, headers={'Content-Type': 'application/rss+xml'}, content=SAMPLE)
+        final.iter_content.return_value = iter([SAMPLE])
+        with patch('app.source_http.socket.getaddrinfo', return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))]), \
+             patch('requests.get', side_effect=[redirect, final]) as get:
+            rows = mh._read_one('TV9 Marathi', 'https://www.tv9marathi.com/maharashtra/feed', ('www.tv9marathi.com',))
+        self.assertEqual([call.args[0] for call in get.call_args_list], ['https://www.tv9marathi.com/maharashtra/feed', 'https://www.tv9marathi.com/canonical-feed'])
+        self.assertEqual(rows[0]['title'], 'पुण्यात महत्त्वाची बातमी')
+        self.assertEqual(rows[0]['url'], 'https://www.tv9marathi.com/maharashtra/pune-1.html')
+        self.assertEqual(rows[0]['published_at'], '2026-10-27T12:00:00+00:00')
+        redirect.close.assert_called_once()
+        final.close.assert_called_once()
 
     def test_same_publisher_and_url_after_translation(self):
         original = [
@@ -70,15 +128,17 @@ class MaharashtraFeedTests(unittest.TestCase):
 
     def test_temporary_source_failure_preserves_dated_headlines(self):
         from requests import Timeout
-        original = {'items':[{'title':'पुण्यात महत्त्वाची बातमी','url':'https://www.tv9marathi.com/maharashtra/a','source_name':'TV9 Marathi'}],
+        original = {'items':[{'title':'पुण्यात महत्त्वाची बातमी','url':'https://www.tv9marathi.com/maharashtra/a','source_name':'TV9 Marathi','published_at':'2026-10-27T12:00:00Z'}],
                     'sources':{},'last_checked':'2026-10-27T13:00:00Z','status':'ok','refresh_minutes':20}
-        mh._cache['original']={'result':original,'expires':0}
-        with patch.object(mh,'_read_one',side_effect=Timeout('temporary')):
-            result=mh.get_feed('mr')
-        self.assertEqual(result['items'],original['items'])
-        self.assertEqual(result['status'],'stale')
-        self.assertEqual(result['last_checked'],original['last_checked'])
-        self.assertFalse(result['sources']['TV9 Marathi']['available'])
+        for error in (Timeout('temporary'), UnsafeSourceURL('blocked redirect fixture')):
+            with self.subTest(error=type(error).__name__):
+                mh._cache['original']={'result':original,'expires':0}
+                with patch.object(mh,'_read_one',side_effect=error):
+                    result=mh.get_feed('mr')
+                self.assertEqual(result['items'],original['items'])
+                self.assertEqual(result['status'],'stale')
+                self.assertEqual(result['last_checked'],original['last_checked'])
+                self.assertFalse(result['sources']['TV9 Marathi']['available'])
 
     def test_failed_translations_back_off_instead_of_retrying_per_reader(self):
         original=[{'title':'पुण्यात महत्त्वाची बातमी','url':'https://www.tv9marathi.com/maharashtra/a','source_name':'TV9 Marathi'}]
