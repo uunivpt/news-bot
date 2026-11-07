@@ -312,8 +312,10 @@ def run(base, output,admin_fixture=False):
                             require(len(publishers) == len(set(publishers)), 'Publisher options duplicated')
                             require(cold_page.locator('#searchSource').input_value() == selected_source, 'Feed arrival reset publisher selection')
                             if feed == 'english':
-                                selected_source = cold_page.locator('#sres .sr small').first.text_content()
-                                selected_source = next(source for source in loaded_sources if selected_source.startswith(source))
+                                # Archive results can include publishers absent from
+                                # the bounded startup feed. Select a loaded publisher.
+                                selected_source = next((source for source in loaded_sources if 'india' in source.lower()), '')
+                                require(bool(selected_source), 'No loaded India publisher for startup filter check')
                                 cold_page.locator('#searchSource').select_option(selected_source)
                                 cold_page.wait_for_function("() => document.querySelectorAll('#sres .sr').length > 0 && !document.querySelector('#sc').textContent.includes('Searching')")
                                 cold_page.locator('#searchSource').focus()
