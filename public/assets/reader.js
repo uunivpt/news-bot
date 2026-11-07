@@ -47,6 +47,7 @@
   if(event.target.closest('[data-reader-print]'))window.print();
   if(event.target.closest('[data-reader-consent]')){
    try{storage.setItem('ph-consent-v1','preferences')}catch(_){notice("Your browser couldn't enable preferences. Check browser storage settings.");return}
+   window.dispatchEvent(new Event('ph-preferences-changed'));
    renderSaved();sync();notice('Preferences enabled. You can now save stories on this device.');
   }
  });
@@ -56,7 +57,7 @@
   if(allowed())try{storage.setItem(sizeKey,event.target.value)}catch(_){notice("Text size changed for this article, but your browser couldn't remember it.")}
  });
  const refresh=()=>{renderSaved();sync()};
- window.addEventListener('storage',refresh);window.addEventListener('ph-preferences-cleared',refresh);
+ window.addEventListener('storage',refresh);window.addEventListener('ph-preferences-cleared',refresh);window.addEventListener('ph-preferences-changed',refresh);
  document.addEventListener('click',event=>{if(event.target.closest('[data-consent-choice]'))queueMicrotask(refresh)});
  const app=$('#app');if(app)new MutationObserver(()=>{if(!scheduled){scheduled=true;queueMicrotask(()=>{scheduled=false;enhanceArticle()})}}).observe(app,{childList:true,subtree:true});
  enhanceArticle();renderSaved();

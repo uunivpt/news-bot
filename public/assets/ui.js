@@ -67,6 +67,11 @@
       banner.setAttribute('aria-label', 'Site preference choices');
       banner.innerHTML = '<div><strong>Site preferences</strong><p>Essential storage keeps your choice. Optional storage saves reading preferences and bookmarked stories. Google advertising consent is separate and uses its own privacy message where available.</p><a href="/privacy.html">Privacy Policy</a> · <a href="/cookies.html">Cookie Policy</a></div><div class="privacy-actions"><button type="button" class="btn secondary" data-site-preference="essential">Essential only</button><button type="button" class="btn" data-site-preference="preferences">Allow preferences</button></div>';
       document.body.append(banner);
+      const dismissIfChosen = () => {
+        try { if (['essential','preferences'].includes(localStorage.getItem('ph-consent-v1'))) banner.remove(); } catch (_) {}
+      };
+      window.addEventListener('ph-preferences-changed', dismissIfChosen);
+      window.addEventListener('storage', dismissIfChosen);
       banner.addEventListener('click', event => {
         const button = event.target.closest('[data-site-preference]');
         if (!button) return;
@@ -79,7 +84,13 @@
               .forEach(key => localStorage.removeItem(key));
             document.documentElement.dataset.theme = 'light';
           }
-        } catch (_) {}
+        } catch (_) {
+          let message = banner.querySelector('[role="status"]');
+          if (!message) { message = document.createElement('p'); message.setAttribute('role', 'status'); banner.append(message); }
+          message.textContent = "Your browser couldn't save this choice. Check browser storage settings and try again.";
+          return;
+        }
+        window.dispatchEvent(new Event('ph-preferences-changed'));
         banner.remove();
       });
     }
