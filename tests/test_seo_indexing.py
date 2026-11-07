@@ -64,7 +64,7 @@ class SEOIndexingTests(unittest.TestCase):
         served=Path("public/static-sitemap.xml").read_text(encoding="utf-8").strip()
         generated=static_sitemap_xml()
         self.assertEqual(served,generated)
-        self.assertEqual(len(ET.fromstring(served)),23)
+        self.assertEqual(len(ET.fromstring(served)),24)
 
     def test_active_category_landings_are_discoverable_but_retired_desks_are_not(self):
         from app.seo_indexing import STATIC_PAGES
