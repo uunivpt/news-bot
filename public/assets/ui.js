@@ -56,7 +56,7 @@
   // Site-preference consent for non-SPA pages; advertising consent is separately
   // handled by the Google-certified CMP, not by these buttons.
   if (!document.querySelector('script[src*="/assets/site.js"]') &&
-      !/^\\/(?:admin|newsroom-console|debug)/.test(path)) {
+      !['/admin','/newsroom-console','/debug'].some(prefix => path.startsWith(prefix))) {
     let mode = '';
     try { mode = localStorage.getItem('ph-consent-v1') || ''; } catch (_) {}
     if (!mode) {
