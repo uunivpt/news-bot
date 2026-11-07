@@ -10,7 +10,7 @@ const ls={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:
 const CONSENT_KEY='ph-consent-v1';
 function consentMode(){return ls.get(CONSENT_KEY)||''}
 function preferencesAllowed(){return consentMode()==='preferences'}
-function clearOptionalStorage(){[CACHE_KEY,...LEGACY_CACHE_KEYS,'ph-theme','ph-cookie','ph-ls','ph-reading-list-v1'].forEach(ls.del);window.dispatchEvent(new Event('ph-preferences-cleared'))}
+function clearOptionalStorage(){[CACHE_KEY,...LEGACY_CACHE_KEYS,'ph-theme','ph-cookie','ph-ls','ph-reading-list-v1','ph-reader-size-v1'].forEach(ls.del);window.dispatchEvent(new Event('ph-preferences-cleared'))}
 function setConsent(mode){
  const value=mode==='preferences'?'preferences':'essential';
  ls.set(CONSENT_KEY,value);
@@ -23,7 +23,7 @@ function showConsentBanner(force=false){
  if(!force&&consentMode())return;
  document.querySelector('#privacyConsent')?.remove();
  const box=document.createElement('section');box.id='privacyConsent';box.className='privacy-consent';box.setAttribute('role','dialog');box.setAttribute('aria-label','Privacy choices');
- box.innerHTML='<div><strong>Privacy choices</strong><p>PoliticsHub.in uses essential storage for your privacy choice. Optional browser storage can remember theme and cache recent stories. Eligible article pages may use Google AdSense. These buttons control site preferences; see the Cookie Policy for advertising choices.</p><a href="/cookies.html">Cookie Policy</a> · <a href="/privacy.html">Privacy Policy</a></div><div class="privacy-actions"><button type="button" class="btn secondary" data-consent-choice="essential">Essential only</button><button type="button" class="btn" data-consent-choice="preferences">Allow preferences</button></div>';
+ box.innerHTML='<div><strong>Privacy choices</strong><p>PoliticsHub.in uses essential storage for your privacy choice. Optional browser storage can remember theme, article text size and saved stories, and cache recent stories. Eligible article pages may use Google AdSense. These buttons control site preferences; see the Cookie Policy for advertising choices.</p><a href="/cookies.html">Cookie Policy</a> · <a href="/privacy.html">Privacy Policy</a></div><div class="privacy-actions"><button type="button" class="btn secondary" data-consent-choice="essential">Essential only</button><button type="button" class="btn" data-consent-choice="preferences">Allow preferences</button></div>';
  document.body.append(box);
 }
 document.addEventListener('click',e=>{const b=e.target.closest('[data-consent-choice]');if(b)setConsent(b.dataset.consentChoice);if(e.target.closest('[data-open-consent]')){e.preventDefault();showConsentBanner(true)}});
@@ -223,7 +223,7 @@ function settings(sub){document.documentElement.lang='en';setActive('');document
  $('#app').innerHTML=`<div class="set"><span class="lbl red">Preferences</span><h1>Settings</h1>
  <section><h2>Appearance</h2><div class="themes"><button class="tc" data-th="light" aria-pressed="${th==='light'}"><div class="pv" style="background:#f4f1ec;color:#121212"><i></i><i></i><i></i></div><b>Bright</b></button><button class="tc" data-th="dark" aria-pressed="${th==='dark'}"><div class="pv" style="background:#0c0c0d;color:#f1ede5"><i></i><i></i><i></i></div><b>Dark</b></button></div><small class="lbl">Theme is remembered only when optional preferences are allowed.</small></section>
  <section id="prefs"><h2>Privacy choices</h2>
- <div class="row"><span>Optional browser storage<br><small class="lbl">Theme and recent-story cache</small></span><strong>${privacy}</strong></div>
+ <div class="row"><span>Optional browser storage<br><small class="lbl">Theme, text size, saved stories and recent-story cache</small></span><strong>${privacy}</strong></div>
  <div class="legal-actions"><button class="btn" data-consent-choice="preferences">Allow preferences</button><button class="btn secondary" data-consent-choice="essential">Essential only</button><a class="btn secondary" href="/cookies.html">Cookie Policy</a></div>
  <div class="row"><span>Reset local preferences</span><button class="btn" id="rst">Reset</button></div></section>
  <section id="status"><h2>System status</h2>

@@ -5,6 +5,8 @@
  let storage;
  try{storage=window.localStorage}catch(_){storage={getItem:()=>null,setItem:()=>{throw Error('Unavailable')},removeItem:()=>{}}}
  const allowed=()=>{try{return storage.getItem('ph-consent-v1')==='preferences'}catch(_){return false}};
+ const sizeKey='ph-reader-size-v1',sizes=['normal','large','larger'];
+ function readingSize(){if(!allowed())return 'normal';try{const size=storage.getItem(sizeKey);return sizes.includes(size)?size:'normal'}catch(_){return 'normal'}}
  const list=window.PHReadingList.create(storage,location.origin,allowed);
  const storageError="Your browser couldn't update saved stories. Check browser storage settings.";
  let current=null,scheduled=false;
@@ -22,7 +24,8 @@
   const words=(article.querySelector('.body')?.textContent||'').trim().split(/\s+/).filter(Boolean).length;
   const tools=document.createElement('div');tools.className='reader-tools';tools.setAttribute('aria-label','Reading tools');
   tools.innerHTML='<span>'+Math.max(1,Math.ceil(words/220))+' min read</span><button type="button" data-reader-save aria-pressed="false">Save story</button><a href="/saved.html">Saved stories</a><label>Text size <select data-reader-size aria-label="Article text size"><option value="normal">Standard</option><option value="large">Large</option><option value="larger">Extra large</option></select></label><button type="button" data-reader-print>Print</button>';
-  (article.querySelector('.ah')||heading).insertAdjacentElement('afterend',tools);sync();
+  (article.querySelector('.ah')||heading).insertAdjacentElement('afterend',tools);
+  const size=readingSize();article.setAttribute('data-reader-size',size);tools.querySelector('[data-reader-size]').value=size;sync();
  }
  function renderSaved(){
   const root=$('#savedList');if(!root)return;
@@ -47,7 +50,11 @@
    renderSaved();sync();notice('Preferences enabled. You can now save stories on this device.');
   }
  });
- document.addEventListener('change',event=>{if(event.target.matches('[data-reader-size]'))$('article.art')?.setAttribute('data-reader-size',event.target.value)});
+ document.addEventListener('change',event=>{
+  if(!event.target.matches('[data-reader-size]')||!sizes.includes(event.target.value))return;
+  $('article.art')?.setAttribute('data-reader-size',event.target.value);
+  if(allowed())try{storage.setItem(sizeKey,event.target.value)}catch(_){notice("Text size changed for this article, but your browser couldn't remember it.")}
+ });
  const refresh=()=>{renderSaved();sync()};
  window.addEventListener('storage',refresh);window.addEventListener('ph-preferences-cleared',refresh);
  document.addEventListener('click',event=>{if(event.target.closest('[data-consent-choice]'))queueMicrotask(refresh)});
