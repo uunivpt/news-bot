@@ -53,4 +53,36 @@
   const storeScript=document.createElement('script');storeScript.src='/assets/reading-list.js?v=ph30';
   storeScript.onload=()=>{const readerScript=document.createElement('script');readerScript.src='/assets/reader.js?v=ph30';document.head.append(readerScript)};
   document.head.append(storeScript);
+  // Site-preference consent for non-SPA pages; advertising consent is separately
+  // handled by the Google-certified CMP, not by these buttons.
+  if (!document.querySelector('script[src*="/assets/site.js"]') &&
+      !/^\\/(?:admin|newsroom-console|debug)/.test(path)) {
+    let mode = '';
+    try { mode = localStorage.getItem('ph-consent-v1') || ''; } catch (_) {}
+    if (!mode) {
+      const banner = document.createElement('section');
+      banner.id = 'privacyConsent';
+      banner.className = 'privacy-consent';
+      banner.setAttribute('role', 'region');
+      banner.setAttribute('aria-label', 'Site preference choices');
+      banner.innerHTML = '<div><strong>Site preferences</strong><p>Essential storage keeps your choice. Optional storage saves reading preferences and bookmarked stories. Google advertising consent is separate and uses its own privacy message where available.</p><a href="/privacy.html">Privacy Policy</a> · <a href="/cookies.html">Cookie Policy</a></div><div class="privacy-actions"><button type="button" class="btn secondary" data-site-preference="essential">Essential only</button><button type="button" class="btn" data-site-preference="preferences">Allow preferences</button></div>';
+      document.body.append(banner);
+      banner.addEventListener('click', event => {
+        const button = event.target.closest('[data-site-preference]');
+        if (!button) return;
+        const choice = button.dataset.sitePreference === 'preferences' ? 'preferences' : 'essential';
+        try {
+          localStorage.setItem('ph-consent-v1', choice);
+          if (choice === 'essential') {
+            ['ph-news-cache','ph-news-cache-v6','ph-news-cache-v5','ph-news-cache-v4',
+             'ph-theme','ph-cookie','ph-ls','ph-reading-list-v1','ph-reader-size-v1']
+              .forEach(key => localStorage.removeItem(key));
+            document.documentElement.dataset.theme = 'light';
+          }
+        } catch (_) {}
+        banner.remove();
+      });
+    }
+  }
+
 })();
