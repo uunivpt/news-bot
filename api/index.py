@@ -780,6 +780,26 @@ def _public_row_by_id(item_id):
  proxied=_proxy_public("/api/news/"+str(int(item_id)))
  return proxied.get_json(silent=True) if proxied is not None and proxied.status_code<400 else None
 
+def _article_publication_datetime(row):
+ """Return an actual timestamp for a news article, not the current time.
+
+ Use site publication timestamp when present; otherwise label a source
+ publication timestamp as such. Ignore unparseable or timezone-less dates.
+ """
+ for key in ("published_at_site", "published_at_iso", "published_at"):
+  raw=str(row.get(key) or "").strip()
+  if not raw:continue
+  try:
+   date=datetime.fromisoformat(raw.replace("Z","+00:00"))
+  except ValueError:
+   try:date=parsedate_to_datetime(raw)
+   except (ValueError,TypeError,IndexError):continue
+  if date.tzinfo is None:continue
+  if date > datetime.now(timezone.utc)+timedelta(hours=24):continue
+  return date.astimezone(timezone.utc), "Published" if key=="published_at_site" else "Source published"
+ return None, None
+
+
 def _article_html(row):
  row=dict(row)
  indexable=is_indexable(row)
@@ -790,23 +810,26 @@ def _article_html(row):
  article_ad_code = ('<meta name="google-adsense-account" content="ca-pub-1752666987448533"><script src="/assets/measurement.js?v=consent1" defer></script><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1752666987448533" crossorigin="anonymous"></script>' if ads_eligible else '')
  title=str(row.get("title") or "PoliticsHub.in"); category=str(row.get("category") or "India")
  canonical=SITE_ORIGIN+article_path(row)
- published=row.get("published_at_iso") or row.get("published_at_site") or row.get("published_at")
- modified=row.get("published_at_iso") or row.get("published_at_site") or row.get("published_at")
+ published_at,published_label=_article_publication_datetime(row)
+ pub_iso=published_at.isoformat(timespec="seconds").replace("+00:00","Z") if published_at else ""
+ date_html=('<time class="article-published" datetime="'+html.escape(pub_iso,quote=True)+'">'+html.escape(published_label)+': '+html.escape(published_at.astimezone(ZoneInfo("Asia/Kolkata")).strftime("%d %b %Y, %I:%M %p IST"))+'</time>') if published_at else '<span class="article-published">Publication date unavailable</span>'
+ og_published_meta='<meta property="article:published_time" content="'+html.escape(pub_iso,quote=True)+'">' if pub_iso else ''
  summary=plain_source_text(row.get("summary") or row.get("bot_summary"))
  language="hi" if normalize_category(category,title,summary)=="hindi" else "en"
  body=plain_source_text(row.get("article") or row.get("bot_article") or row.get("body") or summary,paragraphs=True)
  source=str(row.get("source_name") or "PoliticsHub.in")
  source_url=_safe_source_url(row.get("url"))
  image=SITE_ORIGIN+"/api/og/"+str(row.get("id"))+"?v=20261031-deva"
- pub_iso=str(published or datetime.now(timezone.utc).isoformat())
- if pub_iso and not re.search(r"[+-]\d\d:\d\d|Z$",pub_iso): pub_iso=pub_iso+"Z"
  data={
   "@context":"https://schema.org","@type":"NewsArticle","headline":title,"inLanguage":language,
-  "description":summary,"image":[image],"datePublished":pub_iso,"dateModified":str(modified or pub_iso),
+  "description":summary,"image":[image],
   "author":[{"@type":"Organization","name":EDITORIAL_DESK,"url":SITE_ORIGIN+"/author/politicshub-news-desk"}],
   "publisher":{"@type":"Organization","name":"PoliticsHub.in","url":SITE_ORIGIN,"logo":{"@type":"ImageObject","url":SITE_ORIGIN+"/favicon.svg"}},
   "mainEntityOfPage":{"@type":"WebPage","@id":canonical},"isAccessibleForFree":True
  }
+ if published_at:
+  data["datePublished"]=pub_iso
+  data["dateModified"]=pub_iso
  if source_url:
   data["isBasedOn"]=source_url
  json_ld=json.dumps(data,ensure_ascii=False).replace("<", "\\u003c")
@@ -824,14 +847,14 @@ def _article_html(row):
 <meta property="og:title" content="{html.escape(title)}"><meta property="og:description" content="{html.escape(summary[:200])}">
 <meta property="og:url" content="{html.escape(canonical)}"><meta property="og:image" content="{html.escape(image)}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="{html.escape(title)}"><meta name="twitter:description" content="{html.escape(summary[:200])}"><meta name="twitter:image" content="{html.escape(image)}">
-<meta property="article:section" content="{html.escape(category)}"><meta property="article:published_time" content="{html.escape(pub_iso)}">
+<meta property="article:section" content="{html.escape(category)}">{og_published_meta}
 <link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/share.css?v=phshare2">
 <script type="application/ld+json">{json_ld}</script>
 <link rel="stylesheet" href="/assets/polish.css?v=phui30"><script src="/assets/ui.js?v=phui30" defer></script><script src="/assets/share.js?v=phshare2" defer></script></head><body>
 <header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><div class="acts"><a class="ib" href="/" aria-label="Home">⌂</a><a class="ib" href="/about.html" aria-label="About">i</a></div></div></header>
 <main class="wrap"><article class="art" data-k="{html.escape(category.lower())}">
 <div class="ah"><span class="chip">{html.escape(category)}</span><h1>{html.escape(title)}</h1>{lead_html}
-<div class="by"><small>News No. {html.escape(news_number(row))}</small><span>{"Reviewed by" if ads_eligible else "Compiled by"} <a href="/author/politicshub-news-desk">{EDITORIAL_DESK}</a></span><time datetime="{html.escape(pub_iso,quote=True)}">{html.escape(str(published or ""))}</time><span>{html.escape(source)}</span></div></div>
+<div class="by"><small>News No. {html.escape(news_number(row))}</small><span>{"Reviewed by" if ads_eligible else "Compiled by"} <a href="/author/politicshub-news-desk">{EDITORIAL_DESK}</a></span>{date_html}<span>{html.escape(source)}</span></div></div>
 {"<div class='ahero'><img src='"+html.escape(str(_public_image_path(row)),quote=True)+"' alt='"+html.escape(title,quote=True)+"' loading='eager'></div>" if _public_image_path(row) else ""}
 <div class="body">{paras}</div>
 <div class="src"><strong>Content type:</strong> {"PoliticsHub editorial copy. Readers can check the cited sources and correction history." if row.get("source_type")=="manual" else "Source-linked brief based on the originating publisher. This is not an independently reported PoliticsHub article; consult the original link for full context."}</div>
