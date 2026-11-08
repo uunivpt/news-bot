@@ -47,5 +47,5 @@ test('news UI does not label source-only excerpts as full original reports', () 
   assert.match(homepage,/Read source-linked brief/);
   assert.match(homepage,/ph14-source-label/);
   assert.match(site,/Source-linked brief based on reporting from the named publisher/);
-  assert.match(homeHtml,/editorial-home\.js\?v=sourceaudit1/);
+  assert.match(homeHtml,/editorial-home\.js\?v=publishdate1/);
 });
