@@ -333,6 +333,72 @@ def run(base, output,admin_fixture=False):
                 isolated.close()
         check('failed search pagination preserves results and retries the same page without stealing focus', search_pagination_retry)
 
+        def exam_failure_recovery():
+            isolated = browser.new_context(viewport={'width': 390, 'height': 844}, service_workers='block')
+            isolated.route('**/*', lambda route: route.continue_() if route.request.url.startswith(base + '/') else route.abort())
+            reader = isolated.new_page()
+            reader.on('pageerror', lambda error: errors.append(str(error)))
+            pending, requests = [], []
+            mode = 'fail'
+            source = {'id': 'board', 'name': 'Official fixture board', 'url': 'https://board.gov.in/',
+                      'allowed_hosts': ['board.gov.in'], 'scope': 'Fixture examinations', 'status': 'available',
+                      'notice_count': 1, 'last_success_at': '2026-11-01T12:00:00Z'}
+            notice = {'title': 'Fixture scholarship examination notice', 'summary': 'Official fixture notice',
+                      'source_name': source['name'], 'url': 'https://board.gov.in/notice.pdf',
+                      'exam_authority': 'board', 'exam_region': 'maharashtra', 'news_number': '800001',
+                      'published_at': '2026-11-01T12:00:00Z'}
+
+            def respond(route):
+                requests.append(route.request.url)
+                if mode == 'hold':
+                    pending.append(route)
+                else:
+                    route.fulfill(status=503, json={'error': 'Fixture notices unavailable'})
+
+            reader.route(base + '/api/exams', respond)
+            try:
+                reader.goto(base + '/exams/', wait_until='networkidle')
+                reader.wait_for_function("() => document.querySelector('#examStatus').textContent.includes('unavailable')")
+                source_links = reader.locator('#examSources h3 a').count()
+                require(source_links > 0, 'Outage removed official authority links')
+                reader.locator('#examQuery').fill('scholarship')
+                reader.locator('#examRegion').select_option('maharashtra')
+                reader.locator('#examFilters button[type="submit"]').click()
+                require('unavailable' in reader.locator('#examStatus').inner_text(), 'Filtering replaced unavailable data with zero matches')
+                require('Invalid Date' not in reader.locator('#examStatus').inner_text(), 'Failed collection rendered an invented checked date')
+                require(reader.locator('#examNotices article').count() == 0, 'Failed load fabricated notices')
+                mode = 'hold'
+                reader.locator('#examRetry').focus()
+                reader.keyboard.press('Enter')
+                deadline = time.monotonic() + 5
+                while not pending and time.monotonic() < deadline:
+                    reader.wait_for_timeout(10)
+                require(len(pending) == 1 and len(requests) == 2, 'Retry did not issue one bounded request')
+                require(reader.locator('#examNotices').get_attribute('aria-busy') == 'true', 'Retry loading state is absent')
+                pending.pop().fulfill(json={'checked_at': 'not-a-date', 'items': [], 'sources': []})
+                reader.wait_for_selector('#examRetry:visible')
+                require(reader.locator('#examRetry').evaluate('(node) => node === document.activeElement'), 'Failed retry lost keyboard focus')
+                reader.keyboard.press('Enter')
+                deadline = time.monotonic() + 5
+                while not pending and time.monotonic() < deadline:
+                    reader.wait_for_timeout(10)
+                require(len(pending) == 1 and len(requests) == 3, 'Second retry duplicated or missed a request')
+                reader.locator('#examQuery').focus()
+                pending.pop().fulfill(json={'checked_at': '2026-11-02T12:00:00Z', 'items': [notice], 'sources': [source]})
+                reader.wait_for_selector('#examNotices article')
+                require(reader.locator('#examQuery').input_value() == 'scholarship' and reader.locator('#examRegion').input_value() == 'maharashtra', 'Retry lost selected filters')
+                require(reader.locator('#examQuery').evaluate('(node) => node === document.activeElement'), 'Successful retry stole moved focus')
+                require(reader.locator('#examRetry').is_hidden(), 'Successful load still offers retry')
+                require(reader.locator('#examNotices h2 a').get_attribute('href') == notice['url'], 'Retry changed official notice attribution')
+                reader.locator('#examQuery').fill('no matching fixture')
+                require('0 official notices match' in reader.locator('#examStatus').inner_text(), 'Valid empty filter no longer reports no matches')
+                require('unavailable' not in reader.locator('#examStatus').inner_text(), 'Recovered response retains stale failure')
+            finally:
+                for route in pending:
+                    route.abort()
+                isolated.close()
+        check('exam outages remain distinct from empty filters and retry preserves controls and official links', exam_failure_recovery)
+
         def startup_keeps_reader_controls():
             # Release the independent startup feeds one at a time so both the
             # early English paint and the final combined paint happen mid-use.
