@@ -1,6 +1,19 @@
 /* Lightweight chrome for static pages, server-rendered stories and the home app. */
 (() => {
   const path = window.location.pathname;
+  // Make the existing GA4 consent bootstrap available on all public pages.
+  // This loads only first-party code: no Google request, cookie or analytics
+  // event is sent until Google's CMP supplies an applicable consent decision.
+  // Pages that are private, administrative, or withheld from indexing stay out.
+  if (!/^\/(?:admin(?:\/|$)|api(?:\/|$)|newsroom-console|debug)/.test(path) &&
+      !document.querySelector('meta[name="robots"][content*="noindex"]') &&
+      !document.querySelector('script[src*="/assets/measurement.js"]')) {
+    const measurement = document.createElement('script');
+    measurement.src = '/assets/measurement.js?v=ga4coverage1';
+    measurement.defer = true;
+    measurement.dataset.ga4MeasurementId = 'G-2HVZQST08G';
+    document.head.appendChild(measurement);
+  }
   const desks = [['','Home'],['maharashtra','Maharashtra'],['india','India'],['politics','Politics'],['world','World'],['hindi','Hindi']];
   try {
     if (localStorage.getItem('ph-consent-v1') === 'preferences') {
