@@ -66,6 +66,14 @@ class MonetizationTests(unittest.TestCase):
                    fact_check_status='passed', approved_at='2026-11-01T10:00:00Z')
         self.assertFalse(is_monetizable(row))
 
+    def test_sensitive_public_interest_news_requires_separate_ad_suitability_review(self):
+        row = story()
+        row['title'] = 'Regional officials issue updated report on fatal attack'
+        row = reviewed(row)
+        self.assertFalse(is_monetizable(row))
+        row['fact_check_notes'] += ' Ad suitability reviewed for sensitive coverage.'
+        self.assertTrue(is_monetizable(row))
+
     def test_source_image_link_alone_does_not_establish_republication_rights(self):
         row = reviewed(dict(story(), image_url='https://example.org/news/photo.jpg'))
         self.assertFalse(is_monetizable(row))
