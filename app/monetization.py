@@ -28,6 +28,26 @@ def has_distinct_body(row):
     return bool(lead and len(body) >= 600 and len(remainder.strip()) >= 100)
 
 
+
+SENSITIVE_AD_TOPICS = re.compile(
+    r"\b(?:fatal attack|armed attack|terror attack|sexual assault|sexual violence|"
+    r"graphic violence|hate speech|drug trafficking|suicide|mass shooting|"
+    r"war casualties|violent extremist)\b",
+    re.IGNORECASE,
+)
+
+def requires_sensitive_ad_review(row):
+    """Flag potentially restricted news for separate human ad-suitability review.
+
+    Newsworthiness alone must not be equated with advertising eligibility.
+    Pattern matching is a conservative flag, not an editorial ban or proof
+    that the content violates Google policies.
+    """
+    text = " ".join(str(row.get(k) or "") for k in
+                    ("title", "bot_summary", "summary", "bot_article", "article", "body"))
+    return bool(SENSITIVE_AD_TOPICS.search(text))
+
+
 def is_monetizable(row):
     if str(row.get("fact_check_status") or "").lower() != "reviewed" or not row.get("approved_at"):
         return False
@@ -39,6 +59,8 @@ def is_monetizable(row):
         # A publisher image URL by itself is not permission to republish it.
         return False
     notes = str(row.get("fact_check_notes") or "")
+    if requires_sensitive_ad_review(row) and "Ad suitability reviewed for sensitive coverage." not in notes:
+        return False
     return ("Originality and added value confirmed." in notes
             and "Evidence: https://" in notes
             and "Notes: " in notes
