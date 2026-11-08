@@ -56,7 +56,7 @@ class ArticlePublicationDateTests(unittest.TestCase):
     def test_invalid_and_naive_dates_are_omitted(self):
         for raw in ("not a date", "2026-10-15T08:00:00"):
             with self.subTest(value=raw):
-                date, label = _article_publication_datetime(article(published_at=raw))
+                date, label, published_iso = _article_publication_datetime(article(published_at=raw))
                 self.assertIsNone(date)
                 self.assertIsNone(label)
                 self.assertIsNone(published_iso)
