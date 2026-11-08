@@ -2,7 +2,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import re
-from .monetization import is_monetizable,has_distinct_body,requires_sensitive_ad_review
+from .monetization import is_monetizable,has_distinct_body,has_repeated_passages,requires_sensitive_ad_review
 from .seo_indexing import is_indexable,SITE_ORIGIN
 from .source_http import fetch_source
 from .editorial_store import now
@@ -15,6 +15,7 @@ def article_findings(row):
     findings=[]
     if not is_indexable(row):findings.append('Local search eligibility checks incomplete')
     if not has_distinct_body(row):findings.append('Source brief / insufficient distinct article context under local ad rules')
+    if has_repeated_passages(row):findings.append('Repeated substantial sentences: review for padding or copied template text')
     if not row.get('source_name') or not row.get('url'):findings.append('Missing source attribution')
     if row.get('image_url') and (row.get('image_license') not in {'licensed','rights-owned','cc0','pdm'} or not row.get('image_credit')):findings.append('Image licence or credit missing')
     if requires_sensitive_ad_review(row) and 'Ad suitability reviewed for sensitive coverage.' not in str(row.get('fact_check_notes') or ''):

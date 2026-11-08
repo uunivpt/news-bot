@@ -161,7 +161,7 @@ class OneClickPublishTests(unittest.TestCase):
         self.assertEqual(self.database.get_by_id(self.sid)['status'], 'published')
 
     def test_existing_genuine_unchanged_monetization_evidence_is_preserved(self):
-        article = 'The official timetable lists routes, service hours and accessibility arrangements. ' * 12
+        article = "The official timetable distinguishes public-route changes from services that continue under earlier arrangements. The notice identifies the responsible office and provides the date on which updated schedules are expected to apply. Residents should consult the current published document rather than a forwarded copy with no reference number. Individual route listings may include conditions that are not fully described in the public announcement. Staff contact channels are listed separately from the general inquiries desk in the detailed guidance. The issuing authority can publish later corrections, which should be checked before relying on an old timetable. Accessibility information is best verified against the official service page for the affected locality. Readers should compare published hours with any holiday notices before planning a journey."
         self.database.update(self.sid, bot_summary=self.database.get_by_id(self.sid)['summary'], bot_article=article)
         row = dict(self.database.get_by_id(self.sid))
         notes = ('Originality and added value confirmed. Evidence: https://independent.example.net/notice. '

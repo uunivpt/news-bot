@@ -17,6 +17,28 @@ def review_fingerprint(row):
     return hashlib.sha256(json.dumps(copy, ensure_ascii=False).encode()).hexdigest()
 
 
+
+def has_repeated_passages(row):
+    """Detect obvious repeated filler; this cannot certify originality.
+
+    Multiple identical substantial sentences are a strong negative quality
+    signal even if a human-review note or long word count was provided.
+    """
+    from collections import Counter
+    body = str(row.get("bot_article") or row.get("article") or row.get("body") or "")
+    sentences = re.split(r"(?<=[.!?।])\s+|\n+", body)
+    substantial = [
+        re.sub(r"\W+", " ", sentence, flags=re.UNICODE).strip().casefold()
+        for sentence in sentences
+        if len(sentence.split()) >= 7 and len(sentence.strip()) >= 45
+    ]
+    if len(substantial) < 4:
+        return False
+    counts = Counter(substantial)
+    duplicates = sum(count - 1 for count in counts.values())
+    return max(counts.values(), default=0) >= 3 or (duplicates >= 2 and duplicates / len(substantial) >= 0.30)
+
+
 def has_distinct_body(row):
     normalize = lambda value: re.sub(r"\s+", " ", str(value or "")).strip().casefold()
     lead = normalize(row.get("bot_summary") or row.get("summary"))
@@ -25,7 +47,7 @@ def has_distinct_body(row):
     # provides no additional article content. Length is not an originality test.
     remainder = body.replace(lead, "") if lead else ""
     remainder = re.sub(r"\b(?:what happened|key details|what is known|context|what comes next|additional details):", "", remainder)
-    return bool(lead and len(body) >= 600 and len(remainder.strip()) >= 100)
+    return bool(lead and len(body) >= 600 and len(remainder.strip()) >= 100 and not has_repeated_passages(row))
 
 
 

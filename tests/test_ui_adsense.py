@@ -58,7 +58,7 @@ class UIAdSenseTests(unittest.TestCase):
             'source_type': 'rss', 'url': 'https://example.org/news/44',
             'source_name': 'Source News', 'published_at': '2026-10-15T08:00:00Z',
             'summary': 'Official sources report changes to public services after discussion in Parliament. ' * 2,
-            'bot_article': 'Official sources described the parliamentary debate and changes to public services. ' * 8,
+            'bot_article': "The official record describes the proposed services and identifies the participating public offices. The notice separates early planning statements from administrative provisions already in effect. Readers should check the issuing authority and the publication date before sharing this report. Supporting documents may contain exceptions that are not summarized in the opening announcement. The public guidance gives residents a point of contact for questions about the local process. Any deadline should be checked against the current notice because an amendment can change dates. Relevant legal provisions need to be read alongside the explanatory circular where applicable. PoliticsHub provides the source link so readers can review the issuing document in context.",
         }
         row.update(fact_check_status="reviewed",approved_at="2026-10-16T08:00:00Z")
         row["fact_check_notes"]="Originality and added value confirmed. Evidence: https://example.net/record. Notes: Reviewed official documents and added context. Content SHA256: "+review_fingerprint(row)+"."

@@ -20,8 +20,7 @@ def story():
                 url="https://example.org/notice", source_name="PoliticsHub Editorial",
                 published_at=datetime.now(timezone.utc).isoformat(),
                 summary="The district issued new water supply arrangements, with official documents describing the affected areas and their schedules.",
-                bot_article="The district issued new water supply arrangements. " +
-                "The official notice lists the delivery schedule and explains how residents can request help. " * 10)
+                bot_article="The official record describes the proposed services and identifies the participating public offices. The notice separates early planning statements from administrative provisions already in effect. Readers should check the issuing authority and the publication date before sharing this report. Supporting documents may contain exceptions that are not summarized in the opening announcement. The public guidance gives residents a point of contact for questions about the local process. Any deadline should be checked against the current notice because an amendment can change dates. Relevant legal provisions need to be read alongside the explanatory circular where applicable. PoliticsHub provides the source link so readers can review the issuing document in context.")
 
 
 def reviewed(row):
@@ -40,6 +39,11 @@ class MonetizationTests(unittest.TestCase):
         self.assertTrue(is_monetizable(reviewed(row)))
         row['bot_article'] += ' A different claim was added after review.'
         self.assertFalse(is_monetizable(row))
+
+    def test_repeated_filler_is_not_ad_eligible_even_with_a_review_note(self):
+        row = story()
+        row['bot_article'] = "The public notice describes local services and asks readers to check its latest version. " * 12
+        self.assertFalse(is_monetizable(reviewed(row)))
 
     def test_repeated_summary_cannot_be_monetized_even_with_review(self):
         row = story()

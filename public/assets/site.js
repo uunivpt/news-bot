@@ -60,7 +60,7 @@ function newsCategory(category,title,summary){
  return raw||'india';
 }
 function norm(a,i){const id=a.id??a.slug??a._id??'n'+i;const img=a.image||a.image_url||a.imageUrl||a.urlToImage||a.thumbnail||a.img||'';
- return{...a,id:String(id),title:a.title||a.headline||'Untitled',summary:a.summary||a.description||a.excerpt||'',body:a.article||a.bot_article||a.content||a.body||a.text||'',image:typeof img==='string'?img:'',category:newsCategory(a.category||a.section||'General',a.title||a.headline,a.summary||a.description||a.excerpt),source:(a.source&&a.source.name)||a.source||a.publisher||'',date:a.published_at_iso||a.publishedAt||a.pubDate||a.date||a.published_at||a.created_at||'',url:a.url||a.link||'',author:a.author||a.author_name||'PoliticsHub Editorial Desk'}}
+ return{...a,id:String(id),title:a.title||a.headline||'Untitled',summary:a.summary||a.description||a.excerpt||'',body:a.article||a.bot_article||a.content||a.body||a.text||'',image:typeof img==='string'?img:'',category:newsCategory(a.category||a.section||'General',a.title||a.headline,a.summary||a.description||a.excerpt),source:String(a.source_name||(a.source&&a.source.name)||(typeof a.source==='string'?a.source:'')||a.publisher||'').trim(),date:a.published_at_iso||a.publishedAt||a.pubDate||a.date||a.published_at||a.created_at||'',url:a.url||a.link||'',author:a.author||a.author_name||'PoliticsHub Editorial Desk'}}
 const pick=j=>Array.isArray(j)?j:(j.articles||j.news||j.items||j.data||j.results||[]);
 async function get(u,options={}){const deadline=AbortSignal.timeout(10000);const signal=options.signal?AbortSignal.any([options.signal,deadline]):deadline;const r=await fetch(u,{signal,cache:u===ENDPOINTS.api?'no-store':'default',headers:{'Accept':'application/json'}});if(!r.ok)throw Error('News request failed');if(u===ENDPOINTS.api)S.apiMode=r.headers.get('X-News-Mode')||'live';const rows=pick(await r.json());if(!Array.isArray(rows))throw Error('Invalid news response');const normalizedRows=rows.filter(x=>x&&typeof x==='object'&&!Array.isArray(x)).map((x,i)=>{const img=x.image_url||x.image||x.imageUrl||x.urlToImage||x.thumbnail||x.img||'';const source=x.source_name||(x.source&&x.source.name)||x.source||x.publisher||'PoliticsHub';const date=x.published_at_iso||x.published_at_site||x.publishedAt||x.pubDate||x.date||x.published_at||x.created_at||'';const body=x.article||x.bot_article||x.content||x.body||x.text||'';const summary=x.summary||x.bot_summary||x.description||x.excerpt||'';return {...x,title:String(x.title||x.headline||'Untitled'),category:newsCategory(x.category||x.section||'india',x.title||x.headline,summary),id:String(x.id??x.slug??x._id??'n'+i),image:typeof img==='string'?img:'',source:String(source),date,body:String(body),summary:String(summary)};});const total=r.headers.get('X-Search-Total');if(total!==null&&Number.isFinite(Number(total)))normalizedRows.searchTotal=Number(total);return normalizedRows}
 const CACHE_KEY='ph-news-cache';
@@ -173,7 +173,11 @@ function mergeFeeds(a,b){
  const all=[...(a||[]),...(b||[])].map(norm);
  const seen=new Map();
  for(const item of all){
-  const key=String(item.id||item.url||item.title).trim().toLowerCase();
+  // Different RSS rows can carry the same publisher headline with distinct IDs.
+  // Collapse only exact normalized headline/category matches; never merge on a
+  // fuzzy similarity that could combine separate news events.
+  const titleKey=String(item.title||'').normalize('NFKC').trim().replace(/\s+/g,' ').toLocaleLowerCase();
+  const key=titleKey.length>=15 ? 'headline:'+String(item.category||'')+':'+titleKey : 'record:'+String(item.id||item.url||'').trim().toLowerCase();
   if(!key)continue;
   const prev=seen.get(key);
   if(!prev||ts(item.date)>ts(prev.date)||(!prev.body&&item.body)||(!prev.image&&item.image))seen.set(key,item);
@@ -185,7 +189,7 @@ async function load(opts={}){
  const early=!!opts.early;
  const paintFirst=(rows,mode)=>{
   if(!early||painted||S.items.length||!rows?.length)return;
-  painted=true;S.items=rows.map(norm).sort((x,y)=>ts(y.date)-ts(x.date)||0);S.mode=mode;cacheSave(S.items);ticker();updateSearchSources();render(true);
+  painted=true;S.items=mergeFeeds(rows,[]);S.mode=mode;cacheSave(S.items);ticker();updateSearchSources();render(true);
  };
  // The API is authoritative. Download the full saved snapshot only when the
  // API fails, rather than transferring it alongside every healthy refresh.
@@ -230,7 +234,7 @@ async function article(id){setActive('');
  document.title=it.title+' — PoliticsHub.in';document.body.dataset.k=ck(it);
  const paras=(it.body||'').split(/\n+/).filter(Boolean).map(p=>`<p>${esc(p)}</p>`).join('')||(it.summary?`<p>${esc(it.summary)}</p>`:'');
  const rel=S.items.filter(i=>i.id!==it.id&&i.category===it.category).concat(S.items.filter(i=>i.id!==it.id&&i.category!==it.category)).slice(0,3);
- $('#app').innerHTML=`<article class="art" data-k="${ck(it)}"><div class="ah"><a class="chip" href="${hl(CATS.find(c=>it.category.toLowerCase().includes(c[0]))?.[0]||'all')}">${esc(it.category)}</a><h1>${esc(it.title)}</h1>${it.summary&&it.body&&it.summary.replace(/\s+/g," ").trim()!==it.body.replace(/\s+/g," ").trim()?`<p class="dek">${esc(it.summary)}</p>`:''}<div class="by"><span>Compiled by <a href="/author/politicshub-news-desk">PoliticsHub Editorial Desk</a></span><span>${fmt(it.date)}</span><span>${esc(it.source)}</span></div></div>${it.image?`<div class="ahero"><div class="im">${img(it)}</div></div>`:''}<div class="body">${paras}</div>${it.url?`<div class="src">Source: ${esc(it.source||'original report')}. <a href="${esc(safeSourceUrl(it.url))}" target="_blank" rel="noopener noreferrer">Read the original report</a></div>`:''}<button class="article-share" type="button" data-share-title="${esc(it.title)}" aria-haspopup="dialog" aria-label="Share this story"><span aria-hidden="true">↗</span><b>Share</b></button></article><section class="rel"><div class="sh"><h2>Related stories</h2></div><div class="grid">${rel.map(card).join('')}</div></section>`;fx();return it.id}
+ $('#app').innerHTML=`<article class="art" data-k="${ck(it)}"><div class="ah"><a class="chip" href="${hl(CATS.find(c=>it.category.toLowerCase().includes(c[0]))?.[0]||'all')}">${esc(it.category)}</a><h1>${esc(it.title)}</h1>${it.summary&&it.body&&it.summary.replace(/\s+/g," ").trim()!==it.body.replace(/\s+/g," ").trim()?`<p class="dek">${esc(it.summary)}</p>`:''}<div class="by"><span>Compiled by <a href="/author/politicshub-news-desk">PoliticsHub Editorial Desk</a></span><span>${fmt(it.date)}</span><span>${esc(it.source)}</span></div></div>${it.image?`<div class="ahero"><div class="im">${img(it)}</div></div>`:''}<div class="body">${paras}</div><div class="src"><strong>Story format:</strong> ${it.source_type==='manual'?'Editorially prepared PoliticsHub copy. Review the cited sources and corrections for context.':'Source-linked brief based on reporting from the named publisher. It is not independently reported by PoliticsHub.'}</div>${it.url?`<div class="src">Source: ${esc(it.source||'original report')}. <a href="${esc(safeSourceUrl(it.url))}" target="_blank" rel="noopener noreferrer">Read the original report</a></div>`:''}<button class="article-share" type="button" data-share-title="${esc(it.title)}" aria-haspopup="dialog" aria-label="Share this story"><span aria-hidden="true">↗</span><b>Share</b></button></article><section class="rel"><div class="sh"><h2>Related stories</h2></div><div class="grid">${rel.map(card).join('')}</div></section>`;fx();return it.id}
 function settings(sub){document.documentElement.lang='en';setActive('');document.title='Settings — PoliticsHub.in';const th=document.documentElement.dataset.theme;
  const st=(v,t)=>`<span class="${v}">${t}</span>`;const last=S.items.find(i=>i.date)?.date;
  const privacy=preferencesAllowed()?'Preferences allowed':'Essential only';

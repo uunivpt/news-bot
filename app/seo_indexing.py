@@ -53,6 +53,16 @@ def is_indexable(row, now=None):
         return False
     if not row.get("public_source") or str(row.get("source_type") or "").lower() == "telegram":
         return False
+    # Automated RSS summaries are useful as a source directory, but they are
+    # not automatically unique search articles. Leave them browsable and
+    # source-linked; only promote separately curated or explicitly reviewed
+    # RSS copy to Google's article discovery surfaces.
+    if str(row.get("source_type") or "").lower() == "rss" and not (
+        row.get("editorial_value")
+        or str(row.get("fact_check_status") or "").lower() == "reviewed"
+        or row.get("ads_eligible") is True
+    ):
+        return False
     try:
         if int(row.get("id") or 0) <= 0:
             return False

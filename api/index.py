@@ -785,7 +785,7 @@ def _article_html(row):
  indexable=is_indexable(row)
  from app.monetization import is_monetizable
  ads_eligible=(row["ads_eligible"] is True and indexable) if "ads_eligible" in row else is_monetizable(row)
- robots_meta = "" if indexable else '<meta name="robots" content="noindex,follow">'
+ robots_meta = '<meta name="robots" content="max-image-preview:large">' if indexable else '<meta name="robots" content="noindex,follow,max-image-preview:large">'
  # Search eligibility never substitutes for a recorded review of this copy.
  article_ad_code = ('<meta name="google-adsense-account" content="ca-pub-1752666987448533"><script src="/assets/measurement.js?v=consent1" defer></script><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1752666987448533" crossorigin="anonymous"></script>' if ads_eligible else '')
  title=str(row.get("title") or "PoliticsHub.in"); category=str(row.get("category") or "India")
@@ -807,6 +807,8 @@ def _article_html(row):
   "publisher":{"@type":"Organization","name":"PoliticsHub.in","url":SITE_ORIGIN,"logo":{"@type":"ImageObject","url":SITE_ORIGIN+"/favicon.svg"}},
   "mainEntityOfPage":{"@type":"WebPage","@id":canonical},"isAccessibleForFree":True
  }
+ if source_url:
+  data["isBasedOn"]=source_url
  json_ld=json.dumps(data,ensure_ascii=False).replace("<", "\\u003c")
  repeated_lead=re.sub(r"\s+"," ",body).strip()==re.sub(r"\s+"," ",summary).strip()
  lead_html="" if repeated_lead else '<p class="dek">'+html.escape(summary)+'</p>'
@@ -817,7 +819,6 @@ def _article_html(row):
 <title>{html.escape(title)} — PoliticsHub.in</title>
 {robots_meta}
 <meta name="description" content="{html.escape(summary[:160])}">
-<meta name="robots" content="max-image-preview:large">
 <link rel="canonical" href="{html.escape(canonical)}">
 {article_ad_code}<meta property="og:type" content="article"><meta property="og:site_name" content="PoliticsHub.in">
 <meta property="og:title" content="{html.escape(title)}"><meta property="og:description" content="{html.escape(summary[:200])}">
@@ -833,8 +834,7 @@ def _article_html(row):
 <div class="by"><small>News No. {html.escape(news_number(row))}</small><span>{"Reviewed by" if ads_eligible else "Compiled by"} <a href="/author/politicshub-news-desk">{EDITORIAL_DESK}</a></span><time datetime="{html.escape(pub_iso,quote=True)}">{html.escape(str(published or ""))}</time><span>{html.escape(source)}</span></div></div>
 {"<div class='ahero'><img src='"+html.escape(str(_public_image_path(row)),quote=True)+"' alt='"+html.escape(title,quote=True)+"' loading='eager'></div>" if _public_image_path(row) else ""}
 <div class="body">{paras}</div>
-{"<div class='src'><strong>Publisher excerpt:</strong> This page is a source-linked summary, not an independently reported PoliticsHub article. The original source link below contains the complete report.</div>" if not ads_eligible else ""}
-<div class="src"><strong>Source transparency:</strong> This is a source-linked brief prepared from the originating report. When multiple independent sources are available, PoliticsHub compares their reported details; otherwise no independent reporting claim is made.</div>
+<div class="src"><strong>Content type:</strong> {"PoliticsHub editorial copy. Readers can check the cited sources and correction history." if row.get("source_type")=="manual" else "Source-linked brief based on the originating publisher. This is not an independently reported PoliticsHub article; consult the original link for full context."}</div>
 <div class="src">Source: {html.escape(source)}. {"<a href='"+html.escape(source_url,quote=True)+"' rel='nofollow noopener noreferrer' target='_blank'>Read the original report</a>" if source_url else ""}</div>
 <button type="button" class="article-share" data-share-title="{html.escape(title,quote=True)}" data-share-url="{html.escape(canonical,quote=True)}" aria-haspopup="dialog"><span>↗</span><b>Share this story</b></button>
 </article></main>
