@@ -37,3 +37,7 @@ html[data-theme=light] .ph14-media-fallback{background:linear-gradient(145deg,#e
 html[data-theme=light] .ph14-thumb span{color:#aaa39a!important}
 html[data-theme=light] footer{background:#f4f1ec!important;border-top-color:rgba(18,18,18,.12)!important}
 
+
+/* Publication attribution on the live lead; visible in both themes and on phones. */
+.ph14-source-label{display:block;margin:0 0 22px;color:#dedede;font:700 12px/1.5 Inter,system-ui,sans-serif;overflow-wrap:anywhere}
+@media(max-width:720px){.ph14-source-label{font-size:11px;margin-bottom:14px}}
