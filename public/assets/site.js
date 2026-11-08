@@ -21,9 +21,15 @@ function setConsent(mode){
 }
 function showConsentBanner(force=false){
  if(!force&&consentMode())return;
- document.querySelector('#privacyConsent')?.remove();
- const box=document.createElement('section');box.id='privacyConsent';box.className='privacy-consent';box.setAttribute('role','dialog');box.setAttribute('aria-label','Privacy choices');
- box.innerHTML='<div><strong>Privacy choices</strong><p>PoliticsHub.in uses essential storage for your privacy choice. Optional browser storage can remember theme, article text size and saved stories, and cache recent stories. Eligible article pages may use Google AdSense. These buttons control site preferences; see the Cookie Policy for advertising choices.</p><a href="/cookies.html">Cookie Policy</a> · <a href="/privacy.html">Privacy Policy</a></div><div class="privacy-actions"><button type="button" class="btn secondary" data-consent-choice="essential">Essential only</button><button type="button" class="btn" data-consent-choice="preferences">Allow preferences</button></div>';
+ const existing=document.querySelector('#privacyConsent');
+ if(existing){
+  existing.hidden=false;
+  existing.style.removeProperty('display');
+  existing.setAttribute('role','region');
+  return;
+ }
+ const box=document.createElement('section');box.id='privacyConsent';box.className='privacy-consent';box.setAttribute('role','region');box.setAttribute('aria-label','Privacy choices');
+ box.innerHTML='<div><strong>Site preferences</strong><p>PoliticsHub.in uses essential storage for your privacy choice. Optional storage keeps theme, article text size and saved-story links. This does not grant advertising consent. Google manages separate advertising privacy messages where applicable.</p><a href="/cookies.html">Cookie Policy</a> · <a href="/privacy.html">Privacy Policy</a></div><div class="privacy-actions"><button type="button" class="btn secondary" data-consent-choice="essential">Essential only</button><button type="button" class="btn" data-consent-choice="preferences">Allow preferences</button></div>';
  document.body.append(box);
 }
 document.addEventListener('click',e=>{const b=e.target.closest('[data-consent-choice]');if(b)setConsent(b.dataset.consentChoice);if(e.target.closest('[data-open-consent]')){e.preventDefault();showConsentBanner(true)}});
