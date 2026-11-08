@@ -24,7 +24,7 @@ class ArticlePublicationDateTests(unittest.TestCase):
         self.assertIn('datetime="2026-10-15T08:00:00Z"', page)
         self.assertIn("Source published: 15 Oct 2026, 01:30 PM IST", page)
         self.assertIn('content="2026-10-15T08:00:00Z"', page)
-        schema = json.loads(re.search(r'<script type="application/ld\\+json">([^<]+)</script>', page).group(1))
+        schema = json.loads(re.search(r'<script type="application/ld\+json">([^<]+)</script>', page).group(1))
         self.assertEqual(schema["datePublished"], "2026-10-15T08:00:00Z")
         self.assertEqual(schema["dateModified"], "2026-10-15T08:00:00Z")
 
@@ -47,7 +47,7 @@ class ArticlePublicationDateTests(unittest.TestCase):
         page = _article_html(article())
         self.assertIn("Publication date unavailable", page)
         self.assertNotIn('property="article:published_time"', page)
-        schema = json.loads(re.search(r'<script type="application/ld\\+json">([^<]+)</script>', page).group(1))
+        schema = json.loads(re.search(r'<script type="application/ld\+json">([^<]+)</script>', page).group(1))
         self.assertNotIn("datePublished", schema)
         self.assertNotIn("dateModified", schema)
 
