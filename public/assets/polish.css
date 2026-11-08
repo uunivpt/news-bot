@@ -102,3 +102,5 @@ input[type=email],input[type=search]{background:var(--card);color:var(--ink);fon
 
 /* Search the source directory without leaving the reference list. */
 .source-search{margin:24px 0}.source-search[hidden]{display:none}.source-search label{display:block;font-size:14px;font-weight:600;margin-bottom:8px}.source-search>div{display:flex;gap:12px;flex-wrap:wrap}.source-search input{flex:1;min-width:180px;min-height:48px;padding:12px 16px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit}#sourceEmpty{padding:24px 0;color:var(--mut)}@media(max-width:480px){.source-search input{width:100%;flex-basis:100%}}
+
+#examRetry[hidden]{display:none}
