@@ -26,9 +26,9 @@ def has_repeated_passages(row):
     """
     from collections import Counter
     body = str(row.get("bot_article") or row.get("article") or row.get("body") or "")
-    sentences = re.split(r"(?<=[.!?।])\\s+|\\n+", body)
+    sentences = re.split(r"(?<=[.!?।])\s+|\n+", body)
     substantial = [
-        re.sub(r"\\W+", " ", sentence, flags=re.UNICODE).strip().casefold()
+        re.sub(r"\W+", " ", sentence, flags=re.UNICODE).strip().casefold()
         for sentence in sentences
         if len(sentence.split()) >= 7 and len(sentence.strip()) >= 45
     ]
