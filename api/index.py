@@ -834,7 +834,7 @@ def _article_html(row):
 <div class="by"><small>News No. {html.escape(news_number(row))}</small><span>{"Reviewed by" if ads_eligible else "Compiled by"} <a href="/author/politicshub-news-desk">{EDITORIAL_DESK}</a></span><time datetime="{html.escape(pub_iso,quote=True)}">{html.escape(str(published or ""))}</time><span>{html.escape(source)}</span></div></div>
 {"<div class='ahero'><img src='"+html.escape(str(_public_image_path(row)),quote=True)+"' alt='"+html.escape(title,quote=True)+"' loading='eager'></div>" if _public_image_path(row) else ""}
 <div class="body">{paras}</div>
-<div class="src"><strong>Content type:</strong> {"PoliticsHub editorial copy. Readers can check the cited sources and correction history." if row.get("source_type")=="manual" else "Source-linked brief based on the originating publisher. It is not independently reported by PoliticsHub; consult the original link for full context."}</div>
+<div class="src"><strong>Content type:</strong> {"PoliticsHub editorial copy. Readers can check the cited sources and correction history." if row.get("source_type")=="manual" else "Source-linked brief based on the originating publisher. This is not an independently reported PoliticsHub article; consult the original link for full context."}</div>
 <div class="src">Source: {html.escape(source)}. {"<a href='"+html.escape(source_url,quote=True)+"' rel='nofollow noopener noreferrer' target='_blank'>Read the original report</a>" if source_url else ""}</div>
 <button type="button" class="article-share" data-share-title="{html.escape(title,quote=True)}" data-share-url="{html.escape(canonical,quote=True)}" aria-haspopup="dialog"><span>↗</span><b>Share this story</b></button>
 </article></main>
