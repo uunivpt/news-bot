@@ -59,7 +59,8 @@
       !['/admin','/newsroom-console','/debug'].some(prefix => path.startsWith(prefix))) {
     let mode = '';
     try { mode = localStorage.getItem('ph-consent-v1') || ''; } catch (_) {}
-    if (!mode) {
+    const showSitePreferences = () => {
+      document.querySelector('#privacyConsent')?.remove();
       const banner = document.createElement('section');
       banner.id = 'privacyConsent';
       banner.className = 'privacy-consent';
@@ -93,6 +94,22 @@
         window.dispatchEvent(new Event('ph-preferences-changed'));
         banner.remove();
       });
+    };
+    if (!mode) showSitePreferences();
+    document.addEventListener('click', event => {
+      const reopen = event.target.closest('[data-open-consent]');
+      if (!reopen) return;
+      event.preventDefault();
+      showSitePreferences();
+    });
+    const footer = document.querySelector('footer');
+    if (footer && !footer.querySelector('[data-open-consent]')) {
+      const reopen = document.createElement('a');
+      reopen.href = '/cookies.html';
+      reopen.dataset.openConsent = '';
+      reopen.textContent = 'Site preferences';
+      reopen.style.cssText = 'display:inline-block;margin:12px 16px;text-decoration:underline';
+      footer.appendChild(reopen);
     }
   }
 
