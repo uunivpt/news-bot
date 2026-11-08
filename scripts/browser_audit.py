@@ -10,6 +10,8 @@ This script neither submits newsletter subscriptions nor signs into production.
 """
 import argparse
 import json
+import re
+from html import unescape
 import time
 import os
 import sys
@@ -578,6 +580,42 @@ def run(base, output,admin_fixture=False):
             require(not page.locator('.reader-tools').is_visible(), 'Print includes controls')
             page.emulate_media(media='screen')
         check('article content, consent-aware save, text size and print layout', article)
+
+        def publication_labels_survive_chrome():
+            isolated = browser.new_context(viewport={'width': 390, 'height': 844},
+                                           timezone_id='America/Los_Angeles', service_workers='block')
+            isolated.route('**/*', lambda route: route.continue_() if route.request.url.startswith(base + '/') else route.abort())
+            reader = isolated.new_page()
+            reader.on('pageerror', lambda error: errors.append(str(error)))
+            try:
+                response = reader.goto(base + article_href, wait_until='networkidle')
+                match = re.search(r'<time class="article-published" datetime="([^"]+)">([^<]+)</time>', response.text())
+                require(match is not None, 'Server article lacks labeled publication time')
+                stamp, label = unescape(match.group(1)), unescape(match.group(2))
+                require(label.startswith(('Published:', 'Source published:')) and label.endswith(' IST'), 'Server publication time has no explicit provenance/timezone')
+                time_node = reader.locator('time.article-published')
+                require(time_node.is_visible(), 'Article publication date is not visible')
+                require(time_node.text_content() == label, 'Shared chrome removed publication label or converted its declared timezone')
+                require(time_node.get_attribute('datetime') == stamp, 'Shared chrome changed the publication timestamp')
+                schema = json.loads(reader.locator('script[type="application/ld+json"]').first.text_content())
+                require(schema['datePublished'] == stamp, 'Publication label disagrees with structured metadata')
+                require(reader.locator('meta[property="article:published_time"]').get_attribute('content') == stamp, 'Publication label disagrees with Open Graph timestamp')
+                reader.reload(wait_until='networkidle')
+                require(reader.locator('time.article-published').text_content() == label, 'Reload lost labeled publication time')
+                fixture_path = base + '/publication-time-fixture.html'
+                reader.route(fixture_path, lambda route: route.fulfill(content_type='text/html', body=
+                    '<!doctype html><html lang="en"><head><meta name="robots" content="noindex"><script src="/assets/ui.js?v=phui30" defer></script></head><body>'
+                    '<time id="legacyTime" datetime="2026-10-15T08:00:00Z">Legacy date</time>'
+                    '<time class="article-published" datetime="2026-10-15T08:00:00Z">Source published: 15 Oct 2026, 01:30 PM IST</time>'
+                    '<time class="ph14-published-date" datetime="2026-10-15T08:00:00Z">Published: 15 Oct 2026, 01:30 PM IST</time>'
+                    '</body></html>'))
+                reader.goto(fixture_path, wait_until='networkidle')
+                require(reader.locator('#legacyTime').text_content() != 'Legacy date', 'Ordinary timestamp localization was disabled')
+                require(reader.locator('.article-published').text_content() == 'Source published: 15 Oct 2026, 01:30 PM IST', 'Source publication label was rewritten')
+                require(reader.locator('.ph14-published-date').text_content() == 'Published: 15 Oct 2026, 01:30 PM IST', 'Homepage publication label was rewritten')
+            finally:
+                isolated.close()
+        check('shared chrome preserves publication provenance, IST text and metadata across browser timezones', publication_labels_survive_chrome)
 
         def remembered_reading_size():
             key = 'ph-reader-size-v1'
