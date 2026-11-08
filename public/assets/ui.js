@@ -20,7 +20,8 @@
       document.documentElement.dataset.theme = localStorage.getItem('ph-theme') === 'dark' ? 'dark' : 'light';
     }
   } catch (_) {}
-  document.querySelectorAll('time[datetime]').forEach(time => {
+  // Publication text already declares its provenance and an explicit IST timezone.
+  document.querySelectorAll('time[datetime]:not(.article-published):not(.ph14-published-date)').forEach(time => {
     const date = new Date(time.dateTime);
     if (!Number.isNaN(date.getTime())) time.textContent = date.toLocaleString('en-IN', {day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'});
   });
