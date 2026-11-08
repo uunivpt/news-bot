@@ -41,3 +41,6 @@ html[data-theme=light] footer{background:#f4f1ec!important;border-top-color:rgba
 /* Publication attribution on the live lead; visible in both themes and on phones. */
 .ph14-source-label{display:block;margin:0 0 22px;color:#dedede;font:700 12px/1.5 Inter,system-ui,sans-serif;overflow-wrap:anywhere}
 @media(max-width:720px){.ph14-source-label{font-size:11px;margin-bottom:14px}}
+
+.ph14-published-date{display:block;color:#c9c9c9;font:600 12px/1.6 Inter,system-ui,sans-serif;letter-spacing:.01em;margin:0 0 18px}
+@media(max-width:720px){.ph14-published-date{font-size:11px;margin-bottom:12px}}
