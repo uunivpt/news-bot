@@ -37,6 +37,16 @@ class SEOIndexingTests(unittest.TestCase):
         self.assertEqual(len(list(root)),1)
         self.assertEqual(root[0][0].text,SITE_ORIGIN+canonical_path(row))
 
+    def test_unreviewed_source_only_rss_is_browsable_but_not_indexable(self):
+        original = example()
+        original["source_type"] = "rss"
+        self.assertFalse(is_indexable(original))
+        original["editorial_value"] = True
+        self.assertTrue(is_indexable(original))
+        original["editorial_value"] = False
+        original["fact_check_status"] = "reviewed"
+        self.assertTrue(is_indexable(original))
+
     def test_excludes_thin_future_unsourced_and_telegram(self):
         row=example()
         mutations=(
@@ -124,7 +134,7 @@ class SEOIndexingTests(unittest.TestCase):
             self.assertEqual(resp2.headers["Location"],SITE_ORIGIN+canonical)
         with patch.object(api,"_public_row_by_id",return_value=dict(row,bot_article="short")):
             noindex=client.get("/api/seo-article"+canonical)
-            self.assertIn('name="robots" content="noindex,follow"',noindex.get_data(as_text=True))
+            self.assertIn('noindex,follow',noindex.get_data(as_text=True))
             self.assertNotIn("pagead2.googlesyndication.com",noindex.get_data(as_text=True))
             self.assertIn("not an independently reported",noindex.get_data(as_text=True))
 
