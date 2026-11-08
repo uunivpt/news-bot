@@ -10,7 +10,14 @@
         ['ph-news-cache','ph-news-cache-v6','ph-news-cache-v5','ph-news-cache-v4','ph-theme','ph-cookie','ph-ls','ph-reading-list-v1','ph-reader-size-v1'].forEach(key => localStorage.removeItem(key));
         document.documentElement.dataset.theme = 'light';
       }
-    } catch (_) {}
+    } catch (_) {
+      const root = button.closest('.legal-actions') || button.parentElement;
+      let message = root.querySelector('[data-consent-error]');
+      if (!message) { message = document.createElement('p'); message.dataset.consentError = ''; message.setAttribute('role', 'status'); root.append(message); }
+      message.textContent = "Your browser couldn't save this choice. Check browser storage settings and try again.";
+      return;
+    }
+    document.querySelectorAll('[data-consent-error]').forEach(node => node.remove());
     button.textContent = mode === 'preferences' ? 'Preferences allowed' : 'Essential only selected';
     document.querySelectorAll('[data-consent-choice]').forEach(el => el.setAttribute('aria-pressed', String(el === button)));
   });
