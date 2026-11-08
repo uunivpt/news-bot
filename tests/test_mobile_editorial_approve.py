@@ -21,7 +21,7 @@ def story(**overrides):
         "public_source": 1,
         "summary": "The transport office provided confirmation about new public service times and routes.",
         "bot_summary": "The transport office provided confirmation about new public service times and routes.",
-        "bot_article": "The official bulletin confirms additional public transport services. " * 12,
+        "bot_article": "The official timetable distinguishes public-route changes from services that continue under earlier arrangements. The notice identifies the responsible office and provides the date on which updated schedules are expected to apply. Residents should consult the current published document rather than a forwarded copy with no reference number. Individual route listings may include conditions that are not fully described in the public announcement. Staff contact channels are listed separately from the general inquiries desk in the detailed guidance. The issuing authority can publish later corrections, which should be checked before relying on an old timetable. Accessibility information is best verified against the official service page for the affected locality. Readers should compare published hours with any holiday notices before planning a journey.",
         "published_at": (NOW - timedelta(hours=3)).isoformat(),
         "published_at_site": None,
         "status": "pending",
