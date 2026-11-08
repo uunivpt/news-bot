@@ -268,6 +268,71 @@ def run(base, output,admin_fixture=False):
                 page.unroute(pattern, respond)
         check('keyboard search pagination continues at new results and respects moved focus', search_pagination_focus)
 
+        def search_pagination_retry():
+            isolated = browser.new_context(viewport={'width': 390, 'height': 844}, service_workers='block')
+            isolated.route('**/*', lambda route: route.continue_() if route.request.url.startswith(base + '/') else route.abort())
+            reader = isolated.new_page()
+            reader.on('pageerror', lambda error: errors.append(str(error)))
+            rows = [{'id': 995000 + index, 'title': f'retryfixture report {index + 1}',
+                     'category': 'india', 'source_name': 'Pagination retry fixture',
+                     'published_at': datetime.now(timezone.utc).isoformat()} for index in range(52)]
+            offsets, pending = [], []
+            fail_more, hold = True, False
+            pattern = base + '/api/search?*'
+
+            def respond(route):
+                params = parse_qs(urlsplit(route.request.url).query)
+                offset = int(params.get('offset', ['0'])[0])
+                if params.get('q', [''])[0] == 'retryfixture':
+                    offsets.append(offset)
+                if hold and offset:
+                    pending.append(route)
+                elif fail_more and offset:
+                    route.fulfill(status=503, json={'error': 'Fixture archive unavailable'})
+                else:
+                    route.fulfill(json=rows[offset:offset + 50], headers={'X-Search-Total': '52'})
+
+            reader.route(pattern, respond)
+            try:
+                reader.goto(base + '/', wait_until='networkidle')
+                reader.locator('[data-consent-choice="essential"]').click()
+                reader.locator('#sbtn').click()
+                reader.locator('#si').fill('retryfixture')
+                reader.wait_for_function("() => document.querySelectorAll('#sres .sr').length === 50 && !document.querySelector('#sc').textContent.includes('Searching')")
+                original = reader.locator('#sres .sr').evaluate_all('(links) => links.map(link => link.getAttribute("href"))')
+                reader.locator('#searchMore').focus()
+                reader.keyboard.press('Enter')
+                reader.wait_for_function("() => !document.querySelector('#sc').textContent.includes('Searching')")
+                require(reader.locator('#searchMore').count() == 1, 'Failed next page removed retry control')
+                require(reader.locator('#searchMore').is_enabled(), 'Failed next page left retry disabled')
+                require("Couldn't load more" in reader.locator('#sc').text_content(), 'Failed next page lacks explicit retry feedback')
+                require(reader.locator('#sres .sr').evaluate_all('(links) => links.map(link => link.getAttribute("href"))') == original, 'Failed next page mixed in loaded-feed results')
+                require(reader.locator('#searchMore').evaluate('(node) => node === document.activeElement'), 'Failed keyboard pagination lost retry focus')
+                fail_more = False
+                reader.keyboard.press('Enter')
+                reader.wait_for_function("() => document.querySelectorAll('#sres .sr').length === 52")
+                require(offsets == [0, 50, 50], 'Retry skipped the failed archive page: ' + repr(offsets))
+                require(reader.locator('#sres .sr').nth(50).evaluate('(node) => node === document.activeElement'), 'Successful retry lost keyboard continuation')
+                reader.locator('#si').fill('retryfixture moved')
+                reader.wait_for_function("() => document.querySelectorAll('#sres .sr').length === 50 && !document.querySelector('#sc').textContent.includes('Searching')")
+                hold = True
+                reader.locator('#searchMore').focus()
+                reader.keyboard.press('Enter')
+                deadline = time.monotonic() + 5
+                while not pending and time.monotonic() < deadline:
+                    reader.wait_for_timeout(10)
+                require(len(pending) == 1, 'Failed-page request was not held')
+                reader.locator('#si').focus()
+                pending.pop().fulfill(status=503, json={'error': 'Fixture archive unavailable'})
+                reader.wait_for_function("() => document.querySelector('#sc').textContent.includes('Try again')")
+                require(reader.locator('#si').evaluate('(node) => node === document.activeElement'), 'Failure stole focus after reader moved it')
+                require(reader.locator('#searchMore').is_enabled(), 'Moved-focus failure cannot retry')
+            finally:
+                for route in pending:
+                    route.abort()
+                isolated.close()
+        check('failed search pagination preserves results and retries the same page without stealing focus', search_pagination_retry)
+
         def startup_keeps_reader_controls():
             # Release the independent startup feeds one at a time so both the
             # early English paint and the final combined paint happen mid-use.

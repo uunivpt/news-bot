@@ -381,6 +381,15 @@ const __doS=doS; doS=async function(append=false,restoreFocus=false){
   if(Number.isFinite(r.searchTotal))totalMatches=r.searchTotal;
  }catch(e){
   if(requestId!==searchRequest||searchController.signal.aborted)return;
+  if(append){
+   $('#sc').textContent="Couldn't load more stories. Your "+previousCount+' results remain available. Try again.';
+   const more=$('#searchMore');
+   if(more){
+    more.disabled=false;more.textContent='Try again';
+    if(restoreFocus&&$('#sp').classList.contains('open')&&(document.activeElement===document.body||document.activeElement===more))more.focus();
+   }
+   return;
+  }
   localFallback=true;
   const cutoff=period==='all'?0:Date.now()-({day:1,week:7,month:30}[period]||0)*86400000;
   r=S.items.filter(i=>(cat==='all'||inCat(i,cat))&&(!source||i.source===source)&&(!cutoff||ts(i.date)>=cutoff)&&[i.title,i.summary,i.source,i.category].join(' ').toLowerCase().includes(q.toLowerCase())).slice(offset,offset+50);
