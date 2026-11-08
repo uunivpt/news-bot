@@ -25,3 +25,13 @@ test('static homepage internal anchor texts are distinct and concise',()=>{
    seen.add(text);
  }
 });
+
+test('guide CTAs do not duplicate or masquerade as buttons, and Apple icon is declared',()=>{
+ assert.doesNotMatch(home,/Read the guide ↗/);
+ assert.doesNotMatch(home,/Read the policy ↗/);
+ assert.match(home,/<link rel="apple-touch-icon" sizes="180x180" href="\/apple-touch-icon.png">/);
+ const site=fs.readFileSync('public/assets/site.js','utf8');
+ assert.match(site,/existing.hidden=false/);
+ assert.match(site,/existing.style.removeProperty\('display'\)/);
+ assert.match(site,/This does not grant advertising consent/);
+});
