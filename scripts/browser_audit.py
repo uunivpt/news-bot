@@ -674,6 +674,10 @@ def run(base, output,admin_fixture=False):
             isolated = browser.new_context(viewport={'width': 390, 'height': 844}, service_workers='block')
             isolated.route('**/*', lambda route: route.continue_() if route.request.url.startswith(base + '/') else route.abort())
             choices = isolated.new_page()
+            # Vercel serves this static homepage; the local Flask root uses its
+            # section template, which has a different footer. Keep real markup.
+            choices.route(base + '/', lambda route: route.fulfill(
+                content_type='text/html', body=(Path(__file__).resolve().parents[1] / 'public/index.html').read_text(encoding='utf-8')))
             choices.on('pageerror', lambda error: errors.append(str(error)))
 
             def deny_writes():
