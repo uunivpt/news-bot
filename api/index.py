@@ -791,13 +791,15 @@ def _article_publication_datetime(row):
   if not raw:continue
   try:
    date=datetime.fromisoformat(raw.replace("Z","+00:00"))
+   markup_iso=raw  # Preserve original valid ISO precision and timezone offset.
   except ValueError:
    try:date=parsedate_to_datetime(raw)
    except (ValueError,TypeError,IndexError):continue
+   markup_iso=date.isoformat()
   if date.tzinfo is None:continue
   if date > datetime.now(timezone.utc)+timedelta(hours=24):continue
-  return date.astimezone(timezone.utc), "Published" if key=="published_at_site" else "Source published"
- return None, None
+  return date.astimezone(timezone.utc), "Published" if key=="published_at_site" else "Source published", markup_iso
+ return None, None, None
 
 
 def _article_html(row):
@@ -810,8 +812,8 @@ def _article_html(row):
  article_ad_code = ('<meta name="google-adsense-account" content="ca-pub-1752666987448533"><script src="/assets/measurement.js?v=consent1" defer></script><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1752666987448533" crossorigin="anonymous"></script>' if ads_eligible else '')
  title=str(row.get("title") or "PoliticsHub.in"); category=str(row.get("category") or "India")
  canonical=SITE_ORIGIN+article_path(row)
- published_at,published_label=_article_publication_datetime(row)
- pub_iso=published_at.isoformat(timespec="seconds").replace("+00:00","Z") if published_at else ""
+ published_at,published_label,pub_iso=_article_publication_datetime(row)
+ pub_iso=pub_iso or ""
  date_html=('<time class="article-published" datetime="'+html.escape(pub_iso,quote=True)+'">'+html.escape(published_label)+': '+html.escape(published_at.astimezone(ZoneInfo("Asia/Kolkata")).strftime("%d %b %Y, %I:%M %p IST"))+'</time>') if published_at else '<span class="article-published">Publication date unavailable</span>'
  og_published_meta='<meta property="article:published_time" content="'+html.escape(pub_iso,quote=True)+'">' if pub_iso else ''
  summary=plain_source_text(row.get("summary") or row.get("bot_summary"))
