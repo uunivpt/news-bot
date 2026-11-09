@@ -25,7 +25,7 @@ STATIC_PAGES = (
     "/disclaimer.html", "/newsletter.html", "/topics/", "/data-rights.html",
     "/licenses.html", "/sources.html", "/maharashtra/", "/india/", "/politics/", "/world/", "/hindi/",
     "/guides/election-results.html", "/guides/maharashtra-mlc.html",
-    "/guides/government-notifications.html"
+    "/guides/government-notifications.html", "/guides/reading-breaking-news.html"
 )
 
 
