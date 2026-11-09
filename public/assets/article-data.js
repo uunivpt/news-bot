@@ -11,6 +11,7 @@ function enhance(root) {
     if (chart.dataset.enhanced) continue;
     chart.dataset.enhanced = 'true';
     const tooltip = chart.querySelector('.article-data-tooltip');
+    let active = null, mode = 'keyboard', dismissed = false;
     const hide = () => { tooltip.hidden = true; };
     const show = bar => {
       const title = document.createElement('strong'), value = document.createElement('span');
@@ -23,15 +24,22 @@ function enhance(root) {
       tooltip.style.top = Math.max(8, rect.top - box.top - tooltip.offsetHeight - 10) + 'px';
     };
     for (const bar of chart.querySelectorAll('.data-bar')) {
-      bar.addEventListener('pointerenter', () => show(bar));
-      bar.addEventListener('focus', () => show(bar));
-      bar.addEventListener('pointerdown', () => { bar.focus(); show(bar); });
-      bar.addEventListener('blur', hide);
-      bar.addEventListener('keydown', event => { if (event.key === 'Escape') hide(); });
+      // Scrolling a focused bar into view can cause pointerenter without a
+      // mouse move. That must not substitute a neighbouring value for focus.
+      bar.addEventListener('pointerenter', () => { if (!active || mode === 'pointer') show(bar); });
+      bar.addEventListener('pointermove', event => {
+        if (event.movementX || event.movementY) { mode = 'pointer'; dismissed = false; show(bar); }
+      });
+      bar.addEventListener('focus', () => { active = bar; mode = 'keyboard'; dismissed = false; show(bar); });
+      bar.addEventListener('pointerdown', () => { bar.focus(); mode = 'pointer'; dismissed = false; show(bar); });
+      bar.addEventListener('blur', () => { active = null; hide(); });
+      bar.addEventListener('keydown', event => { if (event.key === 'Escape') { dismissed = true; hide(); } });
     }
     chart.addEventListener('pointerleave', () => {
-      if (!chart.contains(document.activeElement)) hide();
+      if (active && !dismissed) { mode = 'keyboard'; show(active); }
+      else hide();
     });
+    chart.addEventListener('scroll', () => { if (active && mode === 'keyboard' && !dismissed) show(active); });
   }
 }
 

@@ -86,6 +86,7 @@ def run(base, output):
                     page.locator('.data-bar').last.focus()
                     tooltip = page.locator('.article-data-tooltip')
                     require(tooltip.is_visible(), 'Last observation tooltip missing after horizontal scrolling')
+                    page.wait_for_function("() => document.querySelector('.article-data-tooltip').textContent.includes('2024')")
                     require(tooltip.bounding_box()['x'] >= page.locator('.article-data-chart').bounding_box()['x'], 'Mobile tooltip scrolled out of view')
         page.emulate_media(media='print')
         require(page.locator('.article-data-source').is_visible(), 'Print hides source attribution')

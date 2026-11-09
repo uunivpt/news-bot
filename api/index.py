@@ -19,6 +19,7 @@ from app.public_delivery import WindowLimiter, read_json_rows, remote_rows
 from app.public_sessions import PublicSessionInterface
 from app.briefing import DESKS as BRIEFING_DESKS, select_briefing, briefing_excerpt
 from app.source_text import source_text as plain_source_text
+from app.article_format import render_inline_markdown
 from app.source_http import fetch_source, public_http_url
 from app.admin_access import configured_users, verify_recovery_owner
 from app.admin_backend import hosted_enabled
@@ -912,8 +913,8 @@ def _article_html(row):
   data["isBasedOn"]=source_url
  json_ld=json.dumps(data,ensure_ascii=False).replace("<", "\\u003c")
  repeated_lead=re.sub(r"\s+"," ",body).strip()==re.sub(r"\s+"," ",summary).strip()
- lead_html="" if repeated_lead else '<p class="dek">'+html.escape(summary)+'</p>'
- paras="".join(f"<p>{html.escape(p.strip())}</p>" for p in re.split(r"\n+",body) if p.strip())
+ lead_html="" if repeated_lead else '<p class="dek">'+render_inline_markdown(summary)+'</p>'
+ paras="".join(f"<p>{render_inline_markdown(p.strip())}</p>" for p in re.split(r"\n+",body) if p.strip())
  return f"""<!doctype html>
 <html lang="{language}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">

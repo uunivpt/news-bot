@@ -20,7 +20,7 @@
         "updated_on": "2026-10-08",
         "retrieved_on": "2026-11-10",
         "license": "CC BY 4.0",
-        "license_url": "https://datacatalog.worldbank.org/public-licenses#cc-by"
+        "license_url": "https://data.worldbank.org/summary-terms-of-use"
       },
       "note": "Provider year labels are retained. Values are rounded to two decimal places for display; the table retains the source precision. Data can be revised by the provider.",
       "points": [
