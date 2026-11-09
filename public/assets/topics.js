@@ -172,6 +172,7 @@
     $('digestStatus').replaceChildren(el('p','','Select and copy the brief below:'),node);
     node.select();
   }
+  $('topicFilters').addEventListener('submit', event => event.preventDefault());
   for (const control of ['topicSelect','deskSelect','periodSelect','topicSearch']) {
     $(control).addEventListener(control==='topicSearch'?'input':'change',()=>{
       visible=12;savePreference();render();
@@ -181,7 +182,12 @@
     if ($('rememberTopic').checked) savePreference();
     else try {localStorage.removeItem('ph-topic-v1')} catch (_) {}
   });
-  $('moreTimeline').addEventListener('click',()=>{visible+=12;render()});
+  $('moreTimeline').addEventListener('click',()=>{
+    const continueReading = document.activeElement === $('moreTimeline');
+    const previousCount = $('timelineResults').children.length;
+    visible+=12;render();
+    if (continueReading) $('timelineResults').children[previousCount]?.querySelector('h3 a')?.focus();
+  });
   $('copyDigest').addEventListener('click',digest);
   restorePreference();
   syncPreferenceConsent();
