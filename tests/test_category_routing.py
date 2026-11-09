@@ -36,6 +36,18 @@ class EditorialCategoryRoutingTests(unittest.TestCase):
         self.assertFalse(is_political_headline("Services of nurses invaluable, says Minister"))
         self.assertEqual(normalize_category("world", "Congress meets in Europe"), "world")
 
+    def test_marathi_publishers_do_not_mix_into_india_listing(self):
+        from api import index as api
+        marathi = {"id": 101, "category": "india", "source_name": "TV9 Marathi - Maharashtra",
+                   "title": "Maharashtra assembly news"}
+        abp = dict(marathi, id=102, source_name="ABP Majha - Maharashtra")
+        national = dict(marathi, id=103, source_name="The Hindu - India")
+        self.assertFalse(api._matches_public_desk(marathi, "india"))
+        self.assertFalse(api._matches_public_desk(abp, "india"))
+        self.assertTrue(api._matches_public_desk(national, "india"))
+        self.assertTrue(api._matches_public_desk(marathi, "all"))
+        self.assertEqual(api.article_path(marathi), api.article_path(dict(marathi)))
+
     def test_existing_active_categories_unaffected(self):
         self.assertEqual(normalize_category("world", "Indian trade delegation visits USA"), "world")
         self.assertEqual(normalize_category("politics", "Election votes counted"), "politics")
