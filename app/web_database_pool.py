@@ -10,11 +10,46 @@ import threading
 import time
 
 from psycopg.rows import dict_row
+from psycopg import Connection
+from psycopg.pq import TransactionStatus
 from psycopg_pool import ConnectionPool
 
 _lock = threading.Lock()
 _pools = {}
 _failed_until = {}
+
+
+class WebConnection(Connection):
+    """Apply query limits inside transactions, compatible with PgBouncer.
+
+    Neon rejects statement_timeout in the startup packet. Session SET values
+    also do not survive transaction pooling, so each web statement sets LOCAL
+    limits in the same transaction as its query. Existing caller transactions
+    keep their own commit/rollback boundary.
+    """
+    @classmethod
+    def connect(cls, conninfo='', *, statement_timeout_ms=0, **kwargs):
+        connection = super().connect(conninfo, **kwargs)
+        connection._web_statement_timeout_ms = max(0, int(statement_timeout_ms))
+        return connection
+
+    def _set_local_limits(self):
+        super().execute(
+            "SELECT set_config('statement_timeout', %s, true), "
+            "set_config('lock_timeout', '2000', true)",
+            (str(self._web_statement_timeout_ms),), prepare=False)
+
+    def execute(self, query, params=None, *, prepare=None, binary=False):
+        if not getattr(self, '_web_statement_timeout_ms', 0):
+            return super().execute(query, params, prepare=prepare, binary=binary)
+        status = self.info.transaction_status
+        if status == TransactionStatus.IDLE:
+            with self.transaction():
+                self._set_local_limits()
+                return super().execute(query, params, prepare=prepare, binary=binary)
+        if status == TransactionStatus.INTRANS:
+            self._set_local_limits()
+        return super().execute(query, params, prepare=prepare, binary=binary)
 
 
 def _reconnect_failed(key):
@@ -32,11 +67,11 @@ def get_pool(database_url, connect_timeout=3, statement_timeout=5000):
         if pool is None:
             kwargs = dict(autocommit=True, row_factory=dict_row,
                           connect_timeout=connect_timeout, prepare_threshold=None,
-                          application_name='politicshub-web')
-            if statement_timeout:
-                kwargs['options'] = f'-c statement_timeout={int(statement_timeout)} -c lock_timeout=2000'
+                          application_name='politicshub-web',
+                          statement_timeout_ms=int(statement_timeout or 0))
             pool = ConnectionPool(
-                database_url, kwargs=kwargs, name='politicshub-web',
+                database_url, kwargs=kwargs, connection_class=WebConnection,
+                name='politicshub-web',
                 min_size=0, max_size=4, max_waiting=16, timeout=2,
                 max_idle=30, max_lifetime=300, reconnect_timeout=5,
                 check=ConnectionPool.check_connection, open=False,

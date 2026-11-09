@@ -90,6 +90,33 @@ class PostgresDeliveryTests(unittest.TestCase):
         finally:
             database.close()
 
+    def test_pooled_query_deadline_survives_transactions_and_recovers(self):
+        database = NewsDatabase(database_url=URL, use_pool=True,
+                                initialize_schema=False, statement_timeout=50)
+        try:
+            with self.assertRaises(psycopg.errors.QueryCanceled):
+                database.conn.execute('SELECT pg_sleep(0.2)')
+            self.assertEqual(database.conn.execute('SELECT 1 AS ok').fetchone()['ok'], 1)
+            with self.assertRaises(psycopg.errors.QueryCanceled):
+                with database.conn.transaction():
+                    database.conn.execute('SELECT pg_sleep(0.2)')
+            self.assertEqual(database.conn.execute('SELECT 2 AS ok').fetchone()['ok'], 2)
+        finally:
+            database.close()
+
+    def test_pooled_execute_preserves_explicit_transaction_rollback(self):
+        database = NewsDatabase(database_url=URL, use_pool=True,
+                                initialize_schema=False, statement_timeout=5000)
+        try:
+            with self.assertRaisesRegex(RuntimeError, 'rollback fixture'):
+                with database.conn.transaction():
+                    database.conn.execute('CREATE TEMP TABLE pooled_rollback_fixture (value INTEGER)')
+                    database.conn.execute('INSERT INTO pooled_rollback_fixture VALUES (1)')
+                    raise RuntimeError('rollback fixture')
+            self.assertIsNone(database.conn.execute("SELECT to_regclass('pg_temp.pooled_rollback_fixture') AS relation").fetchone()['relation'])
+        finally:
+            database.close()
+
     def test_query_failures_return_safe_retryable_http_response(self):
         api._PUBLIC_RATE.clear()
         with patch.object(api, 'db', return_value=self.database), \
