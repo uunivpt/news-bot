@@ -1,6 +1,6 @@
 import unittest
 
-from app.newsroom import clean_text, make_summary, process_news, select_sentences, sentences
+from app.newsroom import clean_text, make_summary, process_news, select_sentences, sentences, longform_quality_gate, quality_headline
 from app.extractive_summarizer import hybrid_scores, lexrank_scores, textrank_scores
 
 
@@ -215,6 +215,28 @@ class NewsroomBotTests(unittest.TestCase):
         )
         summary = make_summary(title, source)
         self.assertTrue(all(sentence in sentences(source) for sentence in sentences(summary)))
+
+
+    def test_longform_gate_enforces_500_to_700_words_without_padding(self):
+        title = "Officials publish a new transport timetable for regional services"
+        # Distinct complete source-backed sentences: this test checks formatting,
+        # not independent factual truth.
+        paragraphs = [
+            f"Officials confirmed transport schedule detail number {i} during the documented regional timetable update, with the same authority responsible for publication and implementation."
+            for i in range(30)
+        ]
+        article = " ".join(paragraphs)
+        self.assertTrue(500 <= len(article.split()) <= 700)
+        self.assertTrue(longform_quality_gate(title, article)["passed"])
+        self.assertFalse(longform_quality_gate(title, "Very short article.")["passed"])
+        self.assertIn("brief_below_500_words", longform_quality_gate(title, "Very short article.")["errors"])
+        self.assertIn("brief_above_700_words", longform_quality_gate(title, article + " " + article)["errors"])
+        self.assertFalse(longform_quality_gate(title, "The same complete sentence is repeated many times. " * 70)["passed"])
+
+    def test_headline_refuses_overlong_or_dangling_fragment(self):
+        source = "The government announced a new transport plan on Tuesday. Local authorities published the supporting details on Wednesday."
+        self.assertEqual(quality_headline("Government announces plan for", source), "The government announced a new transport plan on Tuesday")
+        self.assertLessEqual(len(quality_headline("Unverified headlines " * 100, source)), 180)
 
 
 if __name__ == "__main__":
