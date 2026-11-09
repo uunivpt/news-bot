@@ -60,6 +60,7 @@ def is_indexable(row, now=None):
     if str(row.get("source_type") or "").lower() == "rss" and not (
         row.get("editorial_value")
         or str(row.get("fact_check_status") or "").lower() == "reviewed"
+        or row.get("seo_reviewed") is True
         or row.get("ads_eligible") is True
     ):
         return False
