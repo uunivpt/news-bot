@@ -824,6 +824,7 @@ def _article_html(row):
  body=plain_source_text(row.get("article") or row.get("bot_article") or row.get("body") or summary,paragraphs=True)
  source=str(row.get("source_name") or "PoliticsHub.in")
  source_url=_safe_source_url(row.get("url"))
+ topic_key="world" if category.lower()=="world" else "maharashtra" if re.search(r"maharashtra|mumbai|pune|nagpur|marathi|महाराष्ट्र|मुंबई|पुणे",title,re.I) else "elections" if re.search(r"election|polling|vote|निवडणूक|चुनाव",title,re.I) else "parliament" if re.search(r"parliament|lok sabha|rajya sabha|policy|संसद",title,re.I) else "all"
  image=SITE_ORIGIN+"/api/og/"+str(row.get("id"))+"?v=20261031-deva"
  data={
   "@context":"https://schema.org","@type":"NewsArticle","headline":title,"inLanguage":language,
@@ -864,6 +865,7 @@ def _article_html(row):
 <div class="body">{paras}</div>
 <div class="src"><strong>Content type:</strong> {"PoliticsHub editorial copy. Readers can check the cited sources and correction history." if row.get("source_type")=="manual" else "Source-linked brief based on the originating publisher. This is not an independently reported PoliticsHub article; consult the original link for full context."}</div>
 <div class="src">Source: {html.escape(source)}. {"<a href='"+html.escape(source_url,quote=True)+"' rel='nofollow noopener noreferrer' target='_blank'>Read the original report</a>" if source_url else ""}</div>
+<div class="src"><strong>Follow this subject:</strong> <a href="/topics/?topic={topic_key}">Related headlines and publication timeline</a> · <a href="/guides/election-results.html">How to verify public claims</a>. Topic grouping is based on headlines, not a fact-check.</div>
 <button type="button" class="article-share" data-share-title="{html.escape(title,quote=True)}" data-share-url="{html.escape(canonical,quote=True)}" aria-haspopup="dialog"><span>↗</span><b>Share this story</b></button>
 </article></main>
 <footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><p class="ser">Source-linked news. Clearly.</p></div><div><h4>Navigate</h4><ul><li><a href="/">Home</a></li><li><a href="/archive/">News Archive</a></li><li><a href="/about.html">About</a></li><li><a href="/editorial-policy.html">Editorial Policy</a></li><li><a href="/corrections.html">Corrections</a></li><li><a href="/contact.html">Contact</a></li><li><a href="/disclaimer.html">Disclaimer</a></li><li><a href="/privacy.html">Privacy</a></li><li><a href="/cookies.html">Cookies</a></li><li><a href="/terms.html">Terms</a></li><li><a href="/newsletter.html">Newsletter</a></li><li><a href="/settings.html">Settings</a></li><li><a href="/debug.html">System Status</a></li></ul></div><div><h4>Contact</h4><ul><li><a href="mailto:politicshub.in@gmail.com">politicshub.in@gmail.com</a></li></ul></div></div></footer>
