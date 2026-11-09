@@ -11,7 +11,7 @@ const CONSENT_KEY='ph-consent-v1';
 const consentReturnFocus=new WeakMap();
 function consentMode(){return ls.get(CONSENT_KEY)||''}
 function preferencesAllowed(){return consentMode()==='preferences'}
-function clearOptionalStorage(){[CACHE_KEY,...LEGACY_CACHE_KEYS,'ph-theme','ph-cookie','ph-ls','ph-reading-list-v1','ph-reader-size-v1'].forEach(ls.del);window.dispatchEvent(new Event('ph-preferences-cleared'))}
+function clearOptionalStorage(){[CACHE_KEY,...LEGACY_CACHE_KEYS,'ph-theme','ph-cookie','ph-ls','ph-reading-list-v1','ph-reader-size-v1','ph-topic-v1'].forEach(ls.del);window.dispatchEvent(new Event('ph-preferences-cleared'))}
 function setConsent(mode,button){
  const value=mode==='preferences'?'preferences':'essential';
  try{localStorage.setItem(CONSENT_KEY,value)}catch(_){

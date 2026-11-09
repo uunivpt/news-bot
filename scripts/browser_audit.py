@@ -817,6 +817,66 @@ def run(base, output,admin_fixture=False):
                 isolated.close()
         check('homepage, Settings and Cookie Policy acknowledge storage failure and allow preference retry', consent_write_failure_recovery)
 
+        def topic_preference_withdrawal():
+            isolated = browser.new_context(viewport={'width': 390, 'height': 844}, service_workers='block')
+            isolated.route('**/*', lambda route: route.continue_() if route.request.url.startswith(base + '/') else route.abort())
+            if admin_fixture:
+                # Production serves Topics through Vercel's static rewrite.
+                isolated.route(base + '/topics/', lambda route: route.fulfill(content_type='text/html',
+                    body=(Path(__file__).resolve().parents[1] / 'public/topics/index.html').read_text(encoding='utf-8')))
+            reader = isolated.new_page()
+            reader.on('pageerror', lambda error: errors.append(str(error)))
+
+            def remember_world():
+                reader.goto(base + '/topics/', wait_until='networkidle')
+                if reader.evaluate("localStorage.getItem('ph-consent-v1')") != 'preferences':
+                    if not reader.locator('#privacyConsent').count():
+                        reader.locator('footer [data-open-consent]').click()
+                    reader.locator('[data-site-preference="preferences"]').click()
+                reader.locator('#rememberTopic').check()
+                reader.locator('#topicSelect').select_option('world')
+                require(reader.evaluate("localStorage.getItem('ph-topic-v1')") == 'world', 'Topic was not remembered after opt-in')
+
+            try:
+                remember_world()
+                reader.locator('footer [data-open-consent]').click()
+                reader.locator('[data-site-preference="essential"]').click()
+                require(reader.evaluate("localStorage.getItem('ph-topic-v1')") is None, 'Static withdrawal retained the optional topic')
+                require(not reader.locator('#rememberTopic').is_checked(), 'Topic checkbox still claims storage after withdrawal')
+                require(reader.locator('#topicSelect').input_value() == 'world', 'Withdrawal changed the current reading filter')
+                reader.locator('#topicSelect').select_option('economy')
+                require(reader.evaluate("localStorage.getItem('ph-topic-v1')") is None, 'Essential-only filtering saved another topic')
+                reader.evaluate("localStorage.setItem('ph-topic-v1','world')")
+                reader.reload(wait_until='networkidle')
+                require(reader.locator('#topicSelect').input_value() == 'all', 'Reload resurrected a withdrawn topic')
+                require(reader.evaluate("localStorage.getItem('ph-topic-v1')") is None, 'Startup retained a legacy topic despite essential-only consent')
+                for choice in ('settings', 'cookies', 'reset'):
+                    remember_world()
+                    reader.goto(base + ('/cookies.html' if choice == 'cookies' else '/#/settings'), wait_until='networkidle')
+                    if choice == 'cookies':
+                        reader.locator('[data-consent-choice="essential"]').click()
+                    elif choice == 'reset':
+                        reader.locator('#rst').click()
+                    else:
+                        reader.locator('#prefs [data-consent-choice="essential"]').click()
+                    require(reader.evaluate("localStorage.getItem('ph-topic-v1')") is None, choice + ' retained the optional topic')
+                remember_world()
+                policy = isolated.new_page()
+                policy.on('pageerror', lambda error: errors.append(str(error)))
+                try:
+                    policy.goto(base + '/cookies.html', wait_until='networkidle')
+                    policy.locator('[data-consent-choice="essential"]').click()
+                    reader.wait_for_function("() => !document.querySelector('#rememberTopic').checked")
+                    require(reader.locator('#topicSelect').input_value() == 'world', 'Cross-tab withdrawal reset the current reading filter')
+                    require(reader.evaluate("localStorage.getItem('ph-topic-v1')") is None, 'Cross-tab withdrawal retained the optional topic')
+                    reader.locator('#topicSelect').select_option('economy')
+                    require(reader.evaluate("localStorage.getItem('ph-topic-v1')") is None, 'Cross-tab withdrawal allowed a later optional write')
+                finally:
+                    policy.close()
+            finally:
+                isolated.close()
+        check('remembered Topics are removed by every preference withdrawal path and active controls reflect consent', topic_preference_withdrawal)
+
         def saved():
             visit('/saved.html')
             page.wait_for_selector('[data-reader-consent]')
