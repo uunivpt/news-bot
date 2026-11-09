@@ -51,15 +51,23 @@ def run(base: str, output: Path) -> None:
         try:
             callback()
         except Exception as error:
-            page.screenshot(path=str(output / 'failure.png'), animations='disabled')
-            (output / 'failure.json').write_text(json.dumps({
+            failure = {
                 'check': name, 'error': str(error), 'browser_errors': errors,
                 'page_state': page.evaluate("""() => ({
-                    active: document.activeElement?.outerHTML,
+                    active: document.activeElement?.outerHTML.slice(0, 1000),
                     search: document.querySelector('#sp')?.outerHTML.slice(0, 1000),
+                    searchVisibility: getComputedStyle(document.querySelector('#sp')).visibility,
+                    inputVisibility: getComputedStyle(document.querySelector('#si')).visibility,
+                    hasFocus: document.hasFocus(), hidden: document.hidden,
+                    focusEvents: window.__auditFocusEvents,
                     scrollY, bodyClass: document.body.className
                 })""")
-            }, indent=2))
+            }
+            # Hosted runners do not retain the output directory after failure.
+            # Capture state before screenshots finish CSS animations.
+            print('FAIL ' + json.dumps(failure), flush=True)
+            (output / 'failure.json').write_text(json.dumps(failure, indent=2))
+            page.screenshot(path=str(output / 'failure.png'), animations='disabled')
             raise
         checks.append({'check': name, 'status': 'passed', 'seconds': round(time.monotonic() - start, 3)})
         print('PASS ' + name, flush=True)
@@ -170,6 +178,17 @@ def run(base: str, output: Path) -> None:
         check('loading more reports appends every row and continues keyboard focus', load_more)
 
         def search():
+            page.evaluate("""() => {
+                window.__auditFocusEvents = [];
+                for (const type of ['focusin', 'focusout']) {
+                    document.addEventListener(type, event => {
+                        window.__auditFocusEvents.push({
+                            type, target: event.target.id || event.target.tagName,
+                            time: performance.now(), open: document.querySelector('#sp').classList.contains('open')
+                        });
+                    });
+                }
+            }""")
             page.keyboard.press('Control+k')
             page.wait_for_selector('#sp.open')
             page.wait_for_function("() => document.querySelector('#si') === document.activeElement")
