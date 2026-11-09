@@ -46,8 +46,8 @@ class AuditRegressions(unittest.TestCase):
    self.assertEqual(response.headers['X-News-Mode'],'snapshot')
    self.assertIn('s-maxage=10',response.headers['Cache-Control'])
    health=self.client.get('/api/health')
-   self.assertEqual(health.status_code,503)
-   self.assertFalse(health.json['ok'])
+   self.assertEqual(health.status_code,200)
+   self.assertEqual(health.json,{'ok':True})
    self.assertEqual(health.headers['Cache-Control'],'no-store')
  def test_missing_runtime_snapshot_returns_unavailable(self):
   with patch.object(api,'db',side_effect=DatabaseUnavailable('down')),patch.object(api.app,'_static_folder',self.tmp.name):

@@ -34,6 +34,10 @@ def ensure_queue(database):
 
 
 def delivery_status(database, item_id):
+    from app.admin_backend import hosted_enabled
+    if hosted_enabled():
+        from app.hosted_publication import delivery
+        return delivery(database, item_id)
     ensure_queue(database)
     p = '%s' if database._postgres else '?'
     record = database.conn.execute('SELECT * FROM ph_public_delivery WHERE item_id='+p,
@@ -58,6 +62,10 @@ def delivery_status(database, item_id):
 
 def deliver_publication(item_id, *, database):
     """Call AFTER the publication transaction; retries never republish the DB row."""
+    from app.admin_backend import hosted_enabled
+    if hosted_enabled():
+        from app.hosted_publication import delivery
+        return delivery(database, item_id)
     try:
         record = database.get_by_id(int(item_id))
         if not record:

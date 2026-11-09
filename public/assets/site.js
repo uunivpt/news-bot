@@ -166,11 +166,11 @@ function ticker(){
  const rows=S.items.filter(i=>i.title).slice(0,12);
  if(!rows.length){tickEl.hidden=true;return}
  const links=rows.map(i=>'<a href="'+esc(articleHref(i))+'"><b>'+esc(i.category||'NEWS')+'</b>'+esc(i.title)+'</a>').join('');
- box.innerHTML='<div>'+links+links+'</div>';const primaryLive=S.mode==='api'&&S.apiMode!=='snapshot';
+ box.innerHTML='<div>'+links+links+'</div>';
  const cachedOnly=S.mode==='cached'||S.mode==='cache'||S.mode==='empty';
- tickEl.classList.toggle('saved',!primaryLive);
+ tickEl.classList.toggle('saved',cachedOnly);
  const tag=tickEl.querySelector('.tag');
- if(tag)tag.innerHTML='<span class="dot"></span>'+(primaryLive?'LIVE':cachedOnly?'OFFLINE':'SOURCE FEED');
+ if(tag)tag.innerHTML='<span class="dot"></span>'+(cachedOnly?'SAVED':'LATEST');
  tickEl.hidden=false;
 }
 function hydrateCache(){const x=cacheLoad();if(!x||!x.items.length)return false;S.items=x.items.map(norm).sort((a,b)=>ts(b.date)-ts(a.date)||0);S.mode='cache';S.api='stale';return true}
@@ -245,21 +245,14 @@ async function article(id){setActive('');
  const rel=S.items.filter(i=>i.id!==it.id&&i.category===it.category).concat(S.items.filter(i=>i.id!==it.id&&i.category!==it.category)).slice(0,3);
  $('#app').innerHTML=`<article class="art" data-k="${ck(it)}"><div class="ah"><a class="chip" href="${hl(CATS.find(c=>it.category.toLowerCase().includes(c[0]))?.[0]||'all')}">${esc(it.category)}</a><h1>${esc(it.title)}</h1>${it.summary&&it.body&&it.summary.replace(/\s+/g," ").trim()!==it.body.replace(/\s+/g," ").trim()?`<p class="dek">${esc(it.summary)}</p>`:''}<div class="by"><span>Compiled by <a href="/author/politicshub-news-desk">PoliticsHub Editorial Desk</a></span>${articleDateHtml}<span>${esc(it.source)}</span></div></div>${it.image?`<div class="ahero"><div class="im">${img(it)}</div></div>`:''}<div class="body">${paras}</div><div class="src"><strong>Story format:</strong> ${it.source_type==='manual'?'Editorially prepared PoliticsHub copy. Review the cited sources and corrections for context.':'Source-linked brief based on reporting from the named publisher. It is not independently reported by PoliticsHub.'}</div>${it.url?`<div class="src">Source: ${esc(it.source||'original report')}. <a href="${esc(safeSourceUrl(it.url))}" target="_blank" rel="noopener noreferrer">Read the original report</a></div>`:''}<button class="article-share" type="button" data-share-title="${esc(it.title)}" aria-haspopup="dialog" aria-label="Share this story"><span aria-hidden="true">↗</span><b>Share</b></button></article><section class="rel"><div class="sh"><h2>Related stories</h2></div><div class="grid">${rel.map(card).join('')}</div></section>`;fx();return it.id}
 function settings(sub){document.documentElement.lang='en';setActive('');document.title='Settings — PoliticsHub.in';const th=document.documentElement.dataset.theme;
- const st=(v,t)=>`<span class="${v}">${t}</span>`;const last=S.items.find(i=>i.date)?.date;
  const privacy=preferencesAllowed()?'Preferences allowed':'Essential only';
  $('#app').innerHTML=`<div class="set"><span class="lbl red">Preferences</span><h1>Settings</h1>
  <section><h2>Appearance</h2><div class="themes"><button class="tc" data-th="light" aria-pressed="${th==='light'}"><div class="pv" style="background:#f4f1ec;color:#121212"><i></i><i></i><i></i></div><b>Bright</b></button><button class="tc" data-th="dark" aria-pressed="${th==='dark'}"><div class="pv" style="background:#0c0c0d;color:#f1ede5"><i></i><i></i><i></i></div><b>Dark</b></button></div><small class="lbl">Theme is remembered only when optional preferences are allowed.</small></section>
  <section id="prefs"><h2>Privacy choices</h2>
  <div class="row"><span>Optional browser storage<br><small class="lbl">Theme, text size, saved stories and recent-story cache</small></span><strong>${privacy}</strong></div>
  <div class="legal-actions"><button class="btn" data-consent-choice="preferences">Allow preferences</button><button class="btn secondary" data-consent-choice="essential">Essential only</button><a class="btn secondary" href="/cookies.html">Cookie Policy</a></div>
- <div class="row"><span>Reset local preferences</span><button class="btn" id="rst">Reset</button></div></section>
- <section id="status"><h2>System status</h2>
- <div class="row"><span>News API</span>${S.api==='ok'&&S.apiMode!=='snapshot'?st('ok','Operational'):S.apiMode==='snapshot'?st('ok','GitHub public feed'):S.api==='empty'?st('unk','No stories returned'):st('bad','Unreachable')}</div>
- <div class="row"><span>News storage</span>${S.apiMode==='snapshot'?st('ok','Termux + GitHub delivery'):S.api==='ok'?st('ok','Public news online'):st('unk','Check public feed')}</div>
- <div class="row"><span>News snapshot</span>${S.snap==='ok'?st('ok','Available'):S.snap==='standby'?st('unk','Published feed available'):S.snap==='empty'?st('unk','Empty'):st('bad','Not found')}</div>
- <div class="row"><span>Frontend</span>${st('ok','Running')}</div>
- <div class="row"><span>Last update</span><span>${last?fmt(last):'Unknown'}</span></div></section></div>`;
- if(sub)$('#'+sub)?.scrollIntoView()}
+ <div class="row"><span>Reset local preferences</span><button class="btn" id="rst">Reset</button></div></section></div>`;
+ if(sub==='prefs')$('#prefs')?.scrollIntoView()}
 function render(background=false){
  articleRequest++;articleController?.abort();
  const path=location.pathname.split('/').filter(Boolean); const hash=location.hash.slice(1).split('/').filter(Boolean); const p=path.length>=2&&/^\d+-/.test(path[1])?['article',path[1].split('-')[0]]:(path.length===1&&CATS.some(x=>x[0]===path[0])?['c',path[0]]:hash); if(!background){closeAll();window.scrollTo(0,0)}
@@ -468,17 +461,18 @@ function bindNewsletter(){
 
 function updateFeedStatus(){
  let box=document.getElementById('feedStatus');
- if(!box){box=document.createElement('div');box.id='feedStatus';box.className='feed-status wrap';box.setAttribute('role','status');const main=document.querySelector('main');if(main?.id==='app')main.before(box);else main?.prepend(box)}
  const mode=S.mode;
- const newest=S.items.reduce((best,item)=>Math.max(best,ts(item.date)),0);
- const newestLabel=newest?' Newest report: '+ago(new Date(newest).toISOString())+'.':'';
+ // Readers only need a notice when loading or when current stories cannot load.
+ // Normal source delivery and all service diagnostics belong in the Admin Room.
+ if(mode==='api'||mode==='snapshot'){box?.remove();return}
+ if(!box){box=document.createElement('div');box.id='feedStatus';box.className='feed-status wrap';box.setAttribute('role','status');const main=document.querySelector('main');if(main?.id==='app')main.before(box);else main?.prepend(box)}
  box.replaceChildren();
  const label=document.createElement('span');
- if(mode==='api')label.textContent='Latest news connected. Updates refresh automatically.'+newestLabel;
- else if(mode==='snapshot')label.textContent='GitHub public news feed is active. Reviewed phone stories sync when approved; public sources also refresh automatically.'+newestLabel;
- else if(mode==='cached'||mode==='cache')label.textContent='Connection unavailable. Showing previously loaded stories.'+newestLabel;
- else label.textContent='News is temporarily unavailable. Please retry.';
+ if(mode==='loading')label.textContent='Loading the latest stories…';
+ else if(mode==='cached'||mode==='cache')label.textContent='Connection unavailable. Showing previously loaded stories.';
+ else label.textContent='Stories are temporarily unavailable. Please try again.';
  box.append(label);
+ if(mode==='loading')return;
  const retry=document.createElement('button');retry.type='button';retry.className='btn secondary';retry.textContent='Refresh news';retry.onclick=async()=>{retry.disabled=true;retry.textContent='Refreshing…';try{await refreshLatest(true)}finally{retry.disabled=false;retry.textContent='Refresh news'}};box.append(retry);
 }
 document.addEventListener('error',event=>{

@@ -21,6 +21,7 @@ from app.briefing import DESKS as BRIEFING_DESKS, select_briefing, briefing_exce
 from app.source_text import source_text as plain_source_text
 from app.source_http import fetch_source, public_http_url
 from app.admin_access import configured_users, verify_recovery_owner
+from app.admin_backend import hosted_enabled
 from app.admin_workspace import LIST_FIELDS as ADMIN_LIST_FIELDS, EDITORIAL_FIELDS, editorial_revision, project_rows as admin_project_rows, coverage as admin_coverage
 from app.source_inventory import source_inventory
 from app.newsroom_operations import source_triage, publication_operations
@@ -57,7 +58,7 @@ _LOGIN_WINDOW_SECONDS=300; _LOGIN_MAX_FAILURES=8; _SETUP_MAX_FAILURES=5; _login_
 def maybe_proxy_private_phone_admin():
  # Public reads still use the GitHub feed. Only the protected Admin API is
  # forwarded when the HTTPS tunnel and shared signing secret are configured.
- if os.getenv("VERCEL")!="1":
+ if os.getenv("VERCEL")!="1" or hosted_enabled():
   return None
  from app.remote_admin_bridge import proxy_public_admin
  return proxy_public_admin()
@@ -336,6 +337,8 @@ def _rank_public(rows,threshold=0.82):
  return dedupe_story_rows(items,threshold=threshold)
 def _public_rows_for_section(category="all",limit=200):
  if category=="hindi":return _rank_public(_hindi_rows())[:limit]
+ if hosted_enabled():
+  return _rank_public([row for row in _hosted_snapshot_rows() if _matches_public_desk(row,category)])[:limit]
  try:
   database=db()
   try:
@@ -409,7 +412,7 @@ def _section_html(category="all"):
  if category in ("india","all"):
   body+='<section aria-label="Editorial guides" style="margin:20px 0"><h2>Understand the news</h2><p><a href="/guides/election-results.html">How to verify election results</a></p></section>'
  body+='<div class="sh"><h2>Latest stories</h2><span class="lbl">'+str(len(rows))+' stories</span></div><div class="grid">'+"".join(cards)+'</div>'
- return '<!doctype html><html lang="'+language+'" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta name="google-adsense-account" content="ca-pub-1752666987448533"><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/editorial.css?v=phui19"><link rel="stylesheet" href="/assets/polish.css?v=phui30"><link rel="stylesheet" href="/assets/newsroom-ui.css?v=watermelon1"><script src="/assets/ui.js?v=phui30" defer></script></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/archive/">All News Archive</a></p><p><a href="/guides/maharashtra-mlc.html">Maharashtra Council explainer</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="/settings.html">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=categoryfix1"></script><script src="/assets/newsroom-ui.js?v=watermelon1"></script><script src="/assets/editorial-home.js?v=watermelon1"></script></body></html>'
+ return '<!doctype html><html lang="'+language+'" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta name="google-adsense-account" content="ca-pub-1752666987448533"><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/editorial.css?v=phui19"><link rel="stylesheet" href="/assets/polish.css?v=phui30"><link rel="stylesheet" href="/assets/newsroom-ui.css?v=watermelon1"><script src="/assets/ui.js?v=phui30" defer></script></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/archive/">All News Archive</a></p><p><a href="/guides/maharashtra-mlc.html">Maharashtra Council explainer</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="/settings.html">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=privateadmin1"></script><script src="/assets/newsroom-ui.js?v=watermelon1"></script><script src="/assets/editorial-home.js?v=privateadmin1"></script></body></html>'
 
 
 def _enhance_section_seo(document, category):
@@ -447,10 +450,9 @@ _db_retry_after=0.0
 
 def db():
  global _db_retry_after
- # Vercel's news website consumes GitHub-published feed data. The only
- # editable PostgreSQL database is on Termux; never connect to Neon here,
- # even if legacy DATABASE_3URL environment secrets still exist.
- if os.getenv("VERCEL") == "1" or os.getenv("POLITICSHUB_GITHUB_FEED_ONLY") == "1":
+ # Hosted Admin Room uses the existing deployment database. Legacy feed-only
+ # deployments keep their original restriction until explicitly configured.
+ if not hosted_enabled() and (os.getenv("VERCEL") == "1" or os.getenv("POLITICSHUB_GITHUB_FEED_ONLY") == "1"):
   raise DatabaseUnavailable("Public website is GitHub-feed-only; editable data is local to Termux")
  if time.monotonic() < _db_retry_after:
   raise DatabaseUnavailable("Database temporarily unavailable")
@@ -471,6 +473,20 @@ def db():
    database.close()
    raise
  return database
+
+
+def _hosted_snapshot_rows():
+ """Current source feed plus durable, approved hosted editorial overrides."""
+ rows=_snapshot_rows('all')
+ database=None
+ try:
+  database=db()
+  from app.hosted_publication import overlay
+  return overlay(database,rows)
+ except (DatabaseUnavailable,PostgresError):
+  return rows
+ finally:
+  if database:database.close()
 
 def admin_ok():
  if recovery_session():return False
@@ -735,6 +751,9 @@ def _archive_rows(database=None, search=None,discovery=False):
    _archive_discovery_until=time.monotonic()+300
   rows=[dict(row) for row in _archive_discovery_cache[1]]
  else:rows=public_archive.rows(search)
+ if database is not None and hosted_enabled():
+  from app.hosted_publication import overlay
+  return overlay(database,rows)
  if database is not None:
   overrides=[dict(row) for row in database.archive_overrides(rows)]
   ids={str(row["id"]) for row in overrides}
@@ -750,10 +769,52 @@ def _archive_row(item_id,database=None):
   overrides=[dict(record) for record in database.archive_overrides([row])]
   for record in overrides:
    if str(record["id"])==str(item_id) or record["url"]==row["url"]:
+    if hosted_enabled():
+     from app.hosted_publication import is_editorial_override,is_publication
+     current=database.get_by_id(record['id'])
+     if not current or not is_editorial_override(database,dict(current)):continue
+     if str(current['id'])!=str(row['id']) and (current['source_type']=='manual' or row.get('source_type')=='manual'):continue
+     if not is_publication(dict(current)):return None
     return database.get_by_id(record["id"],"published") if record["status"]=="published" else None
  return row
 
+
+def _hosted_article_row(item_id):
+ """Use edited cloud copy while retaining current source and archive URLs."""
+ candidates=_snapshot_rows('all')+_hindi_rows()+_official_exam_rows()
+ snapshot=next((row for row in candidates if str(row.get('id'))==str(item_id)),None)
+ database=None
+ try:
+  database=db()
+  from app.hosted_publication import overlay,is_editorial_override,is_publication
+  if snapshot:
+   merged=overlay(database,[snapshot])
+   visible=next((row for row in merged if str(row.get('id'))==str(item_id) or
+     (snapshot.get('source_type')!='manual' and row.get('source_type')!='manual' and row.get('url')==snapshot.get('url'))),None)
+   if not visible:return None
+   current=database.get_by_id(int(visible['id']))
+   if current and is_editorial_override(database,dict(current)):
+    return dict(current) if is_publication(dict(current)) else None
+   return snapshot
+  current=database.get_by_id(int(item_id))
+  if current:
+   row=dict(current)
+   from app.live_publication import source_withheld
+   if source_withheld(row.get('url')):return None
+   if is_editorial_override(database,row):return row if is_publication(row) else None
+   # Untouched imports are not a new publication decision. Only their
+   # previously public archive copy may remain readable.
+   return _archive_row(item_id,database)
+  return _archive_row(item_id,database)
+ except (DatabaseUnavailable,PostgresError):
+  return snapshot or _archive_row(item_id)
+ finally:
+  if database:database.close()
+
 def _public_row_by_id(item_id):
+ if hosted_enabled():
+  row=_hosted_article_row(item_id)
+  return _publicize(row) if row else None
  from app.live_publication import lookup
  handled,live=lookup(item_id)
  if handled:return _publicize(live) if live else None
@@ -873,7 +934,7 @@ def _article_html(row):
 <div class="src"><strong>Follow this subject:</strong> <a href="/topics/?topic={topic_key}">Related headlines and publication timeline</a> · <a href="/guides/reading-breaking-news.html">How to verify evolving claims</a>. Topic grouping is based on headlines, not a fact-check.</div>
 <button type="button" class="article-share" data-share-title="{html.escape(title,quote=True)}" data-share-url="{html.escape(canonical,quote=True)}" aria-haspopup="dialog"><span>↗</span><b>Share this story</b></button>
 </article></main>
-<footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><p class="ser">Source-linked news. Clearly.</p></div><div><h4>Navigate</h4><ul><li><a href="/">Home</a></li><li><a href="/archive/">News Archive</a></li><li><a href="/about.html">About</a></li><li><a href="/editorial-policy.html">Editorial Policy</a></li><li><a href="/corrections.html">Corrections</a></li><li><a href="/contact.html">Contact</a></li><li><a href="/disclaimer.html">Disclaimer</a></li><li><a href="/privacy.html">Privacy</a></li><li><a href="/cookies.html">Cookies</a></li><li><a href="/terms.html">Terms</a></li><li><a href="/newsletter.html">Newsletter</a></li><li><a href="/settings.html">Settings</a></li><li><a href="/debug.html">System Status</a></li></ul></div><div><h4>Contact</h4><ul><li><a href="mailto:politicshub.in@gmail.com">politicshub.in@gmail.com</a></li></ul></div></div></footer>
+<footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><p class="ser">Source-linked news. Clearly.</p></div><div><h4>Navigate</h4><ul><li><a href="/">Home</a></li><li><a href="/archive/">News Archive</a></li><li><a href="/about.html">About</a></li><li><a href="/editorial-policy.html">Editorial Policy</a></li><li><a href="/corrections.html">Corrections</a></li><li><a href="/contact.html">Contact</a></li><li><a href="/disclaimer.html">Disclaimer</a></li><li><a href="/privacy.html">Privacy</a></li><li><a href="/cookies.html">Cookies</a></li><li><a href="/terms.html">Terms</a></li><li><a href="/newsletter.html">Newsletter</a></li><li><a href="/settings.html">Settings</a></li></ul></div><div><h4>Contact</h4><ul><li><a href="mailto:politicshub.in@gmail.com">politicshub.in@gmail.com</a></li></ul></div></div></footer>
 <script src="/assets/story-page.js?v=phview1"></script>
 </body></html>"""
 
@@ -885,8 +946,8 @@ def _og_image(item_id):
   return render_story(row.get("title") or "Latest PoliticsHub report", row.get("category") or "News")
 
 def _editorial_page(title,lead,kind="page"):
- links=["Home","About","Editorial Policy","Corrections","Contact","Disclaimer","Privacy","Cookies","Terms","Newsletter","Settings","System Status"]
- hrefs={"Home":"/","About":"/about.html","Editorial Policy":"/editorial-policy.html","Corrections":"/corrections.html","Contact":"/contact.html","Disclaimer":"/disclaimer.html","Privacy":"/privacy.html","Cookies":"/cookies.html","Terms":"/terms.html","Newsletter":"/newsletter.html","Settings":"/settings.html","System Status":"/debug.html"}
+ links=["Home","About","Editorial Policy","Corrections","Contact","Disclaimer","Privacy","Cookies","Terms","Newsletter","Settings"]
+ hrefs={"Home":"/","About":"/about.html","Editorial Policy":"/editorial-policy.html","Corrections":"/corrections.html","Contact":"/contact.html","Disclaimer":"/disclaimer.html","Privacy":"/privacy.html","Cookies":"/cookies.html","Terms":"/terms.html","Newsletter":"/newsletter.html","Settings":"/settings.html"}
  nav="<ul>"+"".join("<li><a href=\""+hrefs[x]+"\">"+html.escape(x)+"</a></li>" for x in links)+"</ul>"
  body="<p>PoliticsHub.in is a source-linked digital newsroom focused on politics, public affairs, India and the world.</p>" if kind=="author" else ""
  page='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(title)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(lead[:160])+'"><link rel="canonical" href="'+SITE_ORIGIN+request.path+'"><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/polish.css?v=phui30"><script src="/assets/ui.js?v=phui30" defer></script></head><body><header id="hd"><div class="top"><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a></div></header><main class="wrap"><article class="art"><div class="ah"><span class="lbl red">PoliticsHub.in</span><h1>'+html.escape(title)+'</h1><p class="dek">'+html.escape(lead)+'</p></div><div class="body">'+body+'</div></article></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><p class="ser">What matters, clearly.</p></div><div><h4>Navigate</h4>'+nav+'</div></div></footer></body></html>'
@@ -1250,7 +1311,7 @@ def seo_section(category):
 def search_page():return redirect("/#/search",code=302)
 
 @app.get("/status")
-def public_status_page():return redirect("/#/settings/status",code=302)
+def public_status_page():return redirect('/admin/#system',code=302)
 
 @app.get("/author/politicshub-news-desk")
 def author_page(): return _editorial_page("PoliticsHub News Desk","The PoliticsHub Editorial Desk publishes and edits newsroom stories, source links and public corrections.","author")
@@ -1370,7 +1431,7 @@ def admin_workspace():
  latest=(_public_timestamp({'published_at':latest_published}) or None) if connected and not recovery_session() else max((r['timestamp'] for r in rows if r['timestamp'] is not None),default=None)
  writable=connected and not recovery_session()
  return jsonify({'version':2,'generated_at':now.isoformat(),'mode':'snapshot' if snapshot else 'live',
-   'data_origin':'termux_database' if writable and os.getenv('POLITICSHUB_LOCAL_ADMIN')=='1' else 'termux_github' if os.getenv("VERCEL")=="1" or os.getenv("POLITICSHUB_GITHUB_FEED_ONLY")=="1" else 'local_database',
+   'data_origin':'hosted_database' if hosted_enabled() and writable else 'github_feed' if hosted_enabled() else 'termux_database' if writable and os.getenv('POLITICSHUB_LOCAL_ADMIN')=='1' else 'termux_github' if os.getenv("VERCEL")=="1" or os.getenv("POLITICSHUB_GITHUB_FEED_ONLY")=="1" else 'local_database',
   'access':{'username':session.get('admin_user') or 'API token','role':getattr(g,'admin_role','recovery'),'policy':getattr(g,'admin_policy',None),'permissions':getattr(g,'admin_permissions',[]),'scope':'recovery' if recovery_session() else 'owner','read_only':not writable,'expires_at':session.get('admin_expires_at')},
   'capabilities':{'publish':writable and 'news.publish' in getattr(g,'admin_permissions',[]),'settings':writable and 'settings.manage' in getattr(g,'admin_permissions',[]),'telemetry':writable and 'operations.read' in getattr(g,'admin_permissions',[]),'export':True},
   'health':{'database':'connected' if connected else 'unavailable','snapshot_available':bool(rows) if snapshot else None,
@@ -1382,9 +1443,9 @@ def admin_workspace():
   'coverage':admin_coverage(rows),'source_inventory':inventory,
   'source_triage':source_triage(inventory),
   'newsroom_operations':operations if operations is not None else {'scope':'unavailable','note':'Private publication metrics are not available in this session.'},
-  'newsroom_alerts':alerts if alerts is not None else {'scope':'unavailable','status':'unavailable','note':'Private operations access or a connected phone is required.'},
+  'newsroom_alerts':alerts if alerts is not None else {'scope':'unavailable','status':'unavailable','note':'Private operations access is required.'},
   'limits':{'stories':200,'coverage_scope':'loaded stories','source_inventory_scope':inventory['scope'],'refresh_seconds':60},
-  'notice':('Termux is the primary news database. This website reads the published GitHub feed; editorial changes happen on the phone.' if os.getenv("VERCEL")=="1" else
+  'notice':(('Hosted storage is temporarily unavailable; editorial changes are paused.' if snapshot else '') if hosted_enabled() else 'Termux is the primary news database. This website reads the published GitHub feed; editorial changes happen on the phone.' if os.getenv("VERCEL")=="1" else
    'Database restored. Sign out and sign in again for owner access.' if connected and recovery_session() else
    'Database unavailable. Showing the latest public snapshot; editorial changes are paused.' if snapshot else '')})
 
@@ -1433,24 +1494,10 @@ def admin_story_queue():
 
 @app.get("/api/health")
 def health():
- if os.getenv("VERCEL") == "1" or os.getenv("POLITICSHUB_GITHUB_FEED_ONLY") == "1":
-  rows=_snapshot_rows("all")
-  newest=max((_public_timestamp(r) for r in rows),default=0)
-  result={"ok":bool(rows),"mode":"github_feed" if rows else "unavailable",
-   "storage":"termux","delivery":"github","stories":len(rows),
-   "latest_published_at":datetime.fromtimestamp(newest,timezone.utc).isoformat() if newest else None}
-  return jsonify(result),(200 if rows else 503)
- try:
-  database=db()
-  try:
-   row=database.newest_public()
-   newest=_public_timestamp(dict(row)) if row else None
-  finally:database.close()
-  return jsonify({"ok":True,"mode":"live","latest_published_at":datetime.fromtimestamp(newest,timezone.utc).isoformat() if newest else None})
- except RuntimeError:
-  rows=_snapshot_rows()
-  newest=max((_public_timestamp(r) for r in rows),default=0)
-  return jsonify({"ok":False,"mode":"snapshot" if rows else "unavailable","latest_published_at":datetime.fromtimestamp(newest,timezone.utc).isoformat() if newest else None}),503
+ # Public liveness reveals no storage, provider, queue or diagnostic details.
+ # Full system checks belong to the authenticated Admin Room.
+ available=bool(_snapshot_rows("all"))
+ return jsonify({"ok":available}),(200 if available else 503)
 
 
 @app.get("/api/maharashtra")
@@ -1476,6 +1523,16 @@ def public_hindi_feed():
 @app.get('/api/news/version')
 def public_publication_version():
  if not _public_rate_allowed(90,60):return jsonify({'error':'Please retry shortly'}),429
+ if hosted_enabled():
+  database=None
+  try:
+   database=db()
+   from app.hosted_publication import version
+   return jsonify({'version':version(database)}),200,{'Cache-Control':'no-store'}
+  except (DatabaseUnavailable,PostgresError):
+   return jsonify({'version':None}),200,{'Cache-Control':'no-store'}
+  finally:
+   if database:database.close()
  from app.live_publication import enabled,signed_read
  if enabled():
   try:
@@ -1497,6 +1554,17 @@ def news():
  try:limit=min(max(int(request.args.get("limit","200")),1),200)
  except ValueError:limit=100
  if not admin_ok():status,review="published","all"
+ if hosted_enabled() and request.path=='/api/news':
+  records=_hosted_snapshot_rows()
+  if category!='all':records=[row for row in records if _matches_public_desk(row,category)]
+  if search:records=matching_news(records,search)
+  payload=rows_json(_rank_public(records,threshold=0.78)[:limit],compact=compact)
+  for item in payload:
+   for key in ('article','bot_article','bot_summary'):item.pop(key,None)
+  response=jsonify(payload)
+  response.headers['X-News-Mode']='live'
+  response.headers['Cache-Control']='public, max-age=0, s-maxage=5, stale-while-revalidate=5'
+  return response
  try:database=db()
  except Exception:
   # When the database is unavailable, publish only a valid saved snapshot.
@@ -1578,7 +1646,11 @@ def public_search():
  database=None
  try:
   database=db()
-  rows=[dict(row) for row in database.search_public(q)]+_archive_rows(database,q)
+  if hosted_enabled():
+   from app.hosted_publication import overlay
+   rows=overlay(database,_archive_rows(search=q)+_snapshot_rows('all',q))
+   rows=matching_news(rows,q)
+  else:rows=[dict(row) for row in database.search_public(q)]+_archive_rows(database,q)
  except RuntimeError:
   rows=_snapshot_rows("all",q)+_archive_rows(search=q)
  finally:
@@ -1609,6 +1681,10 @@ def trending():
  if not _public_rate_allowed():return jsonify({"error":"rate limit exceeded"}),429
  try:limit=min(max(int(request.args.get("limit","10")),1),30)
  except ValueError:limit=10
+ if hosted_enabled():
+  rows=[row for row in _hosted_snapshot_rows() if int(row.get('view_count') or 0)>0]
+  rows.sort(key=lambda row:int(row.get('view_count') or 0),reverse=True)
+  return jsonify(rows_json(rows[:limit]))
  try:database=db()
  except RuntimeError:
   # Counts and breaking alerts cannot be reconstructed faithfully from an
@@ -1624,6 +1700,9 @@ def trending():
 @app.get("/api/breaking")
 def breaking():
  if not _public_rate_allowed():return jsonify({"error":"rate limit exceeded"}),429
+ if hosted_enabled():
+  rows=_rank_public(_hosted_snapshot_rows())
+  return jsonify(rows_json([row for row in rows if row.get('is_breaking')][:12]))
  try:database=db()
  except RuntimeError:
   # Counts and breaking alerts cannot be reconstructed faithfully from an
@@ -1655,6 +1734,9 @@ def article(item_id):
  handled,live=lookup(item_id)
  if handled:return (jsonify(_publicize(live)),200) if live else (jsonify({"error":"not found"}),404)
  item_id=_resolve_news_id(item_id)
+ if hosted_enabled():
+  row=_hosted_article_row(item_id)
+  return (jsonify(_publicize(row)),200) if row else (jsonify({'error':'not found'}),404)
  try:database=db()
  except RuntimeError:
   snapshot=next((x for x in _snapshot_rows("all")+_official_exam_rows() if str(x.get("id"))==str(item_id)),None)
@@ -1674,6 +1756,13 @@ def article(item_id):
   row=database.get_by_id(item_id,"all")
   if row and (row["status"]=="published" or admin_ok()):return jsonify(_publicize(row))
   if row is None:
+   if hosted_enabled():
+    snapshot=next((x for x in _snapshot_rows('all') if str(x.get('id'))==str(item_id)),None)
+    if snapshot:
+     from app.hosted_publication import overlay
+     visible=overlay(database,[snapshot])
+     same=next((x for x in visible if str(x.get('id'))==str(item_id)),None)
+     if same:return jsonify(_publicize(same))
    hindi=next((x for x in _hindi_rows() if str(x.get("id"))==str(item_id)),None)
    if hindi:return jsonify(_publicize(hindi))
    archived=_archive_row(item_id,database)
@@ -2299,6 +2388,19 @@ def _published_sitemap_rows():
  try:
   database=db()
   try:
+   if hosted_enabled():
+    from app.hosted_publication import overlay
+    visible=overlay(database,_snapshot_rows('all')+_archive_rows(discovery=True))
+    approved=[int(row['id']) for row in visible if row.get('approved_at')]
+    bodies={}
+    ph='%s' if database._postgres else '?'
+    for start in range(0,len(approved),200):
+     batch=approved[start:start+200]
+     records=database.conn.execute("SELECT id,bot_article FROM news_items WHERE status='published' AND approved_at IS NOT NULL AND id IN ("+','.join([ph]*len(batch))+')',tuple(batch)).fetchall()
+     bodies.update({str(record['id']):record['bot_article'] for record in records})
+    for row in visible:
+     if str(row['id']) in bodies:row['bot_article']=bodies[str(row['id'])]
+    return visible
    rows=database.conn.execute(
     "SELECT id,title,category,published_at_site,published_at,bot_article,"
     "bot_summary,summary,source_type,public_source,url,status,fact_check_status "
@@ -2308,7 +2410,7 @@ def _published_sitemap_rows():
     "AND LENGTH(COALESCE(NULLIF(bot_article,''),NULLIF(bot_summary,''),summary,''))>=300 "
     "ORDER BY COALESCE(NULLIF(published_at_site,''),published_at) DESC,id DESC"
    ).fetchall()
-   return [dict(r) for r in rows]+_archive_rows(database,discovery=True)
+   return [dict(row) for row in rows]+_archive_rows(database,discovery=True)
   finally:
    database.close()
  except (RuntimeError, PostgresError):

@@ -50,7 +50,8 @@ test('editorial homepage script is CSP compatible',()=>{
  assert.doesNotMatch(html,/<script id="ph-v14-script">/);
  assert.match(html,/src="\/assets\/editorial-home\.js\?v=[a-z0-9]+"/);
  assert.match(script,/home=function\(c\)/);
- assert.match(script,/Source feed checks for news automatically/);
+ assert.match(script,/READER RESOURCES/);
+ assert.doesNotMatch(script,/FEED STATUS|Your news connection/);
  assert.doesNotMatch(script,/onerror=/);
 });
 test('service worker does not cache API, live snapshot or error responses',()=>{
@@ -90,11 +91,11 @@ test('source snapshot supersedes stale browser cache and stays source-fed',async
  assert.equal(vm.runInContext('S.mode',ctx),'snapshot');
 });
 
-test('feed status accurately distinguishes source feed from offline browser cache',()=>{
- assert.match(source,/SOURCE FEED/);
- assert.match(source,/GitHub public news feed is active/);
+test('reader notices are quiet when stories are available and explain unavailable stories',()=>{
+ assert.match(source,/if\(mode==='api'\|\|mode==='snapshot'\)\{box\?\.remove\(\);return\}/);
+ assert.doesNotMatch(source,/SOURCE FEED|GitHub public news feed is active|Termux \+ GitHub delivery/);
  assert.match(source,/Connection unavailable\. Showing previously loaded stories/);
- assert.doesNotMatch(source,/Showing saved stories\. Live updates are temporarily unavailable/);
+ assert.match(source,/Stories are temporarily unavailable\. Please try again/);
 });
 
 test('mobile page requests explicit web fonts with stable fallback',()=>{

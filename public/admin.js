@@ -9,7 +9,7 @@ let csrf = '', settings = {}, workspace = null, rows = [], currentView = 'overvi
 let pageNumber = 1, pageTotal = 0, queue = 'all', selected = new Set(), visibleRows = [];
 let deliveryController = null;
 let workspacePromise = null, workspaceController = null, workspaceSequence = 0, newsController = null, newsSequence = 0, inspectorSequence = 0;
-let newsTimer, liveTimer, noticeTimer, loginBusy = false, mutationBusy = false, sessionVersion = 0;
+let newsTimer, liveTimer, noticeTimer, loginBusy = false, mutationBusy = false, sessionVersion = 0, sessionCheckBusy = false;
 const pending = new Map();
 
 function notice(message, type = 'ok') {
@@ -50,7 +50,7 @@ async function api(url, options = {}) {
         const response = await fetch(url, {credentials:'same-origin', cache:'no-store', ...requestOptions, signal:requestSignal});
         let data = {};
         try { data = await response.json(); } catch {
-          if (response.ok) throw new Error('Admin service returned an invalid response. Please retry when the phone admin is available.');
+          if (response.ok) throw new Error('Admin service returned an invalid response. Please retry.');
         }
         if (version !== sessionVersion) throw new DOMException('Session changed','AbortError');
         if (!response.ok) {
@@ -76,7 +76,7 @@ async function api(url, options = {}) {
   return promise;
 }
 function action(url, body = {}, headers = {}) {
-  if (workspace?.access.read_only) return Promise.reject(new Error(workspace?.data_origin === 'termux_github' ? 'Read-only public dashboard: edit stories on Termux instead.' : 'Read-only access. Restore the database and sign in again to make changes.'));
+  if (workspace?.access.read_only) return Promise.reject(new Error('Read-only access. Restore the workspace connection and sign in again to make changes.'));
   return api(url, {method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':csrf,...headers}, body:JSON.stringify(body)});
 }
 function metric(label, value, detail = '') {
@@ -190,29 +190,29 @@ async function downloadDiagnosis() {
 
 function applyCapabilities() {
   const writable = !!workspace && !workspace.access.read_only;
-  document.querySelectorAll('[data-write]').forEach(node => { node.disabled = !writable || !can(controlPermission(node)) || mutationBusy; node.title = writable ? '' : workspace?.data_origin === 'termux_github' ? 'Edits run on the Termux phone, not on the public website' : 'Requires a live database and owner session'; });
+  document.querySelectorAll('[data-write]').forEach(node => { node.disabled = !writable || !can(controlPermission(node)) || mutationBusy; node.title = writable ? '' : 'Requires a connected workspace and an authorized session'; });
   document.querySelectorAll('[data-view]').forEach(node => { node.hidden = !canView(node.dataset.view); });
   $('downloadDiagnostics').disabled = !can('reports.read');
   $('publishManual').disabled = !can('news.create') || !can('news.publish') || mutationBusy;
   $('saveManual').closest('.panel').hidden = !can('news.create');
   $('status').disabled = !writable; $('review').disabled = !writable;
-  $('settingsState').textContent = writable ? '' : workspace?.data_origin === 'termux_github' ? 'Read-only website. Review and approve stories using the local Termux workflow.' : 'Read-only. Publishing controls require a live database owner session.';
+  $('settingsState').textContent = writable ? '' : 'Read-only. Publishing controls require a connected workspace and an authorized session.';
 }
 function renderWorkspace() {
   const data = workspace, health = data.health, stats = data.stats, sample = data.coverage.sample_size;
-  const githubOnly = data.data_origin === 'termux_github' && data.mode !== 'live';
+  const githubOnly = ['github_feed','termux_github'].includes(data.data_origin) && data.mode !== 'live';
   rows = data.stories;
   settings = data.settings || {};
   $('userName').textContent = data.access.username;
   $('avatar').textContent = data.access.username.slice(0,1).toUpperCase();
   $('sessionRole').textContent = data.access.scope === 'recovery' ? 'Recovery · read-only' : data.access.read_only ? (githubOnly ? 'Owner · GitHub feed view' : 'Owner · database unavailable') : (data.access.role || 'Administrator') + ' session';
   $('connectionBadge').className = 'pill ' + (data.mode === 'live' || (githubOnly && sample) ? 'green' : 'amber');
-  $('connectionBadge').textContent = data.mode === 'live' ? 'Live database' : githubOnly ? 'GitHub news feed' : 'Snapshot mode';
+  $('connectionBadge').textContent = data.mode === 'live' ? 'Live workspace' : githubOnly ? 'Public feed snapshot' : 'Snapshot mode';
   $('workspaceBanner').classList.toggle('hidden',!data.notice);
   $('workspaceBanner').innerHTML = data.notice ? `<p><b>${data.access.read_only ? 'Read-only workspace. ' : ''}</b>${esc(data.notice)}</p><button class="text-btn" data-view="system">View status ↗</button>` : '';
   $('heroEyebrow').textContent = data.mode === 'live' ? 'EDITORIAL PULSE' : githubOnly ? 'PUBLIC FEED MONITOR' : 'CONTINUITY MODE';
   $('heroTitle').textContent = data.mode === 'live' ? (stats.review_needed ? `${number(stats.review_needed)} stories need a closer look.` : 'The next story starts here.') : 'The newsroom stays in view.';
-  $('heroDescription').textContent = data.mode === 'live' ? 'Review your queue, inspect source material and keep publication decisions accountable.' : githubOnly ? 'Published news is delivered through GitHub. Private editing, reviews and PostgreSQL remain on your Termux phone; this website cannot access that local database.' : 'Browse the latest saved public reports, inspect coverage and follow recovery status. Editorial changes resume when the database is restored.';
+  $('heroDescription').textContent = data.mode === 'live' ? 'Review your queue, inspect source material and publish securely from this website.' : githubOnly ? 'The latest saved public reports remain available. Editing resumes when the workspace connection is restored.' : 'Browse the latest saved public reports, inspect coverage and follow recovery status. Editorial changes resume when the database is restored.';
   $('heroCount').textContent = number(sample);
   $('heroCountLabel').textContent = data.mode === 'live' ? 'recent stories loaded' : githubOnly ? 'published GitHub stories' : 'public snapshot stories';
   $('overviewMetrics').innerHTML = metric(data.mode === 'live' ? 'All stories' : githubOnly ? 'Public feed stories' : 'Snapshot stories',number(data.mode === 'live' ? stats.total : sample),data.mode === 'live' ? 'Entire database' : 'Latest saved public copy') + metric('Published',number(stats.published),data.mode === 'live' ? 'Entire database' : 'In this snapshot') + metric('Needs review',number(stats.review_needed),data.mode === 'live' ? 'Verification queue' : 'Requires live moderation data') + metric('Pending',number(stats.pending),data.mode === 'live' ? 'Awaiting publication' : 'Requires live editorial data');
@@ -220,7 +220,7 @@ function renderWorkspace() {
   $('recentStories').innerHTML = rows.slice(0,5).map((row,index) => `<article class="recent-story"><span class="story-index">${String(index+1).padStart(2,'0')}</span><div><button data-inspect="${Number(row.id)}">${esc(row.title)}</button><div class="meta">${esc(row.source_name || 'Unknown source')} · ${esc(row.category || 'General')}</div></div></article>`).join('') || empty('No reports available','No saved public stories were found.');
   $('deskChart').innerHTML = barChart(data.coverage.categories,sample,6);
   $('coverageScope').textContent = `Based on ${sample} loaded stories. Distribution is not a count of the full archive.`;
-  $('health').innerHTML = `<div class="health-row"><div><b>${githubOnly ? 'News storage' : 'Database'}</b><small>${githubOnly ? 'PostgreSQL is local to Termux; phone health is not checked here' : health.database === 'connected' ? 'Connection available' : 'Persistent services are paused'}</small></div><span class="pill ${health.database === 'connected' ? 'green' : 'amber'}">${githubOnly ? 'Termux' : esc(health.database)}</span></div><div class="health-row"><div><b>Story delivery</b><small>Newest report: ${esc(date(health.latest_published_at))}</small></div><span class="pill ${health.latest_age_seconds != null && health.latest_age_seconds < 86400 ? 'green' : 'amber'}">${esc(age(health.latest_age_seconds))}</span></div><div class="health-row"><div><b>Editorial permissions</b><small>${data.access.read_only ? 'Changes are disabled server-side' : 'Permissions follow your assigned role'}</small></div><span class="pill ${data.access.read_only ? 'amber' : 'green'}">${data.access.read_only ? 'Read-only' : esc(data.access.role || 'Administrator')}</span></div>`;
+  $('health').innerHTML = `<div class="health-row"><div><b>${githubOnly ? 'News storage' : 'Database'}</b><small>${githubOnly ? 'Public snapshot only; private workspace data is unavailable' : health.database === 'connected' ? 'Connection available' : 'Persistent services are paused'}</small></div><span class="pill ${health.database === 'connected' ? 'green' : 'amber'}">${githubOnly ? 'Snapshot' : esc(health.database)}</span></div><div class="health-row"><div><b>Story delivery</b><small>Newest report: ${esc(date(health.latest_published_at))}</small></div><span class="pill ${health.latest_age_seconds != null && health.latest_age_seconds < 86400 ? 'green' : 'amber'}">${esc(age(health.latest_age_seconds))}</span></div><div class="health-row"><div><b>Editorial permissions</b><small>${data.access.read_only ? 'Changes are disabled server-side' : 'Permissions follow your assigned role'}</small></div><span class="pill ${data.access.read_only ? 'amber' : 'green'}">${data.access.read_only ? 'Read-only' : esc(data.access.role || 'Administrator')}</span></div>`;
   $('attentionList').innerHTML = data.coverage.quality.slice(0,4).map(item => `<div class="attention-row"><span>${esc(item.name)}</span><b>${number(item.count)} stories</b></div>`).join('') || '<p class="muted">No completeness flags in the loaded sample.</p>';
   const synced = new Date(data.generated_at).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit'});
   $('footerSync').textContent = `Updated ${synced} IST · Refreshes every 60s on overview`;
@@ -322,8 +322,8 @@ async function loadNews(reset = false, {silent = false} = {}) {
           status:'published',fact_check_status:null,archived:true};
         renderNews([story],1);
         $('newsScope').textContent='Exact news number match across the public archive. Queue and desk filters do not hide this result.';
-        // Public identity resolution must work even while the phone runs an
-        // older queue implementation or the article is absent from its database.
+        // Public identity resolution also covers historical reports that do not
+        // yet have an editable copy in the connected newsroom database.
         if (!workspace.access.read_only) {
           try {
             const draft=await api('/api/admin/story/'+encodeURIComponent(story.id),{signal});
@@ -391,10 +391,10 @@ async function refreshAfterMutation() {
 function publicationMessage(result) {
   const state = result.public_delivery?.state;
   if (state === 'synced') return 'Story published on the website.';
-  if (result.public_delivery?.configured === false) return 'Story published on the phone. Website sync is not configured.';
+  if (result.public_delivery?.configured === false) return 'Publication saved. Website sync is not configured.';
   if (state === 'queued' || state === 'verifying') return 'Publication saved. Checking that the story is visible on the website…';
-  if (state === 'not_configured') return 'Story published on the phone. Website sync is not configured.';
-  if (state === 'failed') return 'Story published on the phone. Website sync failed; publication is saved.';
+  if (state === 'not_configured') return 'Publication saved. Website sync is not configured.';
+  if (state === 'failed') return 'Website sync failed; publication is saved.';
   return 'Story published.';
 }
 async function waitForPublicationDelivery(id, result, version) {
@@ -549,8 +549,8 @@ function renderSources() {
   $('sourceChartScope').textContent = countScope + ' · largest 12 publishers';
   $('qualityChart').innerHTML = barChart(workspace.coverage.quality,workspace.coverage.sample_size,10);
   $('qualityScope').textContent = `Completeness checks cover ${number(workspace.coverage.sample_size)} loaded stories. Source counts use ${database ? 'the entire database' : snapshot ? 'the saved public snapshot' : 'the scope shown above'}.`;
-  const warnings = complete ? arr(inventory.errors).map(error => typeof error === 'string' ? error : error.message || 'Source inventory could not be fully loaded.') : ['Full source inventory is unavailable from this phone version. Update the Termux service to load every configured publisher; the counts below describe only the loaded sample.'];
-  if (snapshot) warnings.unshift('Stored report counts cover the saved public snapshot. Private phone collection status is not checked here.');
+  const warnings = complete ? arr(inventory.errors).map(error => typeof error === 'string' ? error : error.message || 'Source inventory could not be fully loaded.') : ['Full source inventory is unavailable. Refresh the workspace to retry; the counts below describe only the loaded sample.'];
+  if (snapshot) warnings.unshift('Stored report counts cover the saved public snapshot. Private collection status is not checked here.');
   $('sourceInventoryNotice').classList.toggle('hidden',!warnings.length);
   $('sourceInventoryNotice').textContent = warnings.join(' ');
   const query = $('sourceSearch').value.trim().toLocaleLowerCase();
@@ -571,26 +571,26 @@ function renderSources() {
 }
 
 /* Private operational evidence only; snapshots may describe published stories,
-   but are never promoted to collector success or phone delivery claims. */
+   but are never promoted to collector success or delivery claims. */
 function renderPhase3Operations() {
   const triage=workspace?.source_triage || {scope:'unavailable',status:'unavailable'};
   const metrics=$('sourceTriageMetrics'), issues=$('sourceIncidents'), notice=$('sourceTriageNotice');
   const opMetrics=$('sourceOperationsMetrics'), opNote=$('sourceOperationsNote');
   if(triage.scope!=='database'||triage.status==='unavailable') {
-    metrics.innerHTML=metric('Collector checks','Unavailable','Private phone database not measured')
+    metrics.innerHTML=metric('Collector checks','Unavailable','Private collector records are unavailable')
       +metric('Source incidents','Unavailable','Cannot infer failures from the public feed')
       +metric('Last successful fetch','Unavailable','No authenticated collector telemetry');
-    issues.innerHTML=empty('Phone collector status not checked','Public GitHub snapshots can show stories, not private source fetches or failures.');
-    notice.textContent='Private collector metrics are unavailable. A working public feed does not prove the phone collector is online.';
+    issues.innerHTML=empty('Collector status not checked','Public GitHub snapshots can show stories, not private source fetches or failures.');
+    notice.textContent='Private collector metrics are unavailable. A working public feed does not prove the collector is online.';
   } else {
     const counts=triage.counts||{};
-    metrics.innerHTML=metric('Recorded checks',number(triage.observed)+' / '+number(triage.tracked),'Enabled publishers managed by the phone collector')
+    metrics.innerHTML=metric('Recorded checks',number(triage.observed)+' / '+number(triage.tracked),'Enabled publishers tracked by the collector')
       +metric('Failed checks',number(counts.failed||0),'Latest recorded collector attempt')
       +metric('Overdue sources',number(counts.stale||0),'Last recorded attempt older than its check window')
       +metric('Awaiting first check',number(counts.awaiting_collection||0),'Configured, no attempt recorded');
     notice.textContent=triage.status==='awaiting_checks'
       ? 'No successful or failed collector attempts are recorded. Source statuses are not verified.'
-      : 'Based on actual phone collector records. A successful fetch does not independently verify the resulting news.';
+      : 'Based on actual collector records. A successful fetch does not independently verify the resulting news.';
     const incidents=arr(triage.incidents);
     issues.innerHTML=incidents.length
       ? '<table class="table"><thead><tr><th>Publisher</th><th>Problem</th><th>Last attempt</th><th>Last success</th><th>Recorded error class</th></tr></thead><tbody>'
@@ -598,14 +598,14 @@ function renderPhase3Operations() {
         +'</tbody></table>'
       : triage.status==='awaiting_checks'
         ? empty('No collection checks recorded','The worker must report actual attempts before a source can be called healthy.')
-        : empty('No failed or overdue sources recorded','This is only a summary of the latest available phone collection records.');
+        : empty('No failed or overdue sources recorded','This is only a summary of the latest available collection records.');
   }
   const ops=workspace?.newsroom_operations;
   if(!ops||ops.scope!=='database') {
-    opMetrics.innerHTML=metric('Collection → publish','Unavailable','Requires real phone article history')
+    opMetrics.innerHTML=metric('Collection → publish','Unavailable','Requires recorded article history')
       +metric('Delivery queue','Unavailable','Private website sync status not checked')
       +metric('Pending corrections','Unavailable','Private editorial updates not checked');
-    opNote.textContent='Source fetches, delivery receipts and pending corrections cannot be inferred from the public website. Sign into the connected phone Admin Room to inspect them.';
+    opNote.textContent='Source fetches, delivery receipts and pending corrections cannot be inferred from the public website. Reconnect to the private workspace to inspect them.';
     return;
   }
   const latency=ops.latency||{}, delivery=ops.delivery||{}, corrections=ops.corrections||{};
@@ -625,13 +625,13 @@ function renderPhase4Operations() {
   const metrics=$('phase4Metrics'), table=$('phase4Alerts'), trend=$('phase4Trend');
   const notice=$('phase4Notice'), trendNote=$('phase4TrendNote');
   if(!d || d.scope!=='database' || !d.trend) {
-    metrics.innerHTML=metric('Operational alerts','Unavailable','Private phone database not verified')
+    metrics.innerHTML=metric('Operational alerts','Unavailable','Private operational records are unavailable')
       +metric('Corrections follow-up','Unavailable','Private editorial queue not checked')
-      +metric('Collection trends','Unavailable','Requires completed phone checks');
-    table.innerHTML=empty('Private alerts unavailable','Sign into an authorized phone-connected Admin Room. Public GitHub snapshots do not contain collector incidents.');
-    trend.innerHTML=empty('Historical data unavailable','Collector history and signed-in publication records are held on the phone.');
+      +metric('Collection trends','Unavailable','Requires completed collector checks');
+    table.innerHTML=empty('Private alerts unavailable','Use an authorized, connected workspace. Public GitHub snapshots do not contain collector incidents.');
+    trend.innerHTML=empty('Historical data unavailable','Collector history and signed-in publication records require a connected workspace.');
     notice.textContent='No authenticated private operational telemetry; unavailable is not a healthy result.';
-    trendNote.textContent='Collection history begins with the upgraded phone worker. Previously completed checks cannot be recreated.';
+    trendNote.textContent='Collection history begins when the worker records its checks. Previously completed checks cannot be recreated.';
     return;
   }
   const alerts=arr(d.alerts), followups=arr(d.followups), history=d.trend||{};
@@ -663,7 +663,7 @@ function sourceCollectionStatus(source,scope) {
   if (source.enabled === false) return {label:'Disabled',tone:'',detail:'Not enabled for collection'};
   const status = source.collection_status;
   if (status === 'external_pipeline') return {label:'Separate pipeline',tone:'',detail:'Collected by the GitHub pipeline'};
-  if (scope === 'snapshot' || scope === 'sample') return {label:'Not checked',tone:'',detail:'Phone collection status unavailable'};
+  if (scope === 'snapshot' || scope === 'sample') return {label:'Not checked',tone:'',detail:'Collection status unavailable'};
   if (status === 'failed') return {label:'Collection failed',tone:'red',detail:String(source.last_error || 'Latest collection attempt failed').slice(0,300)};
   if (status === 'stale') return {label:'Collection overdue',tone:'amber',detail:source.last_success_at ? 'Last successful fetch: ' + date(source.last_success_at) : 'No recent successful fetch recorded'};
   if (status === 'healthy' || status === 'ok') return {label:'Fetch succeeded',tone:'green',detail:source.last_success_at ? date(source.last_success_at) : 'Successful collection recorded'};
@@ -676,7 +676,7 @@ function telemetryAvailable(kind) {
   const available = !!workspace?.capabilities.telemetry;
   $(kind + 'Content').classList.toggle('hidden',!available);
   $(kind + 'Unavailable').classList.toggle('hidden',available);
-  if (!available) $(kind + 'Unavailable').innerHTML = '<h3>Live telemetry is unavailable</h3><p>Worker history is private to the phone PostgreSQL database. This website serves the public GitHub feed only; review execution metrics locally in Termux.</p><button class="btn" data-view="system">View system status</button>';
+  if (!available) $(kind + 'Unavailable').innerHTML = '<h3>Live telemetry is unavailable</h3><p>Worker history requires a connected private workspace and operations permission. The saved public feed cannot supply private execution metrics.</p><button class="btn" data-view="system">View system status</button>';
   return available;
 }
 function telemetryError(kind, message) {
@@ -687,17 +687,17 @@ function telemetryError(kind, message) {
 }
 async function loadActivity() {
   if (!workspace) return;
-  if (!workspace.capabilities.telemetry) { $('activityList').innerHTML = empty('The audit trail needs the database','The public GitHub feed does not expose private phone editing or audit history.'); return; }
+  if (!workspace.capabilities.telemetry) { $('activityList').innerHTML = empty('The audit trail needs the database','The public GitHub feed does not expose private editing or audit history.'); return; }
   try { const items = await api('/api/admin/activity?limit=100'); $('activityList').innerHTML = arr(items).map(item => `<article class="activity-item"><h3>${esc(item.action)}</h3><div class="meta">${esc(date(item.created_at))} · ${esc(item.username || 'System')}${item.item_id ? ' · #'+Number(item.item_id) : ''}</div><p>${esc(item.details || '')}</p></article>`).join('') || empty('No activity recorded','Admin actions will appear here after they are saved.'); }
   catch (error) { notice(error.message,'err'); }
 }
 function renderSystem() {
   if (!workspace) return;
   const health = workspace.health, access = workspace.access;
-  const githubOnly = workspace.data_origin === 'termux_github' && workspace.mode !== 'live';
-  $('systemChecks').innerHTML = (githubOnly ? metric('Primary storage','Termux PostgreSQL','Private phone database; not remotely checked') + metric('Public delivery','GitHub feed','Approved phone exports plus attributed public sources') : metric('Database',health.database === 'connected' ? 'Connected' : 'Unavailable',health.database === 'connected' ? 'Connection verified' : 'Persistent writes are paused') + metric('Data mode',workspace.mode === 'live' ? 'Live' : 'Snapshot',workspace.mode === 'live' ? 'Database-backed newsroom' : 'Saved public reports')) + metric('Latest report age',age(health.latest_age_seconds),date(health.latest_published_at)) + metric('Workspace response',health.response_ms + ' ms','Server processing time, not browser latency');
+  const githubOnly = ['github_feed','termux_github'].includes(workspace.data_origin) && workspace.mode !== 'live';
+  $('systemChecks').innerHTML = (githubOnly ? metric('Workspace data','Read-only snapshot','Private database connection is unavailable') + metric('Public delivery','GitHub feed','Latest saved published reports') : metric('Database',health.database === 'connected' ? 'Connected' : 'Unavailable',health.database === 'connected' ? 'Connection verified' : 'Persistent writes are paused') + metric('Data mode',workspace.mode === 'live' ? 'Live' : 'Snapshot',workspace.mode === 'live' ? 'Database-backed newsroom' : 'Saved public reports')) + metric('Latest report age',age(health.latest_age_seconds),date(health.latest_published_at)) + metric('Workspace response',health.response_ms + ' ms','Server processing time, not browser latency');
   $('lastSync').textContent = 'Checked ' + date(workspace.generated_at);
-  $('sessionDetails').innerHTML = detail('Signed in as',access.username) + detail('Assigned role',access.role || 'Administrator') + detail('Allowed actions',arr(access.permissions).map(powerLabel).join(', ') || 'Read-only / unavailable') + detail('Access scope',access.scope === 'recovery' ? 'Recovery · read-only' : access.read_only ? 'Writes unavailable' : (access.role || 'Administrator')) + detail('Session expires',access.expires_at ? date(access.expires_at*1000) : 'Legacy session') + detail(githubOnly ? 'Public website edits' : 'Database writes',githubOnly ? 'Disabled — manage locally in Termux' : access.read_only ? 'Blocked' : 'Limited to assigned role; CSRF protection required') + detail('Private data storage','Session cookie only; no admin records in local storage') + detail('Coverage limit',workspace.limits.stories + ' loaded stories; charts describe this sample');
+  $('sessionDetails').innerHTML = detail('Signed in as',access.username) + detail('Assigned role',access.role || 'Administrator') + detail('Allowed actions',arr(access.permissions).map(powerLabel).join(', ') || 'Read-only / unavailable') + detail('Access scope',access.scope === 'recovery' ? 'Recovery · read-only' : access.read_only ? 'Writes unavailable' : (access.role || 'Administrator')) + detail('Session expires',access.expires_at ? date(access.expires_at*1000) : 'Legacy session') + detail(githubOnly ? 'Public website edits' : 'Database writes',githubOnly ? 'Unavailable until the workspace reconnects' : access.read_only ? 'Blocked' : 'Limited to assigned role; CSRF protection required') + detail('Private data storage','Session cookie only; no admin records in local storage') + detail('Coverage limit',workspace.limits.stories + ' loaded stories; charts describe this sample');
 }
 function fillSettings(value) { settings = value || {}; $('websiteEnabled').checked = settings.website_enabled !== 'false'; }
 async function loadSettings() {
@@ -740,7 +740,7 @@ function renderCommands() {
 async function signedIn(data) {
   if (!data.authenticated) {
     // A successful password response does not prove the browser retained the
-    // phone session cookie. Verify it before opening an empty workspace.
+    // session cookie. Verify it before opening an empty workspace.
     data = await api('/api/admin/me');
   }
   if (!data.authenticated || !data.csrf_token) {
@@ -751,7 +751,8 @@ async function signedIn(data) {
   $('login').classList.add('hidden'); $('shell').classList.remove('hidden');
   await loadOverview();
   if (!workspace) {
-    showLogin('Your session is valid, but the phone workspace could not be loaded. Check that the phone admin is online and retry.');
+    showLogin('Your session is valid, but the workspace could not be loaded. Retry the session check or sign in again.');
+    $('sessionRetry').classList.remove('hidden');
     return;
   }
   go(location.hash.slice(1) || 'overview',false);
@@ -781,7 +782,7 @@ $('createArticleForm').addEventListener('input',()=>{if(!manualBusy)manualReques
 $('createArticleForm').onsubmit = async event => {
  event.preventDefault();
  if(manualBusy)return;
- if (workspace?.access.read_only) return notice('Remote write access is not connected yet. Open the authenticated phone admin or configure the secure bridge.','err');
+ if (workspace?.access.read_only) return notice('Editing is unavailable in this read-only session. Reconnect to the workspace and sign in again.','err');
  const publishNow=event.submitter?.id==='publishManual';
  if(publishNow && !can('news.publish'))return notice('Your role cannot publish news.','err');
  manualBusy=true;manualRequestId=manualRequestId || crypto.randomUUID();
@@ -888,7 +889,28 @@ try { const theme = localStorage.getItem('ph-admin-theme'); if (theme === 'dark'
 $('themeToggle').onclick = () => { const theme = document.documentElement.dataset.adminTheme === 'dark' ? 'light' : 'dark'; setTheme(theme); try { localStorage.setItem('ph-admin-theme',theme); } catch {} };
 window.addEventListener('hashchange',() => { if (workspace) go(location.hash.slice(1),false); });
 matchMedia('(max-width:800px)').addEventListener('change',() => closeMenu());
-document.addEventListener('DOMContentLoaded',async () => { closeMenu(); try { const data = await api('/api/admin/me'); if (data.authenticated) await signedIn(data); } catch (error) { $('loginErr').textContent = 'Session check unavailable. You can still try signing in.'; } });
+async function checkSession() {
+  if (sessionCheckBusy || loginBusy) return;
+  sessionCheckBusy = true;
+  const version = sessionVersion;
+  const retry = $('sessionRetry');
+  retry.disabled = true;
+  $('loginErr').textContent = '';
+  try {
+    const data = await api('/api/admin/me');
+    if (version !== sessionVersion) return;
+    retry.classList.add('hidden');
+    if (data.authenticated) await signedIn(data);
+  } catch (error) {
+    if (version !== sessionVersion || error.name === 'AbortError') return;
+    $('loginErr').textContent = error.name === 'TimeoutError'
+      ? 'Session check timed out. Retry or sign in below.'
+      : (error.message || 'The admin service could not be reached.') + ' Retry the session check or sign in below.';
+    retry.classList.remove('hidden');
+  } finally { sessionCheckBusy = false; retry.disabled = false; }
+}
+$('sessionRetry').onclick = checkSession;
+document.addEventListener('DOMContentLoaded',() => { closeMenu(); checkSession(); });
 
 document.addEventListener('click',async event=>{
  const button=event.target.closest('[data-restore-archive]'); if(!button)return;
