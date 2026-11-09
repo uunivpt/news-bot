@@ -71,6 +71,7 @@
   // handled by the Google-certified CMP, not by these buttons.
   if (!document.querySelector('script[src*="/assets/site.js"]') &&
       !['/admin','/newsroom-console','/debug'].some(prefix => path.startsWith(prefix))) {
+    const preferenceReturnFocus = new WeakMap();
     let mode = '';
     try { mode = localStorage.getItem('ph-consent-v1') || ''; } catch (_) {}
     const showSitePreferences = () => {
@@ -105,8 +106,11 @@
           message.textContent = "Your browser couldn't save this choice. Check browser storage settings and try again.";
           return;
         }
+        const restoreFocus = banner.contains(document.activeElement);
+        const opener = preferenceReturnFocus.get(banner);
         window.dispatchEvent(new Event('ph-preferences-changed'));
         banner.remove();
+        if (restoreFocus && opener?.isConnected) opener.focus();
       });
     };
     if (!mode) showSitePreferences();
@@ -115,6 +119,11 @@
       if (!reopen) return;
       event.preventDefault();
       showSitePreferences();
+      const banner = document.querySelector('#privacyConsent');
+      if (banner) {
+        preferenceReturnFocus.set(banner, reopen);
+        banner.querySelector('[data-site-preference]')?.focus();
+      }
     });
     const footer = document.querySelector('footer');
     if (footer && !footer.querySelector('[data-open-consent]')) {
