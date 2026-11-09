@@ -110,6 +110,7 @@ function ck(item){
  return'all';
 }
 function inCat(item,cat){
+ if(cat==='india'&&/tv9 marathi|abp majha|abp माझा/i.test(String(item?.source||item?.source_name||'')))return false;
  if(cat==='all'||ck(item)===cat)return true;
  // The Politics page is a topical view of India stories. Never rewrite
  // item.category: the original /india/{number} article URL must stay valid.
