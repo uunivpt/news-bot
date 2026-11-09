@@ -74,6 +74,10 @@ def recovery_session():
 def enforce_admin_session_scope():
  expiry=session.get('admin_expires_at')
  if expiry and time.time()>=expiry:session.clear()
+ if hosted_enabled() and session.get('admin_user') and (recovery_session() or not session.get('admin_verifier_tag')) and request.path.startswith('/api/admin/') and request.path not in {'/api/admin/login','/api/admin/logout'}:
+  session.clear()
+  if request.path!='/api/admin/me':
+   return jsonify({'error':'Sign in again for your full workspace permissions.','code':'reauthenticate'}),401
  if request.method not in {'GET','HEAD','OPTIONS'} and (request.path.startswith('/api/admin/') or request.path.startswith('/api/news/')):
   origin=request.headers.get('Origin')
   expected_origins={request.host_url.rstrip('/')}
@@ -1052,6 +1056,9 @@ def login():
   return jsonify({'error':'too many login attempts; try again later'}),429
  try:database=db()
  except (DatabaseUnavailable,PostgresError):
+  if hosted_enabled():
+   session.clear()
+   return jsonify({'error':'Admin storage is temporarily unavailable. Retry sign-in shortly.','code':'admin_storage_unavailable'}),503
   if verify_recovery_owner(username,password):return _signed_in(username,'recovery','recovery')
   return jsonify({'error':'invalid username or password'}),401
  attempt_key=_auth_key(username)
@@ -1074,6 +1081,9 @@ def login():
   _auth_clear(database,ip_attempt_key)
   return _signed_in(username,effective_role(username,role or 'owner'),verifier=row['password_hash'])
  except (DatabaseUnavailable,PostgresError):
+  if hosted_enabled():
+   session.clear()
+   return jsonify({'error':'Admin storage is temporarily unavailable. Retry sign-in shortly.','code':'admin_storage_unavailable'}),503
   if verify_recovery_owner(username,password):return _signed_in(username,'recovery','recovery')
   return jsonify({'error':'invalid username or password'}),401
  finally:
