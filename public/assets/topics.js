@@ -95,9 +95,10 @@
     const duration = Number($('periodSelect').value);
     const search = $('topicSearch').value.toLocaleLowerCase().trim();
     const titleText = item.title + ' ' + item.summary;
-    if (topic !== 'all' && !TOPICS[topic]?.test(titleText)) return false;
+    const isMaharashtra = TOPICS.maharashtra.test(titleText) || /tv9 marathi|abp majha|abp माझा/i.test(item.source);
+    if (topic !== 'all' && !(topic === 'maharashtra' ? isMaharashtra : TOPICS[topic]?.test(titleText))) return false;
     if (desk !== 'all' && !(desk === 'maharashtra'
-      ? TOPICS.maharashtra.test(titleText)
+      ? isMaharashtra
       : (desk === 'politics' ? (item.category === 'politics' || TOPICS.elections.test(item.title)) : item.category === desk))) return false;
     if (duration && (!date(item.date) || Date.now() - date(item.date).getTime() > duration * 86400000)) return false;
     if (search && !(item.title+' '+item.source).toLocaleLowerCase().includes(search)) return false;
