@@ -822,7 +822,7 @@ $('newsRefresh').onclick = async () => { await Promise.allSettled([loadOverview(
 $('search').oninput = () => { newsSequence++; newsController?.abort(); clearTimeout(newsTimer); newsTimer = setTimeout(() => loadNews(true),250); };
 $('sourceSearch').oninput = renderSources;
 for (const id of ['category','source','status','review','sort']) $(id).onchange = () => loadNews(true);
-$('resetFilters').onclick = () => { $('search').value = ''; for (const id of ['category','source','status','review']) $(id).value = 'all'; $('sort').value = 'newest'; queue = 'all'; document.querySelectorAll('[data-queue]').forEach(node => node.classList.toggle('active',node.dataset.queue === 'all')); loadNews(true); };
+$('resetFilters').onclick = () => { clearTimeout(newsTimer); $('search').value = ''; for (const id of ['category','source','status','review']) $(id).value = 'all'; $('sort').value = 'newest'; queue = 'all'; document.querySelectorAll('[data-queue]').forEach(node => node.classList.toggle('active',node.dataset.queue === 'all')); loadNews(true); };
 $('selectAll').onchange = event => { for (const row of visibleRows) event.target.checked ? selected.add(Number(row.id)) : selected.delete(Number(row.id)); renderNews(visibleRows,pageTotal); };
 $('clearSelection').onclick = () => { selected.clear(); renderNews(visibleRows,pageTotal); };
 $('prevPage').onclick = () => { pageNumber--; loadNews(); };
