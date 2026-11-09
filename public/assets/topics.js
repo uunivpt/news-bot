@@ -133,6 +133,16 @@
     }
     $('rememberTopic').checked = preferencesAllowed();
   }
+  function syncPreferenceConsent() {
+    if (!preferencesAllowed()) {
+      $('rememberTopic').checked = false;
+      // Also remove a topic left behind by an earlier essential-only choice.
+      try {if (localStorage.getItem('ph-consent-v1') === 'essential') localStorage.removeItem('ph-topic-v1')} catch (_) {}
+    }
+  }
+  for (const event of ['ph-preferences-changed', 'ph-preferences-cleared', 'storage']) {
+    window.addEventListener(event, syncPreferenceConsent);
+  }
   function savePreference() {
     if (!$('rememberTopic').checked) return;
     if (!preferencesAllowed()) {
@@ -174,6 +184,7 @@
   $('moreTimeline').addEventListener('click',()=>{visible+=12;render()});
   $('copyDigest').addEventListener('click',digest);
   restorePreference();
+  syncPreferenceConsent();
   (async()=>{
     const main=await Promise.allSettled([fetchJson('/api/news?category=all&limit=120'),fetchJson('/api/hindi-feed')]);
     if (main[0].status === 'fulfilled') from(main[0].value);

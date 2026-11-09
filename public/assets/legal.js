@@ -7,7 +7,7 @@
     try {
       localStorage.setItem('ph-consent-v1', mode);
       if (mode === 'essential') {
-        ['ph-news-cache','ph-news-cache-v6','ph-news-cache-v5','ph-news-cache-v4','ph-theme','ph-cookie','ph-ls','ph-reading-list-v1','ph-reader-size-v1'].forEach(key => localStorage.removeItem(key));
+        ['ph-news-cache','ph-news-cache-v6','ph-news-cache-v5','ph-news-cache-v4','ph-theme','ph-cookie','ph-ls','ph-reading-list-v1','ph-reader-size-v1','ph-topic-v1'].forEach(key => localStorage.removeItem(key));
         document.documentElement.dataset.theme = 'light';
       }
     } catch (_) {
