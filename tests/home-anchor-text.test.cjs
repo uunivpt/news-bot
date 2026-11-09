@@ -5,7 +5,7 @@ const home=fs.readFileSync('public/index.html','utf8');
 const css=fs.readFileSync('public/assets/reading-guides-home.css','utf8');
 test('homepage guide cards use short, descriptive linked headings',()=>{
   const cards=[...home.matchAll(/<article class="ph-guide-card">([\s\S]*?)<\/article>/g)];
-  assert.equal(cards.length,4);
+  assert.equal(cards.length,5);
   for(const [,card] of cards){
     assert.match(card,/<h3><a href="\/[^"]+">[^<]+<\/a><\/h3>/);
     assert.match(card,/<p>[^<]+<\/p>/);
