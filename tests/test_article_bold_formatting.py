@@ -9,7 +9,7 @@ class ArticleBoldFormattingTests(unittest.TestCase):
         row = {
             "id": 88, "title": "Test newsroom report", "category": "world",
             "summary": "Summary of a public news event.",
-            "bot_article": "**Washington, November 9, 2026:** The White House was temporarily closed.\\n\\n"
+            "bot_article": "**Washington, November 9, 2026:** The White House was temporarily closed." + chr(10)*2 +
                            "The **Secret Service** responded.",
             "source_name": "PoliticsHub", "source_type": "manual",
         }
