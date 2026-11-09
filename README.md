@@ -49,6 +49,16 @@ The worker uses PostgreSQL from `DATABASE_3URL` (or legacy `DATABASE_URL`) and u
 
 ## Reader tools and reliability checks
 
+The homepage includes a Watermelon UI reading dashboard, animated tab indicator,
+pointer glow cards, news-desk coverage, reading shortcuts and comfortable/compact
+story spacing. Dashboard counts use only the loaded feed and distinguish it from
+the full archive; they are not audience statistics. Spacing and tab choices last
+for the current page session without adding browser storage. Animations respect
+reduced-motion settings and keyboard navigation. See the
+[implementation and license notes](docs/WATERMELON_UI_LICENSE.md).
+Run `python scripts/newsroom_ui_browser_audit.py` for the isolated dashboard,
+keyboard and responsive checks.
+
 `/sources.html` links to original publishers and official records. `/saved.html`
 stores up to 100 article links on the reader's browser after optional preferences
 are allowed. Article pages include text-size controls, a print layout and the
