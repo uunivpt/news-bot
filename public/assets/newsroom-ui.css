@@ -46,7 +46,9 @@ html[data-theme=dark] .ph-ui-home {
 .ph-ui-home .ph14-published-date { color: var(--mut); font-size: 10px; margin: 0 0 23px; line-height: 1.7; }
 .ph-ui-home .ph14-read { font-size: 10px; line-height: 1.5; letter-spacing: .05em; }
 .ph-ui-home .ph14-read b { width: 30px; height: 30px; flex-shrink: 0; background: #b51f36; color: #fff; }
-.ph-ui-home .ph14-media { min-height: 100%; height: auto; margin: 0; border-radius: 13px; background: var(--ui-tint) !important; }
+.ph-ui-home .ph14-media { width: 100%; min-height: 0; height: auto; aspect-ratio: 16 / 9; align-self: center; margin: 0; border-radius: 13px; background: var(--ui-tint) !important; }
+/* Preserve the entire source photo, including when a long headline makes the card taller. */
+.ph-ui-home :is(.ph14-media, .ph14-thumb) img { object-fit: contain; object-position: center; transform: none; }
 .ph-ui-home .ph14-lead:not(:has(.ph14-media)) { grid-template-columns: 1fr; min-height: 400px; }
 .ph-ui-home .ph14-lead:not(:has(.ph14-media)) .ph14-copy { max-width: 76ch; padding-bottom: 4px; }
 .ph-ui-home .ph14-lead:not(:has(.ph14-media)) .ph14-copy h1 { max-width: 25ch; }
@@ -169,7 +171,7 @@ html[data-theme=dark] .ph-ui-home {
   .ph-ui-home .ph14-lead { display: flex; flex-direction: column; gap: 20px; padding: 26px; }
   .ph-ui-home .ph14-copy { flex: 1; }
   .ph-ui-home .ph14-copy h1 { font-size: clamp(32px, 4vw, 46px); }
-  .ph-ui-home .ph14-media { min-height: 0; height: 220px; aspect-ratio: 16 / 9; }
+  .ph-ui-home .ph14-media { min-height: 0; height: auto; aspect-ratio: 16 / 9; }
   .ph-ui-home .ph14-lead:not(:has(.ph14-media)) { min-height: 0; }
   .ph-ui-quicklinks > a { padding: 16px 14px; gap: 9px; }
   .ph-ui-quicklinks strong { font-size: 13px; }
@@ -184,7 +186,7 @@ html[data-theme=dark] .ph-ui-home {
   .ph-ui-home .ph14-hero { grid-template-columns: 1fr; }
   .ph-ui-home .ph14-lead { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(180px, .8fr); min-height: 0; }
   .ph-ui-home .ph14-copy h1 { font-size: clamp(32px, 5.3vw, 44px); }
-  .ph-ui-home .ph14-media { min-height: 100%; height: auto; aspect-ratio: auto; }
+  .ph-ui-home .ph14-media { min-height: 0; height: auto; aspect-ratio: 16 / 9; }
   .ph-ui-home .ph14-side { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 4px 22px 6px; gap: 0 22px; }
   .ph-ui-home .ph14-side-head { grid-column: 1 / -1; }
   .ph-ui-home .ph14-brief { border: 0; padding: 18px 0; }
