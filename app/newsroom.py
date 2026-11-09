@@ -607,7 +607,7 @@ def process_news(title,source_text,category="general",source_materials=None):
     # "AI" label is returned when the model was not called.
     try:
         from app.phi4 import enabled as phi4_enabled, generate_news_copy
-        if phi4_enabled():
+        if len(material.split()) >= 450 and phi4_enabled():
             ai=generate_news_copy(title,material,category)
             headline=quality_headline(ai.get("headline",""),material)
             summary=clean_text(ai.get("summary",""))
