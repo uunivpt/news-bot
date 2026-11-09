@@ -1284,7 +1284,7 @@ def seo_article(category,item_id,slug=None):
   try:
    database=db()
    database.close()
-  except RuntimeError:
+  except (RuntimeError, PostgresError):
    message=('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
     '<title>Story currently unavailable — PoliticsHub.in</title><body style="font:16px/1.6 system-ui;max-width:680px;margin:8vh auto;padding:24px">'
     '<a href="/">PoliticsHub.in</a><h1>This story is temporarily unavailable</h1>'
