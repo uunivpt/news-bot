@@ -66,6 +66,12 @@ The command center uses the uncached `/api/admin/news` endpoint for private
 listing/filtering. Anonymous public responses avoid `Vary: Cookie`, which would
 disable Vercel CDN caching. Authenticated responses remain `private, no-store`.
 
+The homepage uses `home-critical.css`, built from `site.css`, `editorial.css`
+and `polish.css` in that order. After editing these source stylesheets, run
+`python scripts/build_home_css.py` and commit the updated bundle. CI runs the
+read-only `--check` mode to catch drift. The source Google Fonts import stays
+out of the bundle; the homepage loads its font stylesheet separately.
+
 Web PostgreSQL connections use a process-local pool capped at 4 connections and
 16 waiters, with a 2-second acquisition timeout and 5-second statement deadline.
 Use Neon's pooled endpoint for web traffic. Core schema migration is skipped by
