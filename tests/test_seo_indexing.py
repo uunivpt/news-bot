@@ -139,6 +139,20 @@ class SEOIndexingTests(unittest.TestCase):
                        for node in root.findall("u:url",ns)]
         self.assertCountEqual(all_languages,["en","hi","mr"])
 
+    def test_article_and_sitemap_fallback_on_postgres_error(self):
+        from psycopg import OperationalError
+        row = example()
+        with patch.object(api, "db", side_effect=OperationalError("temporary outage")), \
+             patch.object(api, "_snapshot_rows", return_value=[row]), \
+             patch.object(api, "_archive_rows", return_value=[]), \
+             patch.object(api, "_hindi_rows", return_value=[]), \
+             patch.object(api, "_official_exam_rows", return_value=[]):
+            self.assertEqual(len(api._published_sitemap_rows()), 1)
+            with api.app.test_request_context("/"):
+                found = api._public_row_by_id(row["id"])
+            self.assertIsNotNone(found)
+            self.assertEqual(found["id"], row["id"])
+
     def test_flask_html_and_status_codes(self):
         client=api.app.test_client()
         row=example()
