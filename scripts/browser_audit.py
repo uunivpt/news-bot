@@ -708,6 +708,50 @@ def run(base, output,admin_fixture=False):
                 isolated.close()
         check('static and saved-page preference choices stay synchronized and permit storage retry', static_preference_choices)
 
+        def preference_reopen_keyboard_focus():
+            for path, attribute in (('/', 'data-consent-choice'), ('/#/settings', 'data-consent-choice'), ('/saved.html', 'data-site-preference')):
+                isolated = browser.new_context(viewport={'width': 390, 'height': 844}, service_workers='block')
+                isolated.route('**/*', lambda route: route.continue_() if route.request.url.startswith(base + '/') else route.abort())
+                reader = isolated.new_page()
+                reader.on('pageerror', lambda error: errors.append(str(error)))
+                if admin_fixture:
+                    reader.route(base + '/', lambda route: route.fulfill(content_type='text/html',
+                        body=(Path(__file__).resolve().parents[1] / 'public/index.html').read_text(encoding='utf-8')))
+                try:
+                    reader.goto(base + path, wait_until='networkidle')
+                    require(not reader.locator('#privacyConsent').evaluate('(node) => node.contains(document.activeElement)'), 'Initial preference notice stole reading focus')
+                    essential = reader.locator('#privacyConsent [' + attribute + '="essential"]')
+                    preferences = reader.locator('#privacyConsent [' + attribute + '="preferences"]')
+                    essential.click()
+                    opener = reader.locator('footer [data-open-consent]')
+                    opener.focus()
+                    reader.keyboard.press('Enter')
+                    require(essential.evaluate('(node) => node === document.activeElement'), 'Keyboard reopen did not focus the preference controls: ' + path)
+                    reader.keyboard.press('Tab')
+                    require(preferences.evaluate('(node) => node === document.activeElement'), 'Tab did not reach the next preference choice')
+                    reader.keyboard.press('Enter')
+                    require(reader.evaluate("localStorage.getItem('ph-consent-v1')") == 'preferences', 'Keyboard preference grant failed')
+                    require(opener.evaluate('(node) => node === document.activeElement'), 'Preference grant lost the footer return position')
+                    reader.keyboard.press('Enter')
+                    require(essential.evaluate('(node) => node === document.activeElement'), 'Repeated reopen lost the preference controls')
+                    reader.evaluate("""() => {const set=Storage.prototype.setItem;window.restorePreferenceWrites=()=>{Storage.prototype.setItem=set};Storage.prototype.setItem=function(k,v){if(k==='ph-consent-v1')throw new DOMException('Fixture denied','SecurityError');return set.call(this,k,v)}}""")
+                    reader.keyboard.press('Enter')
+                    require(essential.evaluate('(node) => node === document.activeElement'), 'Failed preference write lost retry focus')
+                    require(reader.locator('#privacyConsent [role="status"]').is_visible(), 'Failed preference choice has no feedback')
+                    reader.evaluate('window.restorePreferenceWrites()')
+                    reader.keyboard.press('Enter')
+                    require(reader.evaluate("localStorage.getItem('ph-consent-v1')") == 'essential', 'Keyboard withdrawal retry failed')
+                    require(opener.evaluate('(node) => node === document.activeElement'), 'Successful withdrawal retry lost the footer return position')
+                    reader.reload(wait_until='networkidle')
+                    opener.focus()
+                    reader.keyboard.press('Enter')
+                    require(essential.evaluate('(node) => node === document.activeElement'), 'Reopen after reload did not focus the controls')
+                    reader.keyboard.press('Enter')
+                    require(opener.evaluate('(node) => node === document.activeElement'), 'Reopen after reload lost its opener')
+                finally:
+                    isolated.close()
+        check('keyboard preference reopening reaches choices and returns focus after success without stealing initial focus', preference_reopen_keyboard_focus)
+
         def consent_write_failure_recovery():
             isolated = browser.new_context(viewport={'width': 390, 'height': 844}, service_workers='block')
             isolated.route('**/*', lambda route: route.continue_() if route.request.url.startswith(base + '/') else route.abort())

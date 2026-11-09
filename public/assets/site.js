@@ -8,6 +8,7 @@ const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelecto
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ls={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}},del:k=>{try{localStorage.removeItem(k)}catch(e){}}};
 const CONSENT_KEY='ph-consent-v1';
+const consentReturnFocus=new WeakMap();
 function consentMode(){return ls.get(CONSENT_KEY)||''}
 function preferencesAllowed(){return consentMode()==='preferences'}
 function clearOptionalStorage(){[CACHE_KEY,...LEGACY_CACHE_KEYS,'ph-theme','ph-cookie','ph-ls','ph-reading-list-v1','ph-reader-size-v1'].forEach(ls.del);window.dispatchEvent(new Event('ph-preferences-cleared'))}
@@ -23,9 +24,12 @@ function setConsent(mode,button){
   return;
  }
  if(value!=='preferences')clearOptionalStorage();
- document.querySelector('#privacyConsent')?.remove();
+ const banner=document.querySelector('#privacyConsent'),opener=banner&&consentReturnFocus.get(banner);
+ const restoreFocus=banner?.contains(document.activeElement);
+ banner?.remove();
  if(document.documentElement.dataset.theme==='dark'&&!preferencesAllowed())theme('light');
  if(location.hash.startsWith('#/settings'))settings('prefs');
+ if(restoreFocus&&opener?.isConnected)opener.focus();
 }
 function showConsentBanner(force=false){
  if(!force&&consentMode())return;
@@ -40,7 +44,13 @@ function showConsentBanner(force=false){
  box.innerHTML='<div><strong>Site preferences</strong><p>PoliticsHub.in uses essential storage for your privacy choice. Optional storage keeps theme, article text size and saved-story links. This does not grant advertising consent. Google manages separate advertising privacy messages where applicable.</p><a href="/cookies.html">Cookie Policy</a> · <a href="/privacy.html">Privacy Policy</a></div><div class="privacy-actions"><button type="button" class="btn secondary" data-consent-choice="essential">Essential only</button><button type="button" class="btn" data-consent-choice="preferences">Allow preferences</button></div>';
  document.body.append(box);
 }
-document.addEventListener('click',e=>{const b=e.target.closest('[data-consent-choice]');if(b)setConsent(b.dataset.consentChoice,b);if(e.target.closest('[data-open-consent]')){e.preventDefault();showConsentBanner(true)}});
+document.addEventListener('click',e=>{
+ const b=e.target.closest('[data-consent-choice]');if(b)setConsent(b.dataset.consentChoice,b);
+ const reopen=e.target.closest('[data-open-consent]');if(!reopen)return;
+ e.preventDefault();showConsentBanner(true);
+ const banner=document.querySelector('#privacyConsent');
+ if(banner){consentReturnFocus.set(banner,reopen);banner.querySelector('[data-consent-choice]')?.focus()}
+});
 
 const S={items:[],mode:'loading',api:'unknown',snap:'unknown',tried:0};
 const dt=d=>{const raw=String(d||'').trim().replace(/\s*[·•]\s*/g,' ').replace(/\s+/g,' ');const x=new Date(raw);return isNaN(x)?null:x};
