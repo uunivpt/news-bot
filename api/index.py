@@ -769,7 +769,8 @@ def _public_row_by_id(item_id):
    row=_archive_row(item_id,database)
    return _publicize(row) if row else None
   finally: database.close()
- except RuntimeError:
+ except (RuntimeError, PostgresError):
+  # Continue to the public snapshot and durable archive if Neon is unavailable.
   pass
  for item in _snapshot_rows("all"):
   if str(item.get("id"))==str(item_id):return _publicize(item)
@@ -2303,7 +2304,8 @@ def _published_sitemap_rows():
    return [dict(r) for r in rows]+_archive_rows(database,discovery=True)
   finally:
    database.close()
- except RuntimeError:
+ except (RuntimeError, PostgresError):
+  # A transient PostgreSQL outage must not turn sitemap discovery into HTTP 500.
   return _snapshot_rows("all")+_archive_rows(discovery=True)
 
 
