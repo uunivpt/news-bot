@@ -7,6 +7,12 @@ class PublicTitleTests(unittest.TestCase):
     def test_public_title_normalizes_whitespace(self):
         self.assertEqual(_public_title("  India   announces   new policy  "), "India announces new policy")
 
+    def test_public_title_never_cuts_complete_headline_at_eighteen_words(self):
+        title = ("The regional transport authority confirmed a revised public timetable for multiple district bus routes "
+                 "after reviewing the service schedule with local officials on Monday")
+        self.assertGreater(len(title.split()), 18)
+        self.assertEqual(_public_title(title), title)
+
     def test_public_title_strips_leading_punctuation(self):
         self.assertEqual(_public_title("***India announces new policy"), "India announces new policy")
 

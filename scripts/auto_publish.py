@@ -7,7 +7,7 @@ if str(ROOT) not in sys.path:sys.path.insert(0,str(ROOT))
 from app.article_fetcher import enrich_source_text
 from app.database import NewsDatabase
 from app.news_text import clean_news_text
-from app.newsroom import process_news, validate_news_copy
+from app.newsroom import process_news, validate_news_copy, longform_quality_gate
 from app.publish_policy import risk_flags
 from app.phase_system import ensure_schema, run as agent_run, quality_gate, manager_route
 from app.advanced_ops import audit_stage, state_transition, record_verification, find_duplicate_story
@@ -45,26 +45,16 @@ def _process_content(db,row):
  except Exception as exc:print(f"Bot processing failed for item {row.get('id')}: {exc}"); return False
 
 def _direct_fallback_content(row):
- # Do not turn captions, emoji-only posts or one-line fragments into thin
- # website articles. They stay unprocessed until usable source material exists.
- title=clean_news_text(row.get("title") or "",row.get("source_name") or "")
- raw=row.get("summary") or row.get("title") or ""
- summary=clean_news_text(raw,row.get("source_name") or "")
- if not title or not summary:return False
- title_words=[w for w in re.findall(r"[A-Za-z0-9][A-Za-z0-9'-]*",title) if w]
- summary_words=[w for w in re.findall(r"[A-Za-z0-9][A-Za-z0-9'-]*",summary) if w]
- if len(title_words)<3 or len(summary_words)<7 or len(summary)<35:
-  return False
- article=summary
- copy_qa=validate_news_copy(title,summary,article)
- if not copy_qa["passed"]:
-  print(f"Direct fallback blocked by copy completeness for item {row.get('id')}: {copy_qa['errors']}")
-  return False
- qa=quality_gate(title,summary,article,allow_short=True)
- if not qa["passed"]:
-  print(f"Direct fallback blocked by quality gate for item {row.get('id')}: {qa['errors']}")
-  return False
- return {"title":title,"summary":summary,"bot_summary":summary,"bot_article":article}
+ # Keep a clearly source-linked feed preview available when a factual longform
+ # cannot be written. Never present the RSS excerpt as a 500–700-word article.
+ from app.newsroom import quality_headline, sentences
+ title=quality_headline(clean_news_text(row.get("title") or "",row.get("source_name") or ""))
+ summary=clean_news_text(row.get("summary") or "",row.get("source_name") or "")
+ if not title or len(summary)<70:return False
+ items=sentences(summary)
+ if not items or any(len(s.split())<7 for s in items):return False
+ if not quality_gate(title,summary,summary,allow_short=True)["passed"]:return False
+ return {"title":title,"summary":summary,"bot_summary":summary,"bot_article":""}
 
 def prepare_content(db,row):
  fields=_process_content(db,row)
@@ -75,7 +65,7 @@ def prepare_content(db,row):
  fallback=_direct_fallback_content(row)
  if not fallback:return False
  db.update(int(row["id"]),**fallback); row.update(fallback)
- print(f"Using direct source fallback for short item {row['id']}")
+ print(f"Using attributed summary-only preview for item {row['id']} (no full article)")
  return True
 
 def process_content(db,row):
@@ -143,8 +133,8 @@ def main():
    held+=1
    print(f"X story {row['id']} held for source/context review")
    continue
-  # Always regenerate pending content from the freshest source. If the newsroom
-  # processor rejects a very short alert, fall back to cleaned source wording.
+  # Regenerate pending content from source evidence; hold incomplete longform
+  # instead of promoting a summary into a full article.
   duplicate=find_duplicate_story(db,int(row["id"]),row.get("title") or "")
   if duplicate:
    audit_stage(db,int(row["id"]),"DUPLICATE_CHECK","flagged",{"similarity":round(duplicate[0],3),"existing_id":duplicate[1].get("id")})

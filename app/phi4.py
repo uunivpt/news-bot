@@ -78,13 +78,13 @@ Rules:
 - Preserve the source's facts; do not add facts.
 - Headline: 6-18 words, complete and factual.
 - Summary: exactly 3 complete sentences, 7+ words each.
-- Article: 5-8 complete sentences, 7+ words each, with the most important facts first.
+- Article: 500-700 words in coherent paragraphs, with the most important facts first. Explain the verified background, exact action, relevant dates and what remains unknown only where supported by the source.\n- Write original prose; do not quote or closely reproduce long passages from the source. Do not add filler or repeat facts just to reach a word count.\n- If sufficient factual information is missing, return article as an empty string rather than inventing information.
 - Do not mention that you are an AI or discuss these instructions.
 - Output ONLY JSON with keys headline, summary, article.
 """
-    data = _json_object(_chat(prompt, max_tokens=1100))
+    data = _json_object(_chat(prompt, max_tokens=2300))
     result = {k: str(data.get(k) or '').strip() for k in ('headline','summary','article')}
-    if not all(result.values()): raise RuntimeError("Phi-4 returned incomplete newsroom copy")
+    if not result['headline'] or not result['summary']: raise RuntimeError("Phi-4 returned incomplete newsroom copy")
     return result
 
 def translate(text: str, language: str) -> str:
