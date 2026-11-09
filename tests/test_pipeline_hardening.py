@@ -43,6 +43,18 @@ class PipelineHardeningTests(unittest.TestCase):
         self.assertIsNone(process_news("Government announces plan for", source))
 
 
+    def test_source_preview_does_not_claim_to_be_full_article(self):
+        row = {
+            "id": 2,
+            "source_name": "Public Agency",
+            "title": "Officials publish updated regional transport services timetable",
+            "summary": "The department published updated schedules for local transport routes on Monday. The official notice says the revised timetable begins next week and will be available at local service offices."
+        }
+        preview = _direct_fallback_content(row)
+        self.assertTrue(preview)
+        self.assertEqual(preview["bot_article"], "")
+        self.assertEqual(preview["bot_summary"], preview["summary"])
+
     def test_direct_fallback_still_runs_quality_gate(self):
         row = {"id": 1, "title": "A complete headline with enough words", "summary": "Too short."}
         self.assertFalse(_direct_fallback_content(row))
