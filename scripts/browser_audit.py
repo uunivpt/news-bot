@@ -507,7 +507,7 @@ def run(base, output,admin_fixture=False):
 
         def briefing():
             home()
-            page.locator('.ph-ui-quicklinks a[href="/briefing/"]').click()
+            page.locator('.ph-ui-intro-actions a[href="/briefing/"]').click()
             require(page.locator('h1').inner_text() == 'Quick Briefing', 'Briefing entry failed')
             count = page.locator('.briefing-story').count()
             require(0 < count <= 6, 'Briefing should show one to six recent reports')
@@ -549,7 +549,7 @@ def run(base, output,admin_fixture=False):
                 reader.goto(base + '/', wait_until='domcontentloaded')
                 reader.locator('#privacyConsent [data-consent-choice="essential"]').click()
                 reader.wait_for_load_state('networkidle')
-                reader.locator('.ph-ui-quicklinks a[href="/briefing/"]').click()
+                reader.locator('.ph-ui-intro-actions a[href="/briefing/"]').click()
                 reader.wait_for_load_state('networkidle')
                 reader.locator('[name="desk"]').select_option('politics')
                 reader.locator('[name="period"]').select_option('week')
