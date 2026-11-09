@@ -281,8 +281,19 @@ $('#hd').addEventListener('pointerleave',()=>$('#lg').style.transform='');
 const dr=$('#dr');let last,searchLast;
 function openD(){closeS();last=document.activeElement;document.body.classList.add('dro');dr.setAttribute('aria-hidden','false');$('#bg').setAttribute('aria-expanded','true');$('#dx').focus()}
 function closeD(){if(!document.body.classList.contains('dro'))return;document.body.classList.remove('dro');dr.setAttribute('aria-hidden','true');$('#bg').setAttribute('aria-expanded','false');last?.focus?.()}
-function openS(){closeD();searchLast=document.activeElement;document.body.classList.add('search-open');$('#sp').classList.add('open');$('#sp').setAttribute('aria-hidden','false');setTimeout(()=>$('#si').focus(),50);doS()}
-function closeS(){const opened=$('#sp').classList.contains('open');$('#sp').classList.remove('open');$('#sp').setAttribute('aria-hidden','true');document.body.classList.remove('search-open');searchController?.abort();if(opened)searchLast?.focus?.()}
+let searchFocusFrame=0;
+function openS(){
+ closeD();searchLast=document.activeElement;document.body.classList.add('search-open');$('#sp').classList.add('open');$('#sp').setAttribute('aria-hidden','false');
+ cancelAnimationFrame(searchFocusFrame);
+ // A transitioning dialog can still be hidden when a fixed delay expires.
+ const focusWhenVisible=()=>{
+  if(!$('#sp').classList.contains('open'))return;
+  if(getComputedStyle($('#si')).visibility==='visible'){$('#si').focus();searchFocusFrame=0}
+  else searchFocusFrame=requestAnimationFrame(focusWhenVisible);
+ };
+ searchFocusFrame=requestAnimationFrame(focusWhenVisible);doS();
+}
+function closeS(){cancelAnimationFrame(searchFocusFrame);searchFocusFrame=0;const opened=$('#sp').classList.contains('open');$('#sp').classList.remove('open');$('#sp').setAttribute('aria-hidden','true');document.body.classList.remove('search-open');searchController?.abort();if(opened)searchLast?.focus?.()}
 function closeAll(){closeD();closeS()}
 async function doS(){const q=$('#si').value.trim();if(!q){$('#sc').textContent='Type to search the full archive';$('#sres').innerHTML='';return}
  let r=[];try{r=await get(ENDPOINTS.search+'?q='+encodeURIComponent(q)+'&limit=50')}catch(e){r=S.items.filter(i=>[i.title,i.summary,i.source,i.category].join(' ').toLowerCase().includes(q.toLowerCase())).slice(0,50)}

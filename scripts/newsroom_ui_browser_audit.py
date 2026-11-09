@@ -59,7 +59,6 @@ def run(base: str, output: Path) -> None:
                     searchVisibility: getComputedStyle(document.querySelector('#sp')).visibility,
                     inputVisibility: getComputedStyle(document.querySelector('#si')).visibility,
                     hasFocus: document.hasFocus(), hidden: document.hidden,
-                    focusEvents: window.__auditFocusEvents,
                     scrollY, bodyClass: document.body.className
                 })""")
             }
@@ -178,27 +177,28 @@ def run(base: str, output: Path) -> None:
         check('loading more reports appends every row and continues keyboard focus', load_more)
 
         def search():
-            page.evaluate("""() => {
-                window.__auditFocusEvents = [];
-                for (const type of ['focusin', 'focusout']) {
-                    document.addEventListener(type, event => {
-                        window.__auditFocusEvents.push({
-                            type, target: event.target.id || event.target.tagName,
-                            time: performance.now(), open: document.querySelector('#sp').classList.contains('open')
-                        });
-                    });
-                }
-            }""")
-            page.keyboard.press('Control+k')
-            page.wait_for_selector('#sp.open')
-            page.wait_for_function("() => document.querySelector('#si') === document.activeElement")
-            page.keyboard.press('Escape')
-            page.wait_for_selector('#sp.open', state='hidden')
-            trigger = page.locator('[data-news-search]')
-            require(trigger.count() > 0, 'Homepage search trigger missing')
-            trigger.first.click()
-            page.wait_for_selector('#sp.open')
-            page.keyboard.press('Escape')
+            # Delay visibility deterministically: the old 50 ms focus timer
+            # could run while a newly opened dialog was still hidden.
+            transition = page.add_style_tag(content='#sp {transition: opacity .3s, visibility .2s step-end}')
+            try:
+                page.keyboard.press('Control+k')
+                page.wait_for_selector('#sp.open')
+                page.wait_for_function("() => document.querySelector('#si') === document.activeElement")
+                page.keyboard.press('Escape')
+                page.wait_for_selector('#sp.open', state='hidden')
+                trigger = page.locator('[data-news-search]')
+                require(trigger.count() > 0, 'Homepage search trigger missing')
+                trigger.first.click()
+                page.wait_for_selector('#sp.open')
+                page.wait_for_function("() => document.querySelector('#si') === document.activeElement")
+                page.keyboard.press('Escape')
+                page.wait_for_selector('#sp.open', state='hidden')
+                # Closing before the delayed focus must preserve its opener.
+                page.evaluate("document.querySelector('#sbtn').focus(); openS(); closeS()")
+                page.wait_for_timeout(300)
+                require(page.locator('#sbtn').evaluate('(node) => node === document.activeElement'), 'A closed dialog stole focus')
+            finally:
+                transition.evaluate('(node) => node.remove()')
         check('Ctrl+K and the homepage search control open the existing search dialog', search)
 
         def newsletter_form():
