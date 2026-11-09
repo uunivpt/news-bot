@@ -476,11 +476,11 @@ def is_telegram_image(url):
 def quality_headline(title, source_text=""):
     """Return a complete headline or an empty value; never silently keep a cut fragment."""
     value=SPACE_RE.sub(" ", clean_text(title)).strip(" .:-")
-    if _headline_complete(value) and BAD_HEADLINE_RE.search(value or "") is None:
+    if 5 <= len(value.split()) <= 24 and len(value) <= 180 and _headline_complete(value) and BAD_HEADLINE_RE.search(value or "") is None:
         return value
     for candidate in sentences(source_text):
         candidate=_headline_from_sentence(candidate)
-        if 3 <= len(candidate.split()) <= 18 and _headline_complete(candidate):
+        if 5 <= len(candidate.split()) <= 18 and len(candidate) <= 180 and _headline_complete(candidate) and BAD_HEADLINE_RE.search(candidate) is None:
             return candidate
     # If the source cannot provide a complete headline, fail closed. The
     # publisher will keep the item pending instead of inventing/truncating copy.
@@ -568,6 +568,30 @@ def build_editorial_value(title, source_materials):
     }
 
 
+def longform_quality_gate(headline, article):
+    """Require a complete headline and a substantial original brief.
+
+    Word counts are a formatting gate, not evidence that the facts are true.
+    The publishing path must independently check the source and attribution.
+    """
+    count=len(str(article or "").split())
+    errors=[]
+    if not _headline_complete(headline) or BAD_HEADLINE_RE.search(str(headline or "")):
+        errors.append("incomplete_headline")
+    if len(str(headline or ""))>180 or not 5 <= len(str(headline or "").split()) <= 24:
+        errors.append("headline_length")
+    if count<500:
+        errors.append("brief_below_500_words")
+    if count>700:
+        errors.append("brief_above_700_words")
+    items=sentences(article)
+    if len(items)<15:
+        errors.append("brief_lacks_distinct_facts")
+    if len(set(s.casefold() for s in items)) < max(15, int(len(items)*0.85)):
+        errors.append("repetitive_brief")
+    return {"passed":not errors,"errors":errors,"words":count}
+
+
 def process_news(title,source_text,category="general",source_materials=None):
     """Build publication copy, preferring configured Microsoft Phi-4 when available.
 
@@ -589,7 +613,7 @@ def process_news(title,source_text,category="general",source_materials=None):
             summary=clean_text(ai.get("summary",""))
             article=clean_text(ai.get("article",""))
             copy_qa=validate_news_copy(headline,summary,article)
-            if copy_qa["passed"] and len(summary)>=50 and len(article)>=120:
+            if copy_qa["passed"] and len(summary)>=50 and longform_quality_gate(headline,article)["passed"]:
                 value=build_editorial_value(headline,source_materials or [])
                 if value["eligible"]:
                     article=article+"\n\nEditorial source comparison: "+value["text"]
@@ -605,7 +629,7 @@ def process_news(title,source_text,category="general",source_materials=None):
                     "ai_summary":summary,
                     "ai_article":article,
                 }
-            raise RuntimeError(f"Phi-4 output failed newsroom QA: {copy_qa.get('errors')}")
+            raise RuntimeError(f"Phi-4 output failed newsroom QA: {copy_qa.get('errors')}; longform={longform_quality_gate(headline, article)['errors']}")
     except Exception as exc:
         print(f"Phi-4 newsroom path unavailable; using deterministic fallback: {exc}")
 
