@@ -7,20 +7,26 @@
   document.documentElement.lang=c==='hindi'?'hi':'en';
   setActive(c);document.title=(c==='all'?'':(CATS.find(function(x){return x[0]===c})||['',''])[1]+' — ')+'PoliticsHub.in';
   var list=phSorted(S.items.filter(function(i){return inCat(i,c)})),lead=list[0],briefs=list.slice(1,4),rows=list.slice(4,24),remaining=list.slice(24);
-  var found=CATS.find(function(x){return x[0]===c}),label=found?found[1]:'Home',day=new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-  var cats=CATS.map(function(x){return '<a href="'+hl(x[0])+'" class="'+(x[0]===c?'on':'')+'">'+esc(x[1])+'</a>'}).join('');
-  if(!lead){$('#app').innerHTML='<div class="ph14-home"><div class="ph14-cats">'+cats+'</div><div class="msg"><h1>No stories yet</h1><p>Fresh reports will appear here automatically.</p><p><a class="btn secondary" href="/archive/">Browse the archive</a></p></div></div>';return}
+  var found=CATS.find(function(x){return x[0]===c}),label=found?found[1]:'Home',day=new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric',timeZone:'Asia/Kolkata'});
+  var ui=window.PHNewsroomUI;
+  var cats=CATS.map(function(x){return '<a href="'+hl(x[0])+'" class="'+(x[0]===c?'on':'')+'"'+(x[0]===c?' aria-current="page"':'')+'>'+esc(x[1])+'</a>'}).join('');
+  var start='<div class="ph14-home ph-ui-home"><div class="ph14-datebar"><strong>PoliticsHub News Desk</strong><span>'+esc(day)+' · '+esc(label)+'</span></div><nav class="ph14-cats" aria-label="News desks">'+cats+'</nav>';
+  var dashboard=ui?ui.dashboard(S.items,CATS,inCat,hl):'';
+  if(!lead){$('#app').innerHTML=start+'<div class="msg"><h1>No reports in this desk yet</h1><p>Browse another desk or return when more stories are published.</p><p><a class="btn secondary" href="/archive/">Browse the archive</a></p></div>'+dashboard+'</div>';if(ui)ui.bind($('#app .ph-ui-home'));return}
   var leadPublished=phTs(lead.date);
   var leadPublishedMarkup=leadPublished>0 && leadPublished<Date.now()+86400000
     ? '<time class="ph14-published-date" datetime="'+new Date(leadPublished).toISOString()+'">Published: '+esc(new Date(leadPublished).toLocaleString('en-IN',{day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit',timeZone:'Asia/Kolkata'}))+' IST</time>'
     : '';
-  var leadHtml='<a class="ph14-lead" href="'+esc(articleHref(lead))+'"><div class="ph14-copy"><span class="ph14-kicker"><i></i>'+(lead.is_breaking?'Breaking · ':'')+esc(lead.category||'Top story')+'</span><h1>'+esc(lead.title)+'</h1><p>'+esc(lead.summary||'')+'</p><small class="ph14-source-label">Source: '+esc(lead.source||'Original publisher')+'</small>'+leadPublishedMarkup+'<span class="ph14-read">Read source-linked brief <b>↗</b></span></div>'+phMedia(lead,true)+'</a>';
-  var briefHtml=briefs.map(function(i){return '<a class="ph14-brief" href="'+esc(articleHref(i))+'">'+phMeta(i)+'<h3>'+esc(i.title)+'</h3>'+(i.summary?'<p>'+esc(i.summary)+'</p>':'')+'</a>'}).join('');
-  function phRow(i){return '<a class="ph14-row" href="'+esc(articleHref(i))+'"><div>'+phMeta(i)+'<h3>'+esc(i.title)+'</h3>'+(i.summary?'<p>'+esc(i.summary)+'</p>':'')+'</div>'+phMedia(i,false)+'</a>'}
+  var leadHtml='<a class="ph14-lead ph-ui-card" href="'+esc(articleHref(lead))+'"><div class="ph14-copy"><span class="ph14-kicker"><i aria-hidden="true"></i>'+(lead.is_breaking?'Breaking · ':'')+esc(lead.category||'Top story')+'</span><h1>'+esc(lead.title)+'</h1><p>'+esc(lead.summary||'')+'</p><small class="ph14-source-label">Source: '+esc(lead.source||'Original publisher')+'</small>'+leadPublishedMarkup+'<span class="ph14-read">Read source-linked brief <b aria-hidden="true">↗</b></span></div>'+phMedia(lead,true)+'</a>';
+  var briefHtml=briefs.map(function(i){return '<a class="ph14-brief ph-ui-card" href="'+esc(articleHref(i))+'">'+phMeta(i)+'<h3>'+esc(i.title)+'</h3>'+(i.summary?'<p>'+esc(i.summary)+'</p>':'')+'</a>'}).join('');
+  function phRow(i){return '<a class="ph14-row ph-ui-card ph-ui-reveal" href="'+esc(articleHref(i))+'"><div>'+phMeta(i)+'<h3>'+esc(i.title)+'</h3>'+(i.summary?'<p>'+esc(i.summary)+'</p>':'')+'</div>'+phMedia(i,false)+'</a>'}
   var rowHtml=rows.map(phRow).join('');
   var subscribeHtml='<section class="ph14-newsletter" aria-labelledby="ph14NlTitle"><div><span class="ph14-newsletter-eyebrow">THE POLITICSHUB BRIEF</span><h2 id="ph14NlTitle">One important story.<br>Delivered daily.</h2><p>A clear, source-linked news briefing delivered to your email. Free, opt-in, and easy to unsubscribe.</p></div><form id="homeNl"><label for="homeNlEmail" class="ph14-newsletter-label">Your email address</label><div class="ph14-newsletter-fields"><input id="homeNlEmail" type="email" placeholder="you@example.com" autocomplete="email" required><button class="btn" type="submit">Subscribe free →</button></div><label class="ph14-newsletter-check"><input name="privacy" type="checkbox" required> I agree to receive daily emails and the <a href="/privacy.html">Privacy Policy</a>.</label><label class="ph14-newsletter-check"><input name="adult" type="checkbox" required> I confirm I am 18 or older.</label><p id="homeNlMsg" class="ph14-newsletter-message" role="status" aria-live="polite"></p><p class="ph14-newsletter-hint">We email you a confirmation link first. Unsubscribe anytime.</p></form></section>';
   var desks=CATS.slice(1).map(function(x){return '<a href="'+hl(x[0])+'">'+esc(x[1])+'</a>'}).join('')+'<a href="/topics/">Topics &amp; live coverage</a><a href="/exams/">Official exams</a><a href="/library/">Library &amp; counts</a>';
-  $('#app').innerHTML='<div class="ph14-home"><div class="ph14-datebar"><strong>PoliticsHub News Desk</strong><span>'+esc(day)+' · '+esc(label)+'</span></div><div class="ph14-cats">'+cats+'</div><a class="ph-briefing-entry" href="/briefing/"><strong>Short on time?</strong><span>Catch up with Quick Briefing →</span></a><a class="ph-briefing-entry" href="/topics/"><strong>Follow a topic</strong><span>Source-linked timelines, context &amp; a personal reading brief →</span></a><section class="ph14-hero">'+leadHtml+'<aside class="ph14-side"><div class="ph14-side-head"><h2>Just in</h2><span>Latest updates</span></div>'+briefHtml+'</aside></section>'+subscribeHtml+'<div class="ph14-section-head"><h2>Latest stories</h2><span>'+list.length+' reports</span></div><section class="ph14-feed"><div>'+rowHtml+'</div><aside class="ph14-rail"><div class="ph14-rail-card"><h3>Browse desks</h3><p>Follow the stories shaping India and the world.</p><div class="ph14-desk">'+desks+'</div></div><div class="ph14-rail-card"><h3>Live newsroom</h3><div class="ph14-status '+(S.mode==='api'||S.mode==='snapshot'?'':'offline')+'"><i></i><span>'+(S.mode==='api'?'News feed refreshes automatically':S.mode==='snapshot'?'Source feed checks for news automatically':'Offline · showing previously loaded stories')+'</span></div></div><div class="ph14-rail-card"><h3>PoliticsHub Brief</h3><p>Important stories, clearly presented. No clutter.</p></div></aside></section></div>';
+  var intro='<div class="ph-ui-intro"><div><span class="ph-ui-eyebrow">INDEPENDENT READING. INFORMED PERSPECTIVES.</span><h2>What matters, clearly.</h2><p>India, the world and the stories in between. Always with the source.</p></div><div class="ph-ui-intro-actions"><button type="button" class="btn secondary ph-ui-shortcut" data-news-search>'+(ui?ui.icon('search'):'')+'<span>Find a story</span><kbd aria-hidden="true">Ctrl / ⌘ K</kbd></button><a class="btn" href="/briefing/">Quick briefing <span aria-hidden="true">↗</span></a></div></div>';
+  var density='<div class="ph-ui-density" role="group" aria-label="Story list spacing"><button type="button" data-news-density="comfortable" aria-pressed="true">Comfortable</button><button type="button" data-news-density="compact" aria-pressed="false">Compact</button></div>';
+  var rail='<aside class="ph14-rail"><div class="ph14-rail-card ph-ui-card ph-ui-reveal"><span class="ph-ui-eyebrow">EXPLORE MORE</span><h3>Choose your desk.</h3><p>Follow the stories shaping India and the world.</p><div class="ph14-desk">'+desks+'</div></div><div class="ph14-rail-card ph-ui-card ph-ui-reveal"><span class="ph-ui-eyebrow">FEED STATUS</span><h3>Your news connection</h3><div class="ph14-status '+(S.mode==='api'||S.mode==='snapshot'?'':'offline')+'"><i aria-hidden="true"></i><span>'+(S.mode==='api'?'News feed refreshes automatically':S.mode==='snapshot'?'Source feed checks for news automatically':'Offline · showing previously loaded stories')+'</span></div><div class="ph-ui-rail-links"><a href="/sources.html">Meet the sources ↗</a><a href="/corrections.html">Request a correction ↗</a></div></div><div class="ph14-rail-card ph-ui-card ph-ui-help ph-ui-reveal"><h3>Read with context.</h3><details><summary>Where do these stories come from?</summary><p>Each brief names its source. Open the article for the original publisher link and publication details. <a href="/sources.html">Browse source references.</a></p></details><details><summary>Is a source-linked brief verified?</summary><p>A source-linked brief is not an independent fact-check. Check the original report and official records before sharing. <a href="/editorial-policy.html">Read our editorial policy.</a></p></details><details><summary>How do I save a story?</summary><p>Open an article and select Save story. Saved links stay in this browser after you allow optional preferences. <a href="/saved.html">Open your reading list.</a></p></details></div></aside>';
+  $('#app').innerHTML=start+intro+'<section class="ph14-hero" aria-label="Top stories">'+leadHtml+'<aside class="ph14-side"><div class="ph14-side-head"><h2>On the radar</h2><span>From this feed</span></div>'+briefHtml+'</aside></section>'+dashboard+'<div class="ph14-section-head"><div><span class="ph-ui-eyebrow">THE NEWS STREAM</span><h2>Latest stories</h2><p>'+list.length+' reports in '+esc(c==='all'?'this feed':label)+'</p></div>'+density+'</div><section class="ph14-feed" aria-label="Latest reports" data-density="comfortable"><div>'+rowHtml+'</div>'+rail+'</section>'+subscribeHtml+'</div>';
   if(remaining.length){
    var listEl=$('#app .ph14-feed > div:first-child');
    if(listEl){
@@ -29,10 +35,15 @@
     button.textContent='Load more stories ('+remaining.length+' remaining)';
     button.addEventListener('click',function(){
      var batch=remaining.slice(offset,offset+20);
+     var restoreFocus=document.activeElement===button;
      button.insertAdjacentHTML('beforebegin',batch.map(phRow).join(''));
+     var inserted=button.previousElementSibling;
+     for(var n=1;n<batch.length;n++)inserted=inserted.previousElementSibling;
      offset+=batch.length;
      if(offset>=remaining.length)button.remove();
      else button.textContent='Load more stories ('+(remaining.length-offset)+' remaining)';
+     if(ui)ui.observe($('#app .ph-ui-home'));
+     if(restoreFocus&&inserted){inserted.classList.add('is-visible');inserted.focus()}
     });
     listEl.append(button);
    }
@@ -40,6 +51,7 @@
   fx();
   if(typeof enhanceHome==='function')enhanceHome(c);
   if(typeof bindNewsletter==='function')bindNewsletter();
+  if(ui)ui.bind($('#app .ph-ui-home'));
  };
  if(S&&S.items&&S.items.length)render();
 })();

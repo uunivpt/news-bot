@@ -20,6 +20,17 @@ This file records direct third-party dependencies and services used by PoliticsH
 
 - Inter and Bricolage Grotesque web fonts — use their upstream open font licenses as distributed through Google Fonts.
 
+## Interface components
+
+- Watermelon UI — MIT, Copyright (c) 2026 Watermelon Platform Contributors.
+  Continuous Tabs and Stats 4 pointer glow were adapted to native HTML/CSS/JavaScript;
+  Blog 1 and Library Dashboard informed the news blocks and reading dashboard.
+  Upstream revision: `2a2aeef7533d7df52be294e73628a216238d1b90` from
+  https://github.com/WatermelonCorp/watermelon-platform.
+  Full notice: [Watermelon UI license](docs/WATERMELON_UI_LICENSE.md), also served at
+  `/assets/watermelon-ui-LICENSE.txt`. No React, Motion runtime, example data or
+  upstream image assets are shipped by these adaptations.
+
 ## External services and APIs
 
 - NewsAPI: production use requires an appropriate paid/production plan; the Developer plan is development-only. Terms also prohibit reproducing or republishing copyrighted material without permission. The NewsAPI source is therefore disabled in production until a suitable license is confirmed.
