@@ -24,7 +24,7 @@
     const d = new Date(String(x || '').replace(/\s*[·•]\s*/g,' '));
     return Number.isFinite(d.getTime()) ? d : null;
   };
-  const fmt = x => date(x)?.toLocaleString('en-IN', {timeZone:'Asia/Kolkata',day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'}) + ' IST' || 'Date unavailable';
+  const fmt = x => { const value = date(x); return value ? value.toLocaleString('en-IN', {timeZone:'Asia/Kolkata',day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'}) + ' IST' : 'Date unavailable'; };
   const category = x => String(x.category || x.section || 'india').toLowerCase().trim();
   const safeUrl = value => {
     try {
@@ -44,7 +44,7 @@
     id: String(x.id ?? ('record-' + i)),
     title: String(x.title || x.headline || '').trim(),
     summary: String(x.summary || x.bot_summary || x.description || '').trim(),
-    source: String(x.source_name || x.source || x.publisher || 'Publisher').trim(),
+    source: String(x.source_name || (typeof x.source === 'string' ? x.source : x.source?.name) || x.publisher || 'Publisher').trim(),
     sourceUrl: safeUrl(x.url || x.link),
     date: x.published_at_iso || x.published_at_site || x.published_at || x.date || '',
     category: category(x),
