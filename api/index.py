@@ -74,7 +74,7 @@ def recovery_session():
 def enforce_admin_session_scope():
  expiry=session.get('admin_expires_at')
  if expiry and time.time()>=expiry:session.clear()
- if hosted_enabled() and recovery_session() and request.path.startswith('/api/admin/') and request.path not in {'/api/admin/login','/api/admin/logout'}:
+ if hosted_enabled() and session.get('admin_user') and (recovery_session() or not session.get('admin_verifier_tag')) and request.path.startswith('/api/admin/') and request.path not in {'/api/admin/login','/api/admin/logout'}:
   session.clear()
   if request.path!='/api/admin/me':
    return jsonify({'error':'Sign in again for your full workspace permissions.','code':'reauthenticate'}),401

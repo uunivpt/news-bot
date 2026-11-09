@@ -67,3 +67,12 @@ class HostedOwnerAccessTests(unittest.TestCase):
         self.assertEqual(result.status_code,503)
         self.assertEqual(result.json['code'],'admin_storage_unavailable')
         self.assertFalse(self.client.get('/api/admin/me').json['authenticated'])
+
+    def test_legacy_owner_cookie_requires_fresh_login_for_hiring_permissions(self):
+        with self.client.session_transaction() as session:
+            session.update(admin_user='pushkarthawari',admin_role='owner',
+                           admin_scope='owner',csrf_token='legacy-token')
+        result=self.client.get('/api/admin/users')
+        self.assertEqual(result.status_code,401)
+        self.assertEqual(result.json['code'],'reauthenticate')
+        self.assertFalse(self.client.get('/api/admin/me').json['authenticated'])
