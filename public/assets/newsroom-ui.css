@@ -229,3 +229,6 @@ html[data-theme=dark] .ph-ui-home {
   .ph-ui-home .ph14-hero, .ph-ui-home .ph14-feed { display: block; }
   .ph-ui-home .ph14-lead, .ph-ui-home .ph14-side, .ph-ui-home .ph14-row { break-inside: avoid; box-shadow: none; margin-bottom: 16px; }
 }
+
+/* Without the sidebar, main news rows use the full feed width. */
+.ph-ui-home .ph14-feed { grid-template-columns: minmax(0, 1fr); }

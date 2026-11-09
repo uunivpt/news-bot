@@ -21,3 +21,14 @@ test('public Reading Room and numerical counts are not rendered by homepage', ()
   for (const preserved of ['ph14-hero','ph14-feed','data-news-density','Load more stories','homeNl',"ui.bind","ui.icon('search')"])
     assert.ok(homepage.includes(preserved), preserved);
 });
+
+test('homepage omits resource rail and trending list without losing news feed', () => {
+ const home=fs.readFileSync('public/assets/editorial-home.js','utf8');
+ const site=fs.readFileSync('public/assets/site.js','utf8');
+ const css=fs.readFileSync('public/assets/newsroom-ui.css','utf8');
+ for(const removed of ['EXPLORE MORE','Choose your desk.','READER RESOURCES','Go to the original.','Read with context.','Most read']) assert.ok(!home.includes(removed),removed);
+ assert.doesNotMatch(home,/ph14-rail|\+rail\+/);
+ assert.doesNotMatch(site,/function enhanceHome\(|\/api\/trending\?limit=5/);
+ assert.match(css,/\.ph-ui-home \.ph14-feed \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+ for(const preserved of ['ph14-hero','ph14-feed','ph14-section-head','ph14-row','Load more stories','ph14-cats']) assert.ok(home.includes(preserved),preserved);
+});
