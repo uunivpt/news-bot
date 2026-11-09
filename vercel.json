@@ -131,6 +131,14 @@
   ],
   "rewrites": [
     {
+      "source": "/topics/",
+      "destination": "/topics/index.html"
+    },
+    {
+      "source": "/topics",
+      "destination": "/topics/index.html"
+    },
+    {
       "source": "/library/",
       "destination": "/library/index.html"
     },
