@@ -77,6 +77,10 @@ class SEOIndexingTests(unittest.TestCase):
                 self.assertFalse(is_indexable(dict(row,**change)))
         self.assertEqual(eligible_articles([dict(row,public_source=False)]),[])
 
+    def test_plural_sitemap_alias_is_one_hop_to_canonical(self):
+        config=json.loads(Path("vercel.json").read_text())
+        self.assertIn({"source":"/sitemaps.xml","destination":"/sitemap.xml","permanent":True},config["redirects"])
+
     def test_static_sitemaps_use_only_www_canonical(self):
         index=ET.fromstring(sitemap_index_xml())
         static=ET.fromstring(static_sitemap_xml())
