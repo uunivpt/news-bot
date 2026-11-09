@@ -150,14 +150,8 @@ function setActive(cat){
  moveInd();
 }
 function moveInd(){
- const nav=$('nav.main'),ind=$('#ind');
- if(!nav||!ind)return;
- const active=$('nav.main a.on');
- if(!active){ind.style.width='0';return}
- const nr=nav.getBoundingClientRect(),ar=active.getBoundingClientRect();
- ind.style.left=(ar.left-nr.left)+'px';
- ind.style.width=ar.width+'px';
- ind.style.background='var(--k)';
+ // Editorial navigation hides #ind; active state uses the .on class.
+ // No geometry read is needed for an invisible indicator.
 }
 function build(){
  const nav=$('nav.main'),drawer=$('#dl');
@@ -278,7 +272,7 @@ let io;function fx(){io?.disconnect();$$('.num').forEach(n=>{const T=+n.dataset.
  if(matchMedia('(hover:hover) and (pointer:fine)').matches&&!matchMedia('(prefers-reduced-motion:reduce)').matches){
   $$('.card,.cv').forEach(h=>{const k=h.classList.contains('cv')?6:3;h.onpointermove=e=>{const r=h.getBoundingClientRect(),x=(e.clientX-r.left)/r.width-.5,y=(e.clientY-r.top)/r.height-.5;h.style.setProperty('--ry',x*k+'deg');h.style.setProperty('--rx',-y*k+'deg')};h.onpointerleave=()=>{h.style.setProperty('--ry','0deg');h.style.setProperty('--rx','0deg')}});
   $$('[data-mag]').forEach(b=>{b.onpointermove=e=>{const r=b.getBoundingClientRect();b.style.transform=`translate(${(e.clientX-r.left-r.width/2)*.18}px,${(e.clientY-r.top-r.height/2)*.25}px)`};b.onpointerleave=()=>b.style.transform=''})}}
-let tk=0;function prog(){if(tk)return;tk=requestAnimationFrame(()=>{tk=0;const y=scrollY,d=document.documentElement.scrollHeight-innerHeight;const a=$('.art');$('#prog').style.transform=`scaleX(${a&&d>0?Math.min(1,y/d):0})`;$('#hd').classList.toggle('is-scrolled',y>20);const bt=$('.bt');if(bt){const w=bt.scrollWidth/3;bt.style.transform=`translateX(${-((y*.8)%w)}px)`}const ah=$('.ahero img');if(ah&&!matchMedia('(prefers-reduced-motion:reduce)').matches)ah.style.transform=`translateY(${Math.min(y*.06,30)}px) scale(1.08)`})}
+let tk=0;function prog(){if(tk)return;tk=requestAnimationFrame(()=>{tk=0;const y=scrollY,d=document.documentElement.scrollHeight-innerHeight;const a=$('.art');const bt=$('.bt');const tickerWidth=bt?bt.scrollWidth/3:0;$('#prog').style.transform=`scaleX(${a&&d>0?Math.min(1,y/d):0})`;$('#hd').classList.toggle('is-scrolled',y>20);if(bt&&tickerWidth>0){bt.style.transform=`translateX(${-((y*.8)%tickerWidth)}px)`}const ah=$('.ahero img');if(ah&&!matchMedia('(prefers-reduced-motion:reduce)').matches)ah.style.transform=`translateY(${Math.min(y*.06,30)}px) scale(1.08)`})}
 addEventListener('scroll',prog,{passive:true});addEventListener('resize',moveInd);
 $('#hd').addEventListener('pointermove',e=>{if(!matchMedia('(hover:hover)').matches||matchMedia('(prefers-reduced-motion:reduce)').matches)return;const r=$('#lg').getBoundingClientRect(),x=(e.clientX-r.left-r.width/2)/innerWidth,y=(e.clientY-r.top-r.height/2)/200;$('#lg').style.transform=`translate(${x*14}px,${y*2}px) rotateY(${x*14}deg) rotateX(${-y*4}deg)`});
 $('#hd').addEventListener('pointerleave',()=>$('#lg').style.transform='');
