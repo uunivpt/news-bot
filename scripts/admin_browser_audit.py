@@ -48,7 +48,7 @@ def run(output):
             page.locator('#password').fill(password)
             page.locator('#loginForm [type="submit"]').click()
             page.wait_for_selector('#overviewMetrics .metric')
-            assert page.locator('#connectionBadge').inner_text()=='Live database'
+            assert page.locator('#connectionBadge').inner_text()=='Live workspace'
             assert page.locator('#overviewMetrics .metric').count()==4
             page.screenshot(path=str(output/'overview-desktop.png'))
         check('database owner login and truthful overview',login)
@@ -157,7 +157,7 @@ def run(output):
             assert 'out of date' in page.locator('#workspaceBanner').inner_text()
             page.unroute('**/api/admin/workspace')
             page.locator('#newsRefresh').click()
-            page.wait_for_function("() => document.querySelector('#connectionBadge').textContent==='Live database' && !document.querySelector('#newsList').hasAttribute('aria-busy')")
+            page.wait_for_function("() => document.querySelector('#connectionBadge').textContent==='Live workspace' && !document.querySelector('#newsList').hasAttribute('aria-busy')")
         check('temporary refresh failure retains readable data and recovers',stale_refresh)
         def verify_and_publish():
             from app.models import NewsItem
@@ -189,7 +189,7 @@ def run(output):
                     requests.append(request)
             page.on('request',record_request)
             button.click()
-            page.wait_for_function("() => !mutationBusy && document.querySelector('#notice').textContent.toLowerCase().includes('publish')")
+            page.wait_for_function("() => !mutationBusy && /publish|publication/i.test(document.querySelector('#notice').textContent)")
             assert not dialogs,dialogs
             assert len(requests)==1
             assert not page.locator('#confirmDialog').is_visible()

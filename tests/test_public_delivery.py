@@ -150,7 +150,8 @@ class PublicDeliveryTests(unittest.TestCase):
         with patch.object(api,'db',return_value=database):
             response=api.app.test_client().get('/api/health')
         self.assertEqual(response.status_code,200)
-        self.assertIsNone(response.json['latest_published_at'])
+        self.assertEqual(response.json, {'ok':True})
+        database.newest_public.assert_not_called()
 
     def test_unpublished_snapshot_and_unsafe_source_urls_stay_private(self):
         with tempfile.TemporaryDirectory() as temp, patch.object(api.app, '_static_folder', temp):

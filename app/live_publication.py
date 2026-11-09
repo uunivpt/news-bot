@@ -46,6 +46,8 @@ def publication_key(row):
 
 
 def enabled():
+    from .admin_backend import hosted_enabled
+    if hosted_enabled():return False
     if os.getenv('VERCEL')!='1':return False
     try:
         from .remote_admin_bridge import bridge_config
@@ -54,6 +56,8 @@ def enabled():
 
 
 def phone_enabled():
+    from .admin_backend import hosted_enabled
+    if hosted_enabled():return False
     return os.getenv('POLITICSHUB_LOCAL_ADMIN')=='1' and os.getenv('VERCEL')!='1' and len(os.getenv('POLITICSHUB_ADMIN_BRIDGE_SECRET',''))>=32
 
 

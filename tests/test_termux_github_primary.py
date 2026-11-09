@@ -39,9 +39,7 @@ class TermuxGithubPrimaryTests(unittest.TestCase):
             response = self.client.get("/api/health")
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json["ok"])
-        self.assertEqual(response.json["mode"], "github_feed")
-        self.assertEqual(response.json["storage"], "termux")
-        self.assertEqual(response.json["delivery"], "github")
+        self.assertEqual(response.json, {"ok": True})
         initialize.assert_not_called()
 
     def test_health_fails_closed_when_feed_is_empty(self):

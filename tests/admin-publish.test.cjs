@@ -168,6 +168,13 @@ function deliveryHarness(response) {
   vm.runInContext(source.slice(source.indexOf('async function waitForPublicationDelivery('),source.indexOf('function showPublicationNotice(')),context);
   return {context,reads,elapsed:()=>elapsed};
 }
+test('hosted publication confirmation never polls the phone delivery queue',async()=>{
+  const h=deliveryHarness(()=>{throw new Error('A synced hosted publication must not poll');});
+  const result=await vm.runInContext("waitForPublicationDelivery(44,{ok:true,status:'published',public_delivery:{state:'synced',configured:true,mode:'hosted',public_url:'https://www.politicshub.in/india/44'}},1)",h.context);
+  assert.deepEqual(h.reads,[]);
+  assert.equal(result.public_delivery.mode,'hosted');
+  assert.equal(result.public_delivery.public_url,'https://www.politicshub.in/india/44');
+});
 test('publication delivery polls read-only status and preserves the versioned public URL',async()=>{
   const h=deliveryHarness({state:'synced',public_url:'https://www.politicshub.in/india/44-story?v=abc'});
   const result=await vm.runInContext("waitForPublicationDelivery(44,{ok:true,status:'published',public_delivery:{state:'queued',configured:true}},1)",h.context);

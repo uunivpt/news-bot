@@ -69,3 +69,60 @@ test('password acceptance cannot open the workspace when the session cookie is a
   await assert.rejects(vm.runInContext('signedIn({ok:true,csrf_token:"login-token"})',ctx),/session could not be saved/);
   assert.equal(checks,1);
 });
+
+function sessionCheckHarness(response) {
+  const elements = new Map();
+  const opened = [];
+  const ctx = vm.createContext({sessionVersion:1,sessionCheckBusy:false,loginBusy:false,
+    api:response,
+    signedIn:async data=>opened.push(data),
+    $:id=>{
+      if (!elements.has(id)) {
+        const classes = new Set(['hidden']);
+        elements.set(id,{textContent:'',disabled:false,classList:{add:value=>classes.add(value),remove:value=>classes.delete(value),contains:value=>classes.has(value)}});
+      }
+      return elements.get(id);
+    }});
+  vm.runInContext(source.slice(source.indexOf('async function checkSession()'),source.indexOf("$('sessionRetry').onclick = checkSession;")),ctx);
+  return {ctx,elements,opened};
+}
+
+test('session check preserves service errors as text and offers a working retry',async()=>{
+  let attempts=0;
+  const h=sessionCheckHarness(async()=>{
+    attempts++;
+    if(attempts===1)throw new Error('Workspace unavailable <img src=x>');
+    return {authenticated:true,csrf_token:'confirmed-cookie'};
+  });
+  await vm.runInContext('checkSession()',h.ctx);
+  assert.match(h.elements.get('loginErr').textContent,/Workspace unavailable <img src=x>/);
+  assert.equal(h.elements.get('sessionRetry').classList.contains('hidden'),false);
+  assert.equal(h.elements.get('sessionRetry').disabled,false);
+  assert.equal(h.opened.length,0);
+  await vm.runInContext('checkSession()',h.ctx);
+  assert.equal(h.elements.get('loginErr').textContent,'');
+  assert.equal(h.elements.get('sessionRetry').classList.contains('hidden'),true);
+  assert.equal(h.opened.length,1);
+});
+
+test('session retries cannot race and a logout prevents a stale workspace from opening',async()=>{
+  let finish,requests=0;
+  const h=sessionCheckHarness(()=>{requests++;return new Promise(resolve=>{finish=resolve;});});
+  const pending=vm.runInContext('checkSession()',h.ctx);
+  await vm.runInContext('checkSession()',h.ctx);
+  assert.equal(requests,1);
+  assert.equal(h.elements.get('sessionRetry').disabled,true);
+  h.ctx.sessionVersion++;
+  finish({authenticated:true,csrf_token:'expired-cookie'});
+  await pending;
+  assert.equal(h.opened.length,0);
+  assert.equal(h.elements.get('sessionRetry').disabled,false);
+});
+
+test('anonymous session confirmation keeps the login form ready without a failure message',async()=>{
+  const h=sessionCheckHarness(async()=>({authenticated:false}));
+  await vm.runInContext('checkSession()',h.ctx);
+  assert.equal(h.opened.length,0);
+  assert.equal(h.elements.get('loginErr').textContent,'');
+  assert.equal(h.elements.get('sessionRetry').classList.contains('hidden'),true);
+});

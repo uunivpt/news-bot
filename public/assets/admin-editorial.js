@@ -20,7 +20,7 @@ window.Editorial = (() => {
     if ($('policyDialog').open) $('policyDialog').close();
   }
   function usable() {
-    if (!workspace || workspace.access.read_only) { notice('This section needs the live phone database.','err'); return false; }
+    if (!workspace || workspace.access.read_only) { notice('This section needs the connected newsroom database.','err'); return false; }
     return true;
   }
   async function load(view) {

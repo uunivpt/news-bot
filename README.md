@@ -49,6 +49,15 @@ The worker uses PostgreSQL from `DATABASE_3URL` (or legacy `DATABASE_URL`) and u
 
 ## Reader tools and reliability checks
 
+The private Admin Room runs at `/admin/` on the deployed website. Production
+sets `POLITICSHUB_ADMIN_BACKEND=hosted` and uses its existing cloud PostgreSQL
+connection and stable session secret. GitHub stores the application code;
+Vercel runs the server and the database keeps drafts, users and permissions.
+The phone bridge is bypassed in hosted mode. Existing owner credentials are
+preserved. See [hosted Admin Room operations](docs/HOSTED_ADMIN_ROOM.md).
+System diagnostics are available inside the authenticated workspace; public
+pages show reading preferences and useful loading/offline notices only.
+
 The homepage includes a Watermelon UI reading dashboard, animated tab indicator,
 pointer glow cards, news-desk coverage, reading shortcuts and comfortable/compact
 story spacing. Dashboard counts use only the loaded feed and distinguish it from

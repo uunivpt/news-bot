@@ -60,10 +60,10 @@ test('Newsroom source options retain configured publishers absent from the lates
   const names=vm.runInContext('sourceOptions().map(source=>source.name)',h.context);
   assert.ok(names.includes('TV9 Marathi'));assert.ok(names.includes('Recent sample only'));
 });
-test('snapshot counts never claim to check private phone collection health',()=>{
+test('snapshot counts never claim to check private collection health',()=>{
   const data=inventory();data.scope='snapshot';const h=harness(data,'snapshot');h.render();
   assert.match(h.elements.get('sourceMetrics').innerHTML,/Saved public snapshot only/);
-  assert.match(h.elements.get('sourceTable').innerHTML,/Phone collection status unavailable/);
+  assert.match(h.elements.get('sourceTable').innerHTML,/Collection status unavailable/);
   assert.doesNotMatch(h.elements.get('sourceTable').innerHTML,/Fetch succeeded|HTTP 503/);
   assert.match(h.elements.get('sourceInventoryNotice').textContent,/not checked here/);
 });
@@ -75,7 +75,7 @@ test('unavailable counts are distinct from an empty publisher and old APIs discl
   assert.doesNotMatch(h.elements.get('sourceTable').innerHTML,/No stored stories/);
   assert.match(h.elements.get('sourceChart').innerHTML,/Database counts could not be loaded/);
   h=harness();h.render();
-  assert.match(h.elements.get('sourceInventoryNotice').textContent,/Update the Termux service/);
+  assert.match(h.elements.get('sourceInventoryNotice').textContent,/Refresh the workspace to retry/);
   assert.match(h.elements.get('sourceMetrics').innerHTML,/Loaded sample only/);
   assert.doesNotMatch(h.elements.get('sourceMetrics').innerHTML,/Entire database/);
 });
@@ -112,7 +112,7 @@ test('Phase 3 snapshot remains unavailable; incident text is HTML-escaped',()=>{
   h.workspace.newsroom_operations={scope:'unavailable'};
   h.render();
   assert.match(h.elements.get('sourceTriageMetrics').innerHTML,/Collector checks:Unavailable/);
-  assert.match(h.elements.get('sourceIncidents').innerHTML,/Phone collector status not checked/);
+  assert.match(h.elements.get('sourceIncidents').innerHTML,/Collector status not checked/);
   assert.match(h.elements.get('sourceOperationsMetrics').innerHTML,/Delivery queue:Unavailable/);
   assert.doesNotMatch(h.elements.get('sourceTriageMetrics').innerHTML,/Failed checks:0/);
   const e=harness(inventory());

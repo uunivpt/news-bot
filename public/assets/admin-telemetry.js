@@ -6,7 +6,7 @@ function telemetryBytes(value) {
   return Math.round(value / 1048576 * 100) / 100 + ' MB';
 }
 function telemetryEmpty(available, message) {
-  return '<div class="empty">' + esc(available === false ? 'Data unavailable. Retry after the phone database is reachable.' : message) + '</div>';
+  return '<div class="empty">' + esc(available === false ? 'Data unavailable. Retry after the newsroom database is reachable.' : message) + '</div>';
 }
 function telemetryCount(value) { return value == null ? 'Unavailable' : number(value); }
 async function loadOps() {
