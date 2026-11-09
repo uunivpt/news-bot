@@ -103,7 +103,10 @@ class UIAdSenseTests(unittest.TestCase):
             if path.name.startswith('newsroom-console'):
                 continue
             html = path.read_text()
-            assert '/assets/polish.css?v=' in html, path
+            if path.name == 'index.html':
+                assert '/assets/home-critical.css?v=' in html, path
+            else:
+                assert '/assets/polish.css?v=' in html, path
             assert '/assets/ui.js?v=phui30' in html, path
             assert 'PH.bindChrome()' not in html
             assert 'googletagmanager.com/gtag/js' not in html

@@ -29,6 +29,8 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
+      - name: Check homepage CSS bundle matches its sources
+        run: python scripts/build_home_css.py --check
       - run: pip install -r requirements.txt
       - name: Test pipeline without production credentials
         env:
