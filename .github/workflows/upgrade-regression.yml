@@ -36,6 +36,11 @@ jobs:
               raise SystemExit("public/admin.js is missing")
           PY
           node --check public/admin.js
+      - name: News reader features JavaScript syntax check
+        run: |
+          node --check public/assets/topics.js
+          node --check public/assets/editorial-home.js
+          node --check public/assets/site.js
       - name: Full deterministic test suite
         env:
           PYTHONPATH: .
