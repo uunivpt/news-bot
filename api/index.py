@@ -614,6 +614,8 @@ def _publicize(row):
   if "source_count" in r: r["source_count"]=int(r.get("source_count") or 0)
  r["news_number"]=news_number(dict(row))
  r["ads_eligible"]=ads_eligible
+ # Preserve only the boolean search-eligibility review signal, not private review notes.
+ r["seo_reviewed"]=str(dict(row).get("fact_check_status") or "").lower()=="reviewed"
  r["category"]=normalize_category(r.get("category"), r.get("title"), r.get("summary") or r.get("bot_summary") or "")
  score=story_score(r.get("title",""),r.get("summary",""),r.get("category") or "general",r.get("source_name") or "")
  r["news_score"]=score; r["is_breaking"]=is_breaking(r.get("title",""),r.get("summary",""),score)
@@ -2291,7 +2293,7 @@ def _published_sitemap_rows():
   try:
    rows=database.conn.execute(
     "SELECT id,title,category,published_at_site,published_at,bot_article,"
-    "bot_summary,summary,source_type,public_source,url,status "
+    "bot_summary,summary,source_type,public_source,url,status,fact_check_status "
     "FROM news_items WHERE status='published' AND public_source<>0 "
     "AND LOWER(COALESCE(source_type,''))<>'telegram' "
     "AND LENGTH(COALESCE(NULLIF(bot_summary,''),summary,''))>=80 "
