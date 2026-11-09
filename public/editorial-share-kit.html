@@ -1,0 +1,26 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Editorial Sharing Kit | PoliticsHub.in</title><meta name="robots" content="noindex,follow"><meta name="description" content="Create source-attributed, platform-appropriate summaries for PoliticsHub editorial content."><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/assets/reading-guides.css?v=adsenseqa1"><style>.kit{max-width:820px;margin:30px auto;padding:20px}.kit label{display:block;font-weight:700;margin:16px 0 5px}.kit input,.kit textarea,.kit select{box-sizing:border-box;width:100%;padding:12px;font:inherit;border:1px solid #aaa;border-radius:6px;background:white;color:#111}.kit textarea{min-height:120px}.kit button{margin:14px 8px 10px 0;padding:12px 16px;border:0;background:#111;color:white;border-radius:6px;cursor:pointer}.kit p{line-height:1.6}.kit small{display:block}.kit #status{min-height:1.5em}</style></head><body>
+<header class="guide-header"><div class="guide-shell"><a href="/" class="guide-brand"><img src="/favicon.svg" width="41" height="40" alt=""><span>Politics<strong>Hub</strong><small>WHAT MATTERS, CLEARLY.</small></span></a><nav aria-label="Site"><a href="/">Home</a><a href="/topics/">Topics</a><a href="/editorial-policy.html">Editorial policy</a></nav></div></header>
+<main class="kit"><h1>Editorial sharing kit</h1><p>Create a concise, attributed preview of an original PoliticsHub story for channels such as LinkedIn and Medium. The tool runs in your browser, does not submit information to our server, and never publishes to other platforms. Edit for accuracy before posting.</p>
+<label for="title">Article headline</label><input id="title" maxlength="180" placeholder="Verified, factual headline">
+<label for="url">Canonical PoliticsHub link</label><input id="url" type="url" placeholder="https://www.politicshub.in/guides/...">
+<label for="summary">What readers will learn (your own words)</label><textarea id="summary" maxlength="800" placeholder="Two or three useful, verified sentences. Don't paste copyrighted articles."></textarea>
+<label for="source">Original primary record or source (optional)</label><input id="source" type="url" placeholder="https://...">
+<label for="platform">Platform</label><select id="platform"><option value="linkedin">LinkedIn</option><option value="medium">Medium excerpt</option><option value="general">General social post</option></select>
+<button id="create" type="button">Create draft</button><button id="copy" type="button">Copy draft</button><p id="status" role="status" aria-live="polite"></p>
+<label for="draft">Editable draft</label><textarea id="draft" rows="10"></textarea><small>Only share material you have the right to republish. Avoid duplicate full articles, paid-link placements, keyword stuffing, invented facts or claims of guaranteed Google rankings. For Medium, consider a short distinct summary and a clear link to the original.</small>
+<p><a href="/guides/verify-political-claims.html">Verification checklist</a> · <a href="/editorial-policy.html">Editorial guidelines</a></p>
+</main><script>
+(function(){
+const by=id=>document.getElementById(id); const base='https://www.politicshub.in/';
+by('create').addEventListener('click',function(){
+const title=by('title').value.trim(),url=by('url').value.trim(),summary=by('summary').value.trim(),source=by('source').value.trim(),platform=by('platform').value;
+let parsed;
+try{parsed=new URL(url);if(parsed.origin!==base.slice(0,-1)||!parsed.pathname.startsWith('/')||parsed.username||parsed.password)throw Error();if(source&&!(new URL(source).protocol==='https:'))throw Error()}catch(e){by('status').textContent='Enter a valid PoliticsHub URL and an HTTPS source URL if supplied.';return}
+if(!title||summary.length<40){by('status').textContent='Enter a headline and a useful summary of at least 40 characters.';return}
+const intro=platform==='linkedin'?'Context behind the headline:':platform==='medium'?'Why this topic matters:':'What to know:';
+by('draft').value=intro+'\n\n'+title+'\n\n'+summary+'\n\nRead the complete PoliticsHub explainer: '+parsed.href+(source?'\nPrimary reference: '+source:'')+'\n\nPublished by PoliticsHub.in. Check original documents and updates before sharing.';
+by('status').textContent='Draft prepared. Review accuracy and platform rules before posting.';
+});
+by('copy').addEventListener('click',async function(){if(!by('draft').value.trim()){by('status').textContent='Create a draft first.';return}try{await navigator.clipboard.writeText(by('draft').value);by('status').textContent='Draft copied.'}catch(e){by('draft').select();by('status').textContent='Select and copy the draft manually.'}});
+})();
+</script></body></html>
