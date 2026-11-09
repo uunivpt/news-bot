@@ -45,9 +45,16 @@ def _process_content(db,row):
  except Exception as exc:print(f"Bot processing failed for item {row.get('id')}: {exc}"); return False
 
 def _direct_fallback_content(row):
- # A short RSS description must never masquerade as a 500–700-word report.
- # Retain it in the collected source record instead of publishing a thin article.
- return False
+ # Keep a clearly source-linked feed preview available when a factual longform
+ # cannot be written. Never present the RSS excerpt as a 500–700-word article.
+ from app.newsroom import quality_headline, sentences
+ title=quality_headline(clean_news_text(row.get("title") or "",row.get("source_name") or ""))
+ summary=clean_news_text(row.get("summary") or "",row.get("source_name") or "")
+ if not title or len(summary)<70:return False
+ items=sentences(summary)
+ if not items or any(len(s.split())<7 for s in items):return False
+ if not quality_gate(title,summary,summary,allow_short=True)["passed"]:return False
+ return {"title":title,"summary":summary,"bot_summary":summary,"bot_article":""}
 
 def prepare_content(db,row):
  fields=_process_content(db,row)
@@ -58,7 +65,7 @@ def prepare_content(db,row):
  fallback=_direct_fallback_content(row)
  if not fallback:return False
  db.update(int(row["id"]),**fallback); row.update(fallback)
- print(f"Using direct source fallback for short item {row['id']}")
+ print(f"Using attributed summary-only preview for item {row['id']} (no full article)")
  return True
 
 def process_content(db,row):
