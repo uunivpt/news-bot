@@ -90,6 +90,18 @@ class ArticleVisualTests(unittest.TestCase):
         self.assertIn('s-maxage=300', found.headers['Cache-Control'])
         self.assertEqual(missing.json, {'html': ''})
 
+    def test_renderer_retains_database_row_mapping_compatibility(self):
+        import sqlite3
+        connection = sqlite3.connect(':memory:')
+        connection.row_factory = sqlite3.Row
+        row = connection.execute('SELECT 17484337260322 AS id, ? AS title, ? AS category',
+                                 ('Database mapping fixture', 'india')).fetchone()
+        with api.app.test_request_context('/'):
+            document = api._article_html(row)
+        connection.close()
+        self.assertIn('Database mapping fixture', document)
+        self.assertIn('World Bank', document)
+
     def test_canonical_article_keeps_publication_and_source_and_works_without_js(self):
         row = {'id': 17484337260322, 'title': 'India GDP growth context', 'category': 'india',
                'summary': 'A sourced report.', 'article': 'Article text remains intact.',

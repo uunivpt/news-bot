@@ -877,9 +877,9 @@ def _article_publication_datetime(row):
 
 
 def _article_html(row):
+ row=dict(row)
  from app.article_visuals import for_article,render as render_visual
  visual_html=render_visual(for_article(row.get('id')))
- row=dict(row)
  indexable=is_indexable(row)
  from app.monetization import is_monetizable
  ads_eligible=(row["ads_eligible"] is True and indexable) if "ads_eligible" in row else is_monetizable(row)
