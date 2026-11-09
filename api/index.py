@@ -1733,7 +1733,10 @@ def article_view(item_id):
  try:database=db()
  except RuntimeError:return jsonify({"ok":False,"tracked":False}),200
  try:
-  if not database.increment_view(item_id):return jsonify({"error":"not found"}),404
+  # Canonical story URLs use a stable public number, not the database row ID.
+  # Resolve this compatibility identity before touching local view counters.
+  internal_id=_resolve_news_id(item_id) if item_id>=100_000_000_000 else item_id
+  if not database.increment_view(internal_id):return jsonify({"error":"not found"}),404
   return jsonify({"ok":True,"tracked":True})
  finally:database.close()
 

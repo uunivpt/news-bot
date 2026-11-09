@@ -1,7 +1,8 @@
 name: News Collector
 
-# GitHub's public source feeds are independent of Neon. The private writable
-# PostgreSQL database and editorial approvals live on the Termux phone.
+# GitHub's public source feeds are independent of Neon. This workflow only
+# refreshes published public snapshots; hosted and optional phone editorial
+# workflows are separate and do not supply private credentials here.
 on:
   schedule:
     - cron: "12,42 * * * *"

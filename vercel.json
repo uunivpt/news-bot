@@ -223,72 +223,24 @@
       "destination": "/api/seo-article/business/:story"
     },
     {
-      "source": "/business",
-      "destination": "/api/seo-section/business"
-    },
-    {
-      "source": "/business/",
-      "destination": "/api/seo-section/business"
-    },
-    {
       "source": "/technology/:story",
       "destination": "/api/seo-article/technology/:story"
-    },
-    {
-      "source": "/technology",
-      "destination": "/api/seo-section/technology"
-    },
-    {
-      "source": "/technology/",
-      "destination": "/api/seo-section/technology"
     },
     {
       "source": "/sports/:story",
       "destination": "/api/seo-article/sports/:story"
     },
     {
-      "source": "/sports",
-      "destination": "/api/seo-section/sports"
-    },
-    {
-      "source": "/sports/",
-      "destination": "/api/seo-section/sports"
-    },
-    {
       "source": "/entertainment/:story",
       "destination": "/api/seo-article/entertainment/:story"
-    },
-    {
-      "source": "/entertainment",
-      "destination": "/api/seo-section/entertainment"
-    },
-    {
-      "source": "/entertainment/",
-      "destination": "/api/seo-section/entertainment"
     },
     {
       "source": "/science/:story",
       "destination": "/api/seo-article/science/:story"
     },
     {
-      "source": "/science",
-      "destination": "/api/seo-section/science"
-    },
-    {
-      "source": "/science/",
-      "destination": "/api/seo-section/science"
-    },
-    {
       "source": "/health/:story",
       "destination": "/api/seo-article/health/:story"
-    },
-    {
-      "source": "/health",
-      "destination": "/api/seo-section/health"
-    },
-    {
-      "source": "/health/",
-      "destination": "/api/seo-section/health"
     },
     {
       "source": "/hindi/:story",
@@ -388,6 +340,11 @@
     {
       "source": "/Maharashtra/",
       "destination": "/maharashtra/",
+      "permanent": true
+    },
+    {
+      "source": "/story.html",
+      "destination": "/article.html",
       "permanent": true
     }
   ]
