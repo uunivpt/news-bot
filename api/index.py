@@ -876,6 +876,8 @@ def _article_publication_datetime(row):
 
 
 def _article_html(row):
+ from app.article_visuals import for_article,render as render_visual
+ visual_html=render_visual(for_article(row.get('id')))
  row=dict(row)
  indexable=is_indexable(row)
  from app.monetization import is_monetizable
@@ -926,12 +928,14 @@ def _article_html(row):
 <meta property="article:section" content="{html.escape(category)}">{og_published_meta}
 <link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/share.css?v=phshare2">
 <script type="application/ld+json">{json_ld}</script>
+{'<link rel="stylesheet" data-article-data-style href="/assets/article-data.css?v=1"><script type="module" src="/assets/article-data.js?v=1"></script>' if visual_html else ""}
 <link rel="stylesheet" href="/assets/polish.css?v=phui30"><script src="/assets/ui.js?v=phui30" defer></script><script src="/assets/share.js?v=phshare2" defer></script></head><body>
 <header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><div class="acts"><a class="ib" href="/" aria-label="Home">⌂</a><a class="ib" href="/about.html" aria-label="About">i</a></div></div></header>
 <main class="wrap"><article class="art" data-k="{html.escape(category.lower())}">
 <div class="ah"><span class="chip">{html.escape(category)}</span><h1>{html.escape(title)}</h1>{lead_html}
 <div class="by"><small>News No. {html.escape(news_number(row))}</small><span>{"Reviewed by" if ads_eligible else "Compiled by"} <a href="/author/politicshub-news-desk">{EDITORIAL_DESK}</a></span>{date_html}<span>{html.escape(source)}</span></div></div>
 {"<div class='ahero'><img src='"+html.escape(str(_public_image_path(row)),quote=True)+"' alt='"+html.escape(title,quote=True)+"' loading='eager'></div>" if _public_image_path(row) else ""}
+{visual_html}
 <div class="body">{paras}</div>
 <div class="src"><strong>Content type:</strong> {"PoliticsHub editorial copy. Readers can check the cited sources and correction history." if row.get("source_type")=="manual" else "Source-linked brief based on the originating publisher. This is not an independently reported PoliticsHub article; consult the original link for full context."}</div>
 <div class="src">Source: {html.escape(source)}. {"<a href='"+html.escape(source_url,quote=True)+"' rel='nofollow noopener noreferrer' target='_blank'>Read the original report</a>" if source_url else ""}</div>
@@ -1685,6 +1689,14 @@ def public_search():
  response.headers["X-Search-Total"]=str(len(unique))
  response.headers["Cache-Control"]="public, max-age=0, s-maxage=30, stale-while-revalidate=30"
  return response
+
+@app.get('/api/article-visuals/<int:item_id>')
+def article_visual_data(item_id):
+ # The registry contains only reviewed public statistical datasets. No private
+ # article, database connection or source HTTP fetch is needed for this lookup.
+ from app.article_visuals import for_article,render
+ if not _public_rate_allowed():return jsonify({'error':'rate limit exceeded'}),429
+ return jsonify({'html':render(for_article(item_id))}),200,{'Cache-Control':'public,max-age=60,s-maxage=300'}
 
 @app.get("/api/trending")
 def trending():

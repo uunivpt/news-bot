@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "datasets": [
+    {
+      "id": "india-gdp-growth-2019-2024",
+      "reviewed": true,
+      "article_ids": [
+        "17484337260322"
+      ],
+      "title": "India GDP growth: six-year context",
+      "series": "India",
+      "measure": "GDP growth (annual %)",
+      "unit": "%",
+      "difference_unit": "percentage points",
+      "description": "Historical World Bank observations for the years shown. These are annual growth rates, not a current reading or a forecast, and do not measure employment or household income.",
+      "source": {
+        "name": "World Bank · World Development Indicators",
+        "url": "https://data.worldbank.org/indicator/NY.GDP.MKTP.KD.ZG?locations=IN",
+        "data_url": "https://api.worldbank.org/v2/country/IND/indicator/NY.GDP.MKTP.KD.ZG?format=json&per_page=8&date=2017:2024",
+        "updated_on": "2026-10-08",
+        "retrieved_on": "2026-11-10",
+        "license": "CC BY 4.0",
+        "license_url": "https://datacatalog.worldbank.org/public-licenses#cc-by"
+      },
+      "note": "Provider year labels are retained. Values are rounded to two decimal places for display; the table retains the source precision. Data can be revised by the provider.",
+      "points": [
+        {
+          "label": "2019",
+          "value": 3.87143694070524
+        },
+        {
+          "label": "2020",
+          "value": -5.77772470687303
+        },
+        {
+          "label": "2021",
+          "value": 9.68959249191741
+        },
+        {
+          "label": "2022",
+          "value": 7.6093649776932
+        },
+        {
+          "label": "2023",
+          "value": 7.210224629335
+        },
+        {
+          "label": "2024",
+          "value": 7.09927893176518
+        }
+      ]
+    }
+  ]
+}
