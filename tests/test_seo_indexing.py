@@ -47,6 +47,23 @@ class SEOIndexingTests(unittest.TestCase):
         original["fact_check_status"] = "reviewed"
         self.assertTrue(is_indexable(original))
 
+    def test_reviewed_rss_indexability_survives_public_projection(self):
+        original = dict(example(), source_type="rss", fact_check_status="reviewed")
+        with api.app.test_request_context("/"):
+            public = api._publicize(original)
+        self.assertNotIn("fact_check_status", public)
+        self.assertTrue(public["seo_reviewed"])
+        self.assertTrue(is_indexable(public))
+        self.assertIn("max-image-preview:large", api._article_html(public))
+        self.assertNotIn('noindex,follow', api._article_html(public))
+
+        unreviewed = dict(original, fact_check_status="pending")
+        with api.app.test_request_context("/"):
+            public_unreviewed = api._publicize(unreviewed)
+        self.assertFalse(public_unreviewed["seo_reviewed"])
+        self.assertFalse(is_indexable(public_unreviewed))
+        self.assertIn("noindex,follow", api._article_html(public_unreviewed))
+
     def test_excludes_thin_future_unsourced_and_telegram(self):
         row=example()
         mutations=(
