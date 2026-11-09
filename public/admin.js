@@ -279,7 +279,7 @@ function storyActions(row) {
   if(row.archived && !workspace?.access.read_only) return `<button class="btn" data-inspect="${Number(row.id)}">Inspect saved article</button><button class="btn" data-restore-archive="${esc(row.news_number)}">Restore for editing</button>`;
   if (workspace?.access.read_only) return `<button class="btn" data-inspect="${Number(row.id)}">Inspect ↗</button>`;
   const id = Number(row.id);
-  return `<button class="btn" data-inspect="${id}">Inspect</button><button class="btn" data-studio="${id}">Studio</button>` + (!row.article_available ? `<button class="btn" data-permission="news.process" data-news="process" data-id="${id}" data-write>Process</button>` : '') + (['pending','published'].includes(row.status) ? `<button class="btn" data-permission="news.publish" data-news="approve" data-id="${id}" data-write>${row.status === 'published' ? 'Make main news / check website' : 'Verify &amp; publish'}</button>` : '') + (row.status !== 'rejected' ? `<button class="btn danger" data-permission="news.reject" data-news="reject" data-id="${id}" data-write>Reject</button>` : '');
+  return `<button class="btn" data-inspect="${id}">Inspect</button>${can('news.edit') ? `<button class="btn" data-edit-story="${id}" data-permission="news.edit" data-write>Edit story</button>` : ''}<button class="btn" data-studio="${id}">Marathi Studio</button>` + (!row.article_available ? `<button class="btn" data-permission="news.process" data-news="process" data-id="${id}" data-write>Process</button>` : '') + (['pending','published'].includes(row.status) ? `<button class="btn" data-permission="news.publish" data-news="approve" data-id="${id}" data-write>${row.status === 'published' ? 'Make main news / check website' : 'Verify &amp; publish'}</button>` : '') + (row.status !== 'rejected' ? `<button class="btn danger" data-permission="news.reject" data-news="reject" data-id="${id}" data-write>Reject</button>` : '');
 }
 function renderNews(list, total) {
   visibleRows = list; pageTotal = total;
@@ -493,7 +493,7 @@ async function bulkAction(kind) {
     else notice(message);
   }
 }
-async function inspectStory(id) {
+async function inspectStory(id, openEditor = false) {
   const row = [...visibleRows,...rows].find(item => Number(item.id) === id);
   if (!row) return;
   const sequence = ++inspectorSequence, url = safeUrl(row.url);
@@ -507,10 +507,10 @@ async function inspectStory(id) {
   $('copySource').onclick = async () => { try { await navigator.clipboard.writeText(url); notice('Source link copied'); } catch { notice('Clipboard unavailable. Open the original source link.','err'); } };
   if (can('news.edit') && !row.archived) {
     const editor = document.createElement('details'); editor.className = 'story-editor';
-    editor.innerHTML = `<summary>Edit headline &amp; summary</summary><form id="editStoryForm"><label class="label" for="editTitle">Headline</label><textarea id="editTitle" class="field" maxlength="500" required rows="3">${esc(row.title)}</textarea><label class="label" for="editCategory">Editorial desk</label><select id="editCategory" class="field">${['general','india','world','politics','business','technology','sports','entertainment','science','health','hindi','maharashtra'].map(category => `<option ${category === row.category ? 'selected' : ''}>${category}</option>`).join('')}</select><label class="label" for="editSummary">Summary</label><textarea id="editSummary" class="field" maxlength="6000" rows="5">${esc(row.summary)}</textarea><p class="panel-foot">Changes are saved to the database and recorded in the audit trail. Source links stay attached to the story.</p><button class="btn primary" type="submit">Save story</button></form>`;
+    editor.innerHTML = `<summary>Edit story</summary><form id="editStoryForm"><label class="label" for="editTitle">Headline</label><textarea id="editTitle" class="field" maxlength="500" required rows="3">${esc(row.title)}</textarea><label class="label" for="editCategory">Editorial desk</label><select id="editCategory" class="field">${['general','india','world','politics','business','technology','sports','entertainment','science','health','hindi','maharashtra'].map(category => `<option ${category === row.category ? 'selected' : ''}>${category}</option>`).join('')}</select><label class="label" for="editSummary">Summary</label><textarea id="editSummary" class="field" maxlength="6000" rows="5">${esc(row.summary)}</textarea><label class="label" for="editArticle">Full article</label><textarea id="editArticle" class="field" maxlength="50000" rows="16"></textarea><label class="label" for="editImage">Image URL</label><input id="editImage" class="field" type="url"><p class="panel-foot">Edit in the story’s original language. Changes are saved for review; use Verify &amp; publish to update the website. Source links stay attached.</p><button class="btn primary" type="submit">Save story</button></form>`;
     $('inspectorBody').append(editor);
     let revision = '', draftLoading = false;
-    const draftControls = [...editor.querySelectorAll('textarea,select,button')];
+    const draftControls = [...editor.querySelectorAll('input,textarea,select,button')];
     draftControls.forEach(control => control.disabled = true);
     editor.addEventListener('toggle',async () => {
       if (!editor.open || revision || draftLoading) return;
@@ -520,6 +520,7 @@ async function inspectStory(id) {
         if (sequence !== inspectorSequence || !$('inspector').open) return;
         revision = draft.revision;
         $('editTitle').value = draft.title; $('editSummary').value = draft.summary; $('editCategory').value = draft.category;
+        $('editArticle').value = draft.article || ''; $('editImage').value = draft.image_url || '';
         draftControls.forEach(control => control.disabled = false);
       } catch (error) { notice('Could not load the full editable draft: ' + error.message,'err'); }
       finally { draftLoading = false; }
@@ -527,10 +528,11 @@ async function inspectStory(id) {
     $('editStoryForm').onsubmit = async event => {
       event.preventDefault(); const button = event.currentTarget.querySelector('[type=submit]'); button.disabled = true;
       if (!revision) { button.disabled = false; return notice('Load the full editorial draft before saving.','err'); }
-      try { await action('/api/news/' + id + '/edit',{title:$('editTitle').value.trim(),category:$('editCategory').value,summary:$('editSummary').value.trim(),bot_summary:$('editSummary').value.trim()},{'If-Match':revision}); $('inspector').close(); notice('Story changes saved'); if (!await refreshAfterMutation()) notice('Story changes saved. Latest lists could not be refreshed; use Refresh.','warn'); }
+      try { await action('/api/news/' + id + '/edit',{title:$('editTitle').value.trim(),category:$('editCategory').value,summary:$('editSummary').value.trim(),bot_summary:$('editSummary').value.trim(),bot_article:$('editArticle').value.trim(),image_url:$('editImage').value.trim()},{'If-Match':revision}); $('inspector').close(); notice('Story changes saved for review. Verify & publish to update the website.'); if (!await refreshAfterMutation()) notice('Story changes saved. Latest lists could not be refreshed; use Refresh.','warn'); }
       catch (error) { notice(error.message,'err'); }
       finally { button.disabled = false; }
     };
+    if (openEditor) { editor.open = true; editor.scrollIntoView({block:'start'}); }
   }
 }
 function renderSources() {
@@ -865,6 +867,7 @@ $('confirmProceed').onclick = () => $('confirmDialog').close('yes');
 document.addEventListener('click',event => {
   const command = event.target.closest('[data-command]'); if (command) { $('commandDialog').close(); go(command.dataset.command); return; }
   const view = event.target.closest('[data-view]'); if (view) go(view.dataset.view);
+  const edit = event.target.closest('[data-edit-story]'); if (edit && can('news.edit')) inspectStory(Number(edit.dataset.editStory),true);
   const story = event.target.closest('[data-inspect]'); if (story) inspectStory(Number(story.dataset.inspect));
   const actionButton = event.target.closest('[data-news]'); if (actionButton) newsAction(actionButton.dataset.news,Number(actionButton.dataset.id));
   const bulk = event.target.closest('[data-bulk]'); if (bulk) bulkAction(bulk.dataset.bulk);

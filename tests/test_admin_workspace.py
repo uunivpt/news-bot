@@ -210,9 +210,15 @@ class AdminWorkspaceTests(unittest.TestCase):
     def test_editorial_revision_prevents_overwriting_a_newer_edit(self):
         self.database.insert(NewsItem(source_name='Example',source_type='rss',title='Original headline',url='https://example.org/edit',summary='Full summary '*200,category='india'))
         item_id=self.database.latest(1)[0]['id']
+        self.database.update(item_id,bot_article='Complete original-language manuscript. '*100,image_url='https://example.org/original.jpg')
         with patch.object(api,'db',return_value=self.database),patch.object(self.database,'close'):
+            self.assertEqual(self.client.get(f'/api/admin/story/{item_id}').status_code,401)
             signed=self.sign_in().json
-            draft=self.client.get(f'/api/admin/story/{item_id}').json
+            response=self.client.get(f'/api/admin/story/{item_id}')
+            self.assertIn('no-store',response.headers['Cache-Control'])
+            draft=response.json
+            self.assertEqual(draft['article'],'Complete original-language manuscript. '*100)
+            self.assertEqual(draft['image_url'],'https://example.org/original.jpg')
             self.assertGreater(len(draft['summary']),1600)
             headers={'X-CSRF-Token':signed['csrf_token'],'If-Match':draft['revision']}
             first=self.client.post(f'/api/news/{item_id}/edit',json={'title':'First editor headline'},headers=headers)
