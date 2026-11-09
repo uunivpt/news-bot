@@ -19,7 +19,7 @@ Story processing is deterministic-only: source text is cleaned, selected, and as
 Generate admin hashes with `python scripts/hash_password.py`.
 
 ## Automation
-`collector.yml` collects sources; a successful collection triggers `news-processing.yml`, which publishes website stories. Existing scheduled triggers remain as recovery paths. Both use concurrency groups to prevent overlapping copies of the same worker. GitHub schedule times are best-effort, not a five-minute SLA; an external dispatch scheduler can trigger the collector for a stricter cadence.
+`collector.yml` refreshes and publishes the public RSS/news snapshot on its scheduled release gate, without Neon. `news-processing.yml` is a read-only quality check for the published feed; it does not publish news. `offline-feed.yml` remains a lower-frequency recovery path. The publication workflows share a concurrency group to prevent overlapping updates. GitHub schedule times are best-effort, not a five-minute SLA; an external dispatch scheduler can trigger the collector for a stricter cadence.
 
 Both collection paths receive news API keys. Source failures appear in the Actions summary and warnings; complete source failure fails the run. HTTP 403 responses from government sites require an approved accessible feed or permission from the provider; they are not bypassed.
 

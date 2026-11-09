@@ -90,11 +90,13 @@ class UIAdSenseTests(unittest.TestCase):
 
     def test_public_files_are_not_redirected_to_category_404(self):
         client = app.test_client()
-        for path in ['index.html','about.html','privacy.html','contact.html','newsletter.html','story.html','ads.txt']:
+        for path in ['index.html','about.html','privacy.html','contact.html','newsletter.html','ads.txt']:
             response = client.get('/'+path)
             assert response.status_code == 200, path
         assert client.get('/api/seo-section/not-a-section').status_code == 404
         assert client.get('/missing.html').status_code == 404
+        # The retired story.html alias is redirected by Vercel, not served by Flask.
+        assert not Path('public/story.html').exists()
 
 
     def test_shared_assets_and_verification_are_present(self):
