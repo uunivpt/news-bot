@@ -308,6 +308,11 @@
   },
   "redirects": [
     {
+      "source": "/sitemaps.xml",
+      "destination": "/sitemap.xml",
+      "permanent": true
+    },
+    {
       "source": "/business",
       "destination": "/",
       "permanent": true
