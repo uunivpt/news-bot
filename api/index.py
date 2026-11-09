@@ -587,12 +587,12 @@ def _public_title(title,source_text=""):
  # lowercase letters of a headline survive but the rest of the first word is lost.
  first=words[0] if words else ""
  damaged=bool(first and len(first)<=3 and first.islower() and len(words)>=4)
- if damaged or len(words)>18 or "..." in raw or "…" in raw:
+ if damaged or len(words)>24 or len(raw)>180 or "..." in raw or "…" in raw:
   candidate=quality_headline(raw,source_text)
   if candidate and not (len(candidate.split())<=3 and candidate==raw):
    raw=candidate
- if len(raw.split())>18:
-  raw=" ".join(raw.split()[:18]).rstrip(" .,:;-")
+ # Never cut a headline to an arbitrary word cap: it can lose the actor,
+ # outcome or final qualifier and turn a correct title into a false fragment.
  return raw or quality_headline(title,source_text)
 
 def _publicize(row):
