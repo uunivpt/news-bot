@@ -261,6 +261,11 @@ def _matches_public_desk(row, category):
  # Keep original article IDs, categories, canonical URLs and archive history.
  if not category or category=="all":return True
  actual=str(row.get("category") or "").lower()
+ # Keep Maharashtra publisher reports discoverable on Home/Archive but do not
+ # mix explicitly Marathi-desk headlines into the general India listing.
+ source=str(row.get("source_name") or row.get("source") or "").lower()
+ if category=="india" and ("tv9 marathi" in source or "abp majha" in source or "abp माझा" in source):
+  return False
  return actual==category or (category=="politics" and actual=="india"
                             and is_political_headline(row.get("title")))
 
