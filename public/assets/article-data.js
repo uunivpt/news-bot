@@ -2,7 +2,7 @@
 const styled = () => {
   if (document.querySelector('link[data-article-data-style]')) return;
   const link = document.createElement('link');
-  link.rel = 'stylesheet'; link.href = '/assets/article-data.css?v=1';
+  link.rel = 'stylesheet'; link.href = '/assets/article-data.css?v=2';
   link.dataset.articleDataStyle = ''; document.head.append(link);
 };
 
@@ -62,3 +62,17 @@ export async function mount(root, identity) {
 }
 
 if (document.querySelector('.article-data')) enhance(document);
+
+// Only the reviewed, same-origin catalog supplies the homepage indicator cards.
+export async function mountHighlights(root) {
+  if (!root?.isConnected) return;
+  styled();
+  try {
+    const response = await fetch('/api/data-desk/cards', {signal: AbortSignal.timeout(8000)});
+    if (!response.ok || !root.isConnected) return;
+    const result = await response.json();
+    if (!root.isConnected || typeof result.html !== 'string' || result.html.length > 100000) return;
+    const target = root.querySelector('[data-data-cards]');
+    if (target) { target.innerHTML = result.html; enhance(target); }
+  } catch (_) { /* The Data Desk link remains usable if the summary is unavailable. */ }
+}

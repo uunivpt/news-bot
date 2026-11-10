@@ -54,3 +54,31 @@ The browser audit uses local article/template fixtures and the reviewed dataset.
 It checks canonical and SPA reading, source/precision/date preservation,
 negative values, keyboard and touch tooltips, mobile/desktop layouts, both
 themes, no-JavaScript reading, printing and navigation away from the article.
+
+## Public Data Desk
+
+`/data/` now makes the reviewed catalog discoverable from the homepage, public
+navigation and static sitemap. The homepage shows the three latest annual
+observations and the existing GDP chart. The desk contains all three six-year
+charts, source links, exact-value tables and keyboard/touch tooltips. Everything
+on the desk except the tooltip works without JavaScript. No source API, private
+database or Termux process is contacted while serving the charts.
+
+The added World Bank indicators are `FP.CPI.TOTL.ZG` (consumer price inflation,
+annual %) and `SL.UEM.TOTL.ZS` (unemployment, % of total labour force, modeled ILO
+estimate). Both were retrieved and checked on 10 November 2026 from their linked
+World Bank APIs, provider update 8 October 2026, for 2019–2024. Exact reviewed
+observations and their provider URLs are preserved in the bundled registry.
+These are historical annual observations; unemployment is not a PLFS release.
+Changes smaller than 0.005 percentage points use three decimal places, so the
+0.001-point unemployment change is not displayed as a zero change.
+
+A `desk_only: true` dataset may have an empty `article_ids` list. It appears on
+the public desk without being attached to an unrelated article. Missing,
+unreviewed and conflicting entries still fail closed. New charts must keep the
+same provenance and editorial checks described above; the screenshot AQI
+numbers are not treated as verified observations.
+
+Run `python scripts/data_desk_browser_audit.py` for homepage discovery, three
+indicators, responsive layouts, touch/keyboard interactions, no-JavaScript
+reading and the summary-request outage fallback.
