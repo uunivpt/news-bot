@@ -2,7 +2,7 @@
 const styled = () => {
   if (document.querySelector('link[data-article-data-style]')) return;
   const link = document.createElement('link');
-  link.rel = 'stylesheet'; link.href = '/assets/article-data.css?v=2';
+  link.rel = 'stylesheet'; link.href = '/assets/article-data.css?v=3';
   link.dataset.articleDataStyle = ''; document.head.append(link);
 };
 
@@ -23,7 +23,7 @@ function enhance(root) {
       tooltip.style.left = left + chart.scrollLeft + 'px';
       tooltip.style.top = Math.max(8, rect.top - box.top - tooltip.offsetHeight - 10) + 'px';
     };
-    for (const bar of chart.querySelectorAll('.data-bar')) {
+    for (const bar of chart.querySelectorAll('.data-bar, .story-point, .story-slice')) {
       // Scrolling a focused bar into view can cause pointerenter without a
       // mouse move. That must not substitute a neighbouring value for focus.
       bar.addEventListener('pointerenter', () => { if (!active || mode === 'pointer') show(bar); });

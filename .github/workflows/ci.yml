@@ -58,7 +58,9 @@ jobs:
         run: python scripts/article_data_browser_audit.py --output artifacts/article-data
       - name: Check hosted Admin Room sessions and private diagnostics
         run: python scripts/hosted_admin_browser_audit.py --output artifacts/hosted-admin
-      - name: Check public data desk and homepage indicators
+      - name: Check article-specific charts and metric cards
+        run: python scripts/story_visuals_browser_audit.py --output artifacts/story-visuals
+      - name: Check retained historical data desk
         run: python scripts/data_desk_browser_audit.py --output artifacts/data-desk
       - name: Check owner and database-outage Admin Room flows
         run: python scripts/admin_browser_audit.py --output artifacts/admin-browser

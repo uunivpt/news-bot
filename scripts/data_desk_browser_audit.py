@@ -16,11 +16,8 @@ def run(base,output):
   context.add_init_script("localStorage.setItem('ph-consent-v1','essential')")
   page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
   page.goto(base+'/',wait_until='networkidle')
-  page.wait_for_selector('.ph-data-home .data-index')
-  assert page.locator('.ph-data-home .data-index').count()==3
-  assert page.locator('.ph-data-home .data-bar').count()==6
-  page.locator('.ph-data-home').screenshot(path=str(output/'homepage-desktop.png'))
-  page.get_by_role('link',name='Explore charts').click()
+  assert page.locator('.ph-data-home').count()==0
+  page.goto(base+'/data/',wait_until='networkidle')
   page.wait_for_selector('.data-desk .data-bar')
   assert urlsplit(page.url).path=='/data/'
   assert page.locator('.data-desk .data-bar').count()==18
@@ -48,13 +45,9 @@ def run(base,output):
   assert reader.locator('.data-bar').count()==18
   reader.locator('.article-data-table summary').first.click();assert reader.locator('table').first.is_visible()
   plain.close()
-  page.route('**/api/data-desk/cards',lambda r:r.fulfill(status=503,json={'error':'Fixture outage'}))
-  page.goto(base+'/',wait_until='networkidle')
-  assert page.get_by_role('link',name='Explore charts').is_visible()
-  assert page.locator('.ph14-lead').is_visible()
   assert not errors,errors
   browser.close()
- report={'passed':True,'checks':['homepage cards and chart','three exact indicator series','keyboard, Escape and touch tooltip','320/390/768/1440 layouts','anchor navigation and precise tables','dark mode','no-JavaScript charts','summary outage preserves news and link'],'browser_errors':errors}
+ report={'passed':True,'checks':['standalone historical desk remains available without a homepage dashboard','three exact indicator series','keyboard, Escape and touch tooltip','320/390/768/1440 layouts','anchor navigation and precise tables','dark mode','no-JavaScript charts'],'browser_errors':errors}
  (output/'report.json').write_text(json.dumps(report,indent=2))
  print(json.dumps(report),flush=True)
 
