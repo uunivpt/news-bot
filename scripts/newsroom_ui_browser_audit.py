@@ -138,17 +138,26 @@ def run(base: str, output: Path) -> None:
         check('density controls update the feed and survive a background rerender', density)
 
         def load_more():
+            # Home intentionally includes only English India and World stories;
+            # Politics-only fixtures are excluded, unlike the old mixed feed.
+            visible = [row for row in feed if row['category'] in {'india', 'world'}]
+            expected_rows = len(visible) - 4  # lead plus three brief cards
             before = page.locator('.ph14-row').count()
-            more = page.locator('.ph14-more')
-            require(more.count() == 1, 'Fixture should expose the load-more control')
-            more.focus()
-            page.keyboard.press('Enter')
-            require(page.locator('.ph14-row').count() == before + 20, 'Load more did not append the next page')
-            require(page.locator('.ph14-row').nth(before).evaluate('(node) => node === document.activeElement'), 'Loading rows lost keyboard continuation')
-            page.locator('.ph14-more').focus()
-            page.keyboard.press('Enter')
-            require(page.locator('.ph14-more').count() == 0, 'Exhausted load-more control remained')
-            require(page.locator('.ph14-row').count() == len(feed) - 4, 'Final page dropped reports')
+            require(before == min(expected_rows, 20), 'Initial home pagination count is incorrect')
+            require(page.locator('.ph14-more').count() == 1, 'Fixture should expose the load-more control')
+            while page.locator('.ph14-more').count():
+                more = page.locator('.ph14-more')
+                more.focus()
+                page.keyboard.press('Enter')
+                next_count = min(before + 20, expected_rows)
+                require(page.locator('.ph14-row').count() == next_count,
+                        'Load more did not append the next page')
+                require(page.locator('.ph14-row').nth(before).evaluate(
+                    '(node) => node === document.activeElement'),
+                    'Loading rows lost keyboard continuation')
+                before = next_count
+            require(page.locator('.ph14-row').count() == expected_rows,
+                    'Final page dropped reports or included non-Home categories')
         check('loading more reports appends every row and continues keyboard focus', load_more)
 
         def search():
