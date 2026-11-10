@@ -695,8 +695,11 @@ def _is_source_supplied_image(row):
  # website media. Explicitly licensed/owned source photographs remain allowed.
  # These are the same rights categories accepted by the manual editor.
  credit=str(row.get("image_credit") or "").strip()
- if not credit or not public_http_url(url):return False
- return source=="article-source" and license_key in {"cc0","pdm","rights-owned","licensed"}
+ if source!="article-source" or not public_http_url(url):return False
+ # Public-domain/CC0 media may not have a named author. Contractually
+ # licensed and rights-owned media must carry a verified source credit.
+ if license_key in {"cc0","pdm"}:return True
+ return license_key in {"rights-owned","licensed"} and bool(credit)
 
 
 def _public_image_path(row):
