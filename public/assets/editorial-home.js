@@ -18,9 +18,9 @@
   if(!photo)return '';
   var quoteCard=/^\/api\/x-card\//.test(photo);
   var kind=lead?'ph14-media':'ph14-thumb';
-  var alt=quoteCard?'Source post quote card':'Licensed source photograph (see photo credit)';
+  var alt=quoteCard?'Source post quote card':(i.image_source==='wikimedia-commons'?'Illustrative archive photo, not this news event':'Licensed source photograph (see photo credit)');
   var credit=!quoteCard&&lead&&i.image_credit
-   ?'<figcaption class="ph14-photo-credit">Illustrative source photo · '+esc(String(i.image_credit).slice(0,140))+' · '+esc(i.image_license||'Licensed')+'</figcaption>':'';
+   ?'<figcaption class="ph14-photo-credit">'+(i.image_source==='wikimedia-commons'?'Archive photo — not this event':'Source photo')+' · '+esc(String(i.image_credit).slice(0,140))+' · '+esc(i.image_license||'Licensed')+'</figcaption>':'';
   return '<figure class="'+kind+'"><img data-news-photo src="'+esc(photo)+'" alt="'+esc(alt)+'" loading="'+(lead?'eager':'lazy')+'" decoding="async" referrerpolicy="no-referrer">'+credit+'</figure>';
  }
  home=function(c){
