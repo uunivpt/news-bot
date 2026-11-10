@@ -115,9 +115,22 @@ function ck(item){
  if(key.includes('hindi'))return'hindi';
  return'all';
 }
+function localLanguageDesk(item){
+ const source=String(item?.source||item?.source_name||item?.publisher||'');
+ const language=String(item?.language||item?.lang||item?.inLanguage||'').toLowerCase().trim();
+ const title=String(item?.title||item?.headline||'');
+ if(/tv9 marathi|abp majha|abp माझा|lokmat|loksatta|saamana|सामना/i.test(source)||/^(mr|mr-in|marathi)$/.test(language))return 'maharashtra';
+ if(/^(hi|hi-in|hindi)$/.test(language)||/[\u0900-\u097f]/.test(title))return 'hindi';
+ return '';
+}
 function inCat(item,cat){
- if(cat==='india'&&/tv9 marathi|abp majha|abp माझा/i.test(String(item?.source||item?.source_name||'')))return false;
- if(cat==='all'||ck(item)===cat)return true;
+ const local=localLanguageDesk(item);
+ if(cat==='all')return !local&&['india','world'].includes(ck(item));
+ if(cat==='india')return !local&&ck(item)==='india';
+ if(cat==='world')return !local&&ck(item)==='world';
+ if(cat==='maharashtra')return local==='maharashtra'||ck(item)==='maharashtra';
+ if(cat==='hindi')return local==='hindi'||(!local&&ck(item)==='hindi');
+ if(ck(item)===cat)return true;
  // The Politics page is a topical view of India stories. Never rewrite
  // item.category: the original /india/{number} article URL must stay valid.
  return cat==='politics'&&ck(item)==='india'&&
