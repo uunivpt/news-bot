@@ -24,7 +24,7 @@
 <h2><a href="{{ story.href }}">{{ story.title }}</a></h2>
 <p class="briefing-date">Published <time datetime="{{ story.iso }}">{{ story.date }} IST</time></p>
 {% if story.summary %}<p class="briefing-summary" dir="auto">{{ story.summary }}</p>{% endif %}
-<div class="briefing-story-links"><a href="{{ story.href }}">Read report →</a><a href="{{ story.url }}" target="_blank" rel="noopener noreferrer">Original source ↗</a></div>
+<div class="briefing-story-links"><a href="{{ story.href }}">{{ story.report_type }} →</a><a href="{{ story.url }}" target="_blank" rel="noopener noreferrer">Original source ↗</a></div>
 </article></li>{% endfor %}</ol>
 <div class="briefing-finish"><h2>You're caught up on this briefing.</h2><p>This is a short selection. Explore <a href="/archive/">the full archive</a> for more coverage.</p><a class="btn secondary" href="/newsletter.html">Get PoliticsHub Brief by email</a></div>
 {% else %}

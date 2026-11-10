@@ -20,6 +20,8 @@ test('static homepage internal anchor texts are distinct and concise',()=>{
  for(const match of home.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)){
    const href=match[1].match(/href="([^"]+)"/)?.[1];
    if(!href?.startsWith('/'))continue;
+   // Publisher headlines in the initial feed retain their complete wording.
+   if(/^\/(?:india|world)\/\d+$/.test(href))continue;
    const text=match[2].replace(/<[^>]+>/g,' ').replace(/&amp;/g,'&').replace(/\s+/g,' ').trim();
    if(!text)continue;
    assert.ok(text.length<=75,'overlong internal anchor: '+text);

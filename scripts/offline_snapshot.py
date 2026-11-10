@@ -73,6 +73,9 @@ def valid_url(value):
         return False
 
 
+from app.source_text import complete_excerpt, reader_headline, HONORIFIC
+
+
 def public_story(item, now):
     title = clean_text(item.title)
     summary = clean_text(item.summary)
@@ -84,13 +87,9 @@ def public_story(item, now):
     if not 20 <= len(title) <= 210 or not 55 <= len(summary) <= 4200:
         return None
     # End public excerpts at a real sentence boundary; no chopped news copy.
-    excerpt = summary[:460]
-    endings = list(re.finditer(r"[.!?](?=\s|$)", excerpt))
-    if endings:
-        summary = excerpt[:endings[-1].end()].strip()
-    elif len(summary) > 460:
-        return None
-    elif not summary.endswith((".", "!", "?")) and item.source_type != "rss":
+    summary = complete_excerpt(summary)
+    title = reader_headline(title, summary)
+    if not summary.endswith((".", "!", "?", "।")) and item.source_type != "rss":
         return None
     # RSS standfirsts often intentionally omit a final full stop. Preserve the
     # entire short source excerpt rather than discard today's feed as a fragment.
@@ -153,7 +152,10 @@ def build(current, collected, now):
         if key in indexed:
             # Repair older incomplete emergency excerpts without duplicating stories.
             old = indexed[key]
-            if old.get("source_type") == "newsdata" and old.get("summary") != story["summary"]:
+            if HONORIFIC.search(old.get("summary") or ""):
+                old.update(summary=story["summary"], bot_summary=story["summary"])
+                fresh += 1
+            elif old.get("source_type") == "newsdata" and old.get("summary") != story["summary"]:
                 indexed[key] = story
                 fresh += 1
             continue

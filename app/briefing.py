@@ -1,6 +1,7 @@
 """A bounded reading list from published reports, without invented summaries."""
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
+from .category_routing import normalize_category
 from .source_text import source_text
 
 DESKS = (("all", "All desks"), ("india", "India"), ("politics", "Politics"),
@@ -9,7 +10,8 @@ DESKS = (("all", "All desks"), ("india", "India"), ("politics", "Politics"),
 
 def briefing_excerpt(value):
     text = source_text(value)
-    return text if len(text) <= 320 else text[:317].rsplit(" ", 1)[0] + "…"
+    from .source_text import complete_excerpt
+    return complete_excerpt(text, 320)
 
 
 def select_briefing(rows, *, timestamp, desk="all", days=1, now=None, limit=6,
@@ -45,7 +47,7 @@ def select_briefing(rows, *, timestamp, desk="all", days=1, now=None, limit=6,
     # Represent each available desk before filling remaining slots by recency.
     selected, desks = [], set()
     for row in unique:
-        category = row.get("category") or "india"
+        category = normalize_category(row.get("category"), row.get("title") or "")
         if category not in desks:
             selected.append(row)
             desks.add(category)

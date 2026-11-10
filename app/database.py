@@ -279,7 +279,7 @@ class NewsDatabase:
    clauses.append(f"(LOWER(title) LIKE LOWER({ph}) OR LOWER(summary) LIKE LOWER({ph}))")
    params.extend([f"%{search}%",f"%{search}%"])
   max_rows=min(max(1,int(limit)),1000)
-  fields=",".join(self.PUBLIC_LIST_FIELDS)
+  fields=",".join(self.PUBLIC_LIST_FIELDS) + ", LENGTH(COALESCE(bot_article,''))-LENGTH(REPLACE(TRIM(COALESCE(bot_article,'')), ' ', '')) AS article_spaces"
   return self.conn.execute(
    f"SELECT {fields} FROM news_items WHERE "+" AND ".join(clauses)+f" ORDER BY COALESCE(NULLIF(published_at_site,''),published_at) DESC,id DESC LIMIT {ph}",
    (*params,max_rows)

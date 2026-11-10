@@ -275,7 +275,7 @@ def _public_language_desk(row):
 
 def _matches_public_desk(row, category):
  # This affects listings only; article IDs, canonical URLs and archive stay intact.
- actual=str(row.get("category") or "").lower()
+ actual=normalize_category(row.get("category"),row.get("title") or "",row.get("summary") or "")
  local=_public_language_desk(row)
  if not category or category=="all":return not local and actual in {"india","world"}
  if category=="maharashtra":return local=="maharashtra" or actual=="maharashtra"
@@ -348,7 +348,7 @@ def _rank_public(rows,threshold=0.82):
   item["news_score"]=story_score(item.get("title",""),item.get("bot_summary") or item.get("summary") or "",item.get("category") or "general",item.get("source_name") or "")
   item["is_breaking"]=is_breaking(item.get("title",""),item.get("bot_summary") or item.get("summary") or "",item["news_score"])
  items.sort(key=lambda item:(bool(item.get("editorial_featured")),str(item.get("editorial_featured_at") or ""),_public_timestamp(item),int(item.get("id") or 0)),reverse=True)
- return dedupe_story_rows(items,threshold=threshold)
+ return dedupe_story_rows(items,threshold=threshold,keep_sources=True)
 def _public_rows_for_section(category="all",limit=200):
  if category=="hindi":return _rank_public(_hindi_rows())[:limit]
  if hosted_enabled():
@@ -382,7 +382,7 @@ def _section_html(category="all"):
    title=html.escape(str(row.get("title") or "Untitled"))
    href=article_path(row)
    date=html.escape(str(row.get("published_at_site") or row.get("published_at") or ""))
-   summary=html.escape(str(row.get("bot_summary") or row.get("summary") or "")[:320])
+   summary=html.escape(briefing_excerpt(row.get("summary")))
    source=html.escape(str(row.get("source_name") or "PoliticsHub"))
    image=str(row.get("image_url") or "").strip()
    media=""
@@ -390,9 +390,18 @@ def _section_html(category="all"):
     media='<img src="'+html.escape(image,quote=True)+'" alt="" loading="lazy" decoding="async">'
    card_class="card im" if media else "card tx"
    cards.append('<a class="'+card_class+' rv" href="'+html.escape(href,quote=True)+'">'+media+'<span class="chip stk">'+html.escape(str(row.get("category") or category or "News"))+'</span><span class="go" aria-hidden="true">↗</span><h3>'+title+'</h3><p>'+summary+'</p><span class="m">'+source+" · "+date+"</span></a>")
+   original=_safe_source_url(row.get("url"))
+   links = ""
+   if original:
+    links = '<a href="'+html.escape(original,quote=True)+'">Original source ↗</a>'
+   related=row.get("related_reports",[])
+   if related:
+    entries="".join('<li><a href="'+html.escape(r["url"],quote=True)+'">'+html.escape(r["title"])+'</a> · '+html.escape(r["source_name"])+' · '+html.escape(r["published_at"])+'</li>' for r in related)
+    links='<details><summary>'+str(len(related))+' reports</summary><ul>'+entries+'</ul></details>'
+   cards[-1]='<div>'+cards[-1]+'<small>'+row["report_type"]+' · '+links+'</small></div>'
   except Exception:
    pass
- first=rows[0] if rows else {}
+ first=_publicize(rows[0]) if rows else {}
  first_title=html.escape(str(first.get("title") or "Latest news"))
  first_summary=html.escape(str(first.get("bot_summary") or first.get("summary") or "")[:420])
  first_category=html.escape(str(first.get("category") or category or "News"))
@@ -592,10 +601,13 @@ def _strip_promo_nav(value):
  r=re.sub(r"\b(?:socials|donate|advertising)\b(?:\s*[|•·/,-]\s*\b(?:socials|donate|advertising)\b)*"," ",r,flags=re.I)
  return re.sub(r"\s{2,}"," ",r).strip(" |•·/-")
 
+from app.source_text import complete_excerpt, reader_headline, HONORIFIC
+
 def _public_title(title,source_text=""):
  raw=re.sub(r"\s+"," ",str(title or "")).strip()
  raw=re.sub(r"^[^\w]+","",raw).strip()
  raw=re.sub(r"\s*[,;:]\s*[A-Za-z]{1,2}$","",raw).strip(" .,:;-")
+ raw=reader_headline(raw, source_text)
  words=raw.split()
  # Repair the characteristic ingestion truncation where the first 1–3
  # lowercase letters of a headline survive but the rest of the first word is lost.
@@ -610,6 +622,7 @@ def _public_title(title,source_text=""):
  return raw or quality_headline(title,source_text)
 
 def _publicize(row):
+ row=dict(row)
  from app.monetization import is_monetizable
  ads_eligible=is_monetizable(dict(row))
  # Public news documents use a positive projection. Unknown fields from old
@@ -637,6 +650,10 @@ def _publicize(row):
   source_headline=r.get("source_type")=="rss" and r.get("category")=="hindi"
   r["title"]=plain_source_text(r.get("title")) if r.get("source_type")=="manual" or source_headline else _public_title(r.get("title"),source_text)
   r["summary"]=plain_source_text(_strip_promo_nav(dict(row).get("bot_summary") or dict(row).get("summary") or ""))
+  if HONORIFIC.search(r["summary"]):
+   r["summary"]=complete_excerpt(row.get("summary")) or complete_excerpt(row.get("bot_article")) or r["title"]
+   if HONORIFIC.search(source_text):source_text=r["summary"]
+  r["bot_summary"]=r["summary"]
   article_text=plain_source_text(_strip_promo_nav(source_text),paragraphs=True)
   article_text=re.sub(r"(?:\n|\s)*Why it matters:\s*$","",article_text,flags=re.I).strip()
   r["article"]=article_text
@@ -648,6 +665,10 @@ def _publicize(row):
   if "editorial_value" in r: r["editorial_value"]=bool(r.get("editorial_value"))
   if "source_count" in r: r["source_count"]=int(r.get("source_count") or 0)
  r["news_number"]=news_number(dict(row))
+ r["report_type"]="Detailed report" if int(row.get("article_spaces") or 0)>=499 or len(str(row.get("bot_article") or row.get("article") or "").split())>=500 else "Short brief"
+ reports=row.get("related_reports") or []
+ if len({report["source_name"] for report in reports})>1:
+  r["related_reports"]=[{key:report[key] for key in ("title","url","source_name","published_at")} for report in reports if _safe_source_url(report["url"])]
  r["ads_eligible"]=ads_eligible
  # Preserve only the boolean search-eligibility review signal, not private review notes.
  r["seo_reviewed"]=str(dict(row).get("fact_check_status") or "").lower()=="reviewed"
@@ -908,9 +929,12 @@ def _article_html(row):
  og_published_meta='<meta property="article:published_time" content="'+html.escape(pub_iso,quote=True)+'">' if pub_iso else ''
  og_modified_meta='<meta property="article:modified_time" content="'+html.escape(modified_iso,quote=True)+'">' if modified_iso else ''
  summary=plain_source_text(row.get("summary") or row.get("bot_summary"))
+ title=reader_headline(title,summary)
+ if HONORIFIC.search(summary):summary=complete_excerpt(row.get("bot_article")) or title
  from app.seo_indexing import _news_language
  language=_news_language(row)
  body=plain_source_text(row.get("article") or row.get("bot_article") or row.get("body") or summary,paragraphs=True)
+ if HONORIFIC.search(body):body=complete_excerpt(body, len(body)) or summary
  source=str(row.get("source_name") or "PoliticsHub.in")
  source_url=_safe_source_url(row.get("url"))
  topic_key="world" if category.lower()=="world" else "maharashtra" if re.search(r"maharashtra|mumbai|pune|nagpur|marathi|महाराष्ट्र|मुंबई|पुणे",title,re.I) else "elections" if re.search(r"election|polling|vote|निवडणूक|चुनाव",title,re.I) else "parliament" if re.search(r"parliament|lok sabha|rajya sabha|policy|संसद",title,re.I) else "all"
@@ -1319,7 +1343,7 @@ def quick_briefing():
   item=_publicize(row)
   summary=briefing_excerpt(item.get("summary"))
   stories.append({"title":item["title"],"category":item["category"],"href":article_path(item),
-   "summary":summary,"source":item.get("source_name") or urlsplit(item["url"]).hostname,
+   "report_type":item["report_type"],"summary":summary,"source":item.get("source_name") or urlsplit(item["url"]).hostname,
    "url":item["url"],"iso":published.isoformat(),
    "date":published.astimezone(ZoneInfo("Asia/Kolkata")).strftime("%d %b %Y, %H:%M")})
  return Response(render_template("briefing.html",stories=stories,desks=BRIEFING_DESKS,

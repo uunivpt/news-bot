@@ -96,7 +96,7 @@
           localStorage.setItem('ph-consent-v1', choice);
           if (choice === 'essential') {
             ['ph-news-cache','ph-news-cache-v6','ph-news-cache-v5','ph-news-cache-v4',
-             'ph-theme','ph-cookie','ph-ls','ph-reading-list-v1','ph-reader-size-v1','ph-topic-v1']
+             'ph-theme','ph-cookie','ph-ls','ph-reading-list-v1','ph-reader-size-v1','ph-topic-v1','ph-topic-visits']
               .forEach(key => localStorage.removeItem(key));
             document.documentElement.dataset.theme = 'light';
           }

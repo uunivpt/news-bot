@@ -58,6 +58,10 @@ def normalize_category(category: str | None, title: str = "", summary: str = "")
     text = f"{title or ''} {summary or ''}"
     if NANA.search(text):
         return "india"
+    if (name == "politics" and re.search(r"\b(?:diwali|deepavali|holi|durga puja)\b", title, re.I)
+            and re.search(r"\b(?:in photos|celebrat\w*|festivities)\b", title, re.I)
+            and not (POLITICS_SIGNAL.search(title) or is_political_headline(title))):
+        return "india"
     if name in RETIRED_DESKS:
         if POLITICS_SIGNAL.search(text):
             return "politics"

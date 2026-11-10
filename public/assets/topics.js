@@ -104,6 +104,21 @@
     if (search && !(item.title+' '+item.source).toLocaleLowerCase().includes(search)) return false;
     return true;
   }
+  const visitBaseline = new Map();
+  function visitCount(items){
+    if (!preferencesAllowed() || !$('rememberTopic').checked || !items.length) return '';
+    const topic=$('topicSelect').value;
+    const newest=Math.max(...items.map(x=>date(x.date)?.getTime()||0));
+    if(!newest)return '';
+    try{
+      const saved=JSON.parse(localStorage.getItem('ph-topic-visits')||'{}');
+      if(!visitBaseline.has(topic))visitBaseline.set(topic, Number(saved[topic])||0);
+      const since=visitBaseline.get(topic);
+      saved[topic]=Math.max(Number(saved[topic])||0,newest);
+      localStorage.setItem('ph-topic-visits',JSON.stringify(saved));
+      return since?' · '+items.filter(x=>(date(x.date)?.getTime()||0)>since).length+' new since your last visit':'';
+    }catch(_){return ''}
+  }
   function render() {
     filtered = all.filter(matches);
     // Timeline stays chronological even when the featured cards are editorially prioritized.
@@ -114,7 +129,7 @@
     const timeline = $('timelineResults'); timeline.replaceChildren();
     chronological.slice(0,visible).forEach(x => timeline.append(story(x,true)));
     if (!chronological.length) timeline.append(el('li','','No matching updates found.'));
-    $('timelineCount').textContent = filtered.length + ' matching headlines';
+    $('timelineCount').textContent = filtered.length + ' matching headlines' + visitCount(chronological);
     $('moreTimeline').hidden = filtered.length <= visible;
     const counts = new Map();
     for (const x of filtered) counts.set(x.source, (counts.get(x.source) || 0) + 1);
@@ -147,6 +162,7 @@
       try {if (localStorage.getItem('ph-consent-v1') === 'essential') localStorage.removeItem('ph-topic-v1')} catch (_) {}
     }
     $('rememberTopic').checked = storedTopic() !== null;
+    if(!preferencesAllowed()){visitBaseline.clear();if(all.length)render()}
   }
   for (const event of ['ph-preferences-changed', 'ph-preferences-cleared', 'storage']) {
     window.addEventListener(event, syncPreferenceConsent);
@@ -188,7 +204,8 @@
   }
   $('rememberTopic').addEventListener('change',()=>{
     if ($('rememberTopic').checked) savePreference();
-    else try {localStorage.removeItem('ph-topic-v1')} catch (_) {}
+    else try {localStorage.removeItem('ph-topic-v1');localStorage.removeItem('ph-topic-visits');visitBaseline.clear()} catch (_) {}
+    render();
   });
   $('moreTimeline').addEventListener('click',()=>{
     const continueReading = document.activeElement === $('moreTimeline');

@@ -69,11 +69,15 @@ def sentences(text:str)->list[str]:
     if not value:return []
     # Split only at clear sentence boundaries. Do not try to "repair" grammar
     # by concatenating fragments.
-    parts=re.split(r"(?<=[.!?])\s+(?=[A-Z0-9\"'‘“])",value)
+    from .source_text import HONORIFIC
+    parts=[]
+    for part in re.split(r"(?<=[.!?।])\s+(?=[A-Z0-9\"'‘“\u0900-\u097f])",value):
+        if parts and HONORIFIC.search(parts[-1]):parts[-1]+=" "+part
+        else:parts.append(part)
     result=[]
     for index,part in enumerate(parts):
         item=part.strip(" \t-–—")
-        if len(item)<20 or BAD_LINE_RE.search(item):
+        if len(item)<20 or BAD_LINE_RE.search(item) or HONORIFIC.search(item):
             continue
         # A source may omit terminal punctuation, but it must still look like
         # a complete sentence. Never publish a dangling final fragment.
@@ -701,7 +705,7 @@ def _headline_words(value):
     return words or ({fallback} if fallback else set())
 
 
-def dedupe_story_rows(rows, threshold=0.82):
+def dedupe_story_rows(rows, threshold=0.82, *, keep_sources=False):
     """Collapse near-identical headlines while preserving the highest-scoring copy."""
     kept=[]; token_sets=[]
     for row in rows:
@@ -724,6 +728,16 @@ def dedupe_story_rows(rows, threshold=0.82):
                 if (bool(row.get("editorial_featured")),row_score)>(bool(prior.get("editorial_featured")),prior_score):
                     kept[index]=row
                     token_sets[index]=words
+                if keep_sources:
+                    reports = list(prior.get("related_reports") or [])
+                    for candidate in (prior, row):
+                        if not candidate.get("public_source") or candidate.get("status","published") != "published":
+                            continue
+                        report = {k: str(candidate.get(k) or "") for k in ("title","source_name","url","published_at")}
+                        if report["url"].startswith(("https://","http://")) and all(r["url"] != report["url"] for r in reports):
+                            reports.append(report)
+                    if reports:
+                        kept[index] = dict(kept[index], related_reports=reports)
                 break
         if not duplicate:
             kept.append(row)
