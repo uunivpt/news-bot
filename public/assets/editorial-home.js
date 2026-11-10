@@ -11,7 +11,22 @@
   return valid(item.url)?'<a class="ph14-source-link" href="'+esc(item.url)+'">Original source ↗</a>':'';
  }
  function phMeta(i){return '<span class="meta"><b>'+esc(i.category||'News')+' · '+reportType(i)+'</b><span>'+esc(ago(i.date)||fmt(i.date))+'</span><span>'+esc(i.source||'PoliticsHub')+'</span></span>'}
- function phMedia(i,lead){var graphic=lead&&!i.image&&/^\d+$/.test(String(i.id||''));if(!i.image&&!graphic)return'';var src=graphic?'/api/og/'+encodeURIComponent(String(i.id)):i.image;return '<div class="'+(lead?'ph14-media':'ph14-thumb')+'"><img src="'+esc(src)+'" alt="'+(graphic?'PoliticsHub editorial graphic, not a news photograph':'')+'" loading="'+(lead?'eager':'lazy')+'" decoding="async">'+(graphic?'<small class="ph14-graphic-label">PoliticsHub headline graphic · Not a news photograph</small>':'')+'</div>'}
+ function phMedia(i,lead){
+  var photo=String(i.image||'').trim();
+  if(photo&&/^(https?:\/\/|\/)/i.test(photo)){
+   return '<div class="'+(lead?'ph14-media':'ph14-thumb')+'"><img src="'+esc(photo)+'" alt="'+esc(i.title||'News photograph')+'" loading="'+(lead?'eager':'lazy')+'" decoding="async"></div>';
+  }
+  // A category illustration is not a photograph and must not repeat the headline.
+  // Never use the social sharing OG card as a fake article image.
+  if(!lead)return '';
+  var category=String(i.category||'News').toLowerCase();
+  var world=category==='world',hindi=category==='hindi',maharashtra=category==='maharashtra';
+  var label=world?'WORLD':hindi?'HINDI':maharashtra?'MAHARASHTRA':'INDIA';
+  var motif=world
+   ? '<circle cx="160" cy="160" r="105"/><ellipse cx="160" cy="160" rx="50" ry="105"/><path d="M55 160h210M76 105h168M76 215h168"/>'
+   : '<circle cx="160" cy="160" r="103"/><circle cx="160" cy="160" r="76"/><path d="M160 30v260M30 160h260M80 80l160 160M240 80L80 240"/><circle cx="160" cy="160" r="20"/>';
+  return '<div class="ph14-media ph14-editorial-visual" role="img" aria-label="'+esc(label)+' section illustration, not a news photograph"><span class="ph14-visual-label">POLITICSHUB <b>/ '+label+'</b></span><svg viewBox="0 0 320 320" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-width="1.4">'+motif+'</g></svg><span class="ph14-visual-footer"><b>'+label+'</b><small>INDEPENDENT NEWSROOM</small></span></div>';
+ }
  home=function(c){
   document.documentElement.lang=c==='hindi'?'hi':'en';
   setActive(c);document.title=(c==='all'?'':(CATS.find(function(x){return x[0]===c})||['',''])[1]+' — ')+'PoliticsHub.in';
