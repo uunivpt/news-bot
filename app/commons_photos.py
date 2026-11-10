@@ -54,10 +54,12 @@ LICENSES = {
 }
 
 
-def topic_for(title):
+def topic_for(title, category=None):
     text = str(title or "")
     matched = set()
     for term, subject in TOPICS:
+        if term == "Supreme Court" and str(category or "").lower() not in {"india", "maharashtra"}:
+            continue
         if re.search(r"(?<!\w)" + re.escape(term) + r"(?!\w)", text, re.I):
             matched.add(subject)
     return next(iter(matched)) if len(matched) == 1 else None
@@ -169,7 +171,7 @@ def enrich(rows, cache, *, lookup=lookup_photo, max_lookup=4, now=None):
     queried = 0
     for raw in rows:
         row = dict(raw)
-        subject = topic_for(row.get("title"))
+        subject = topic_for(row.get("title"), row.get("category"))
         # Preserve valid photos explicitly supplied by and licensed to the editor.
         if row.get("image_source") == "article-source" and row.get("image_url"):
             output.append(row)
