@@ -63,6 +63,9 @@
     const wrapper = event.target.closest('.ahero,.ph14-media,.ph14-thumb');
     if (wrapper) wrapper.remove();
   },true);
+  if (!document.querySelector('script[src*="/assets/article-print.js"]')) {
+    const printScript=document.createElement('script');printScript.src='/assets/article-print.js?v=1';document.head.append(printScript);
+  }
   // Load local reading tools after the shared chrome; dependency order is explicit.
   const storeScript=document.createElement('script');storeScript.src='/assets/reading-list.js?v=ph30';
   storeScript.onload=()=>{const readerScript=document.createElement('script');readerScript.src='/assets/reader.js?v=ph30';document.head.append(readerScript)};
