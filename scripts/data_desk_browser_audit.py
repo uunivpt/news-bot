@@ -9,6 +9,9 @@ from scripts.browser_audit import fixture_server
 
 def run(base,output):
  output.mkdir(parents=True,exist_ok=True)
+ from app.article_visuals import catalog, number
+ datasets=catalog()
+ expected_values=[number(d['points'][-1]['value'])+d['unit'] for d in datasets]
  with fixture_server(base),sync_playwright() as p:
   browser=p.chromium.launch(args=['--no-sandbox'])
   context=browser.new_context(viewport={'width':1440,'height':1000},service_workers='block',has_touch=True,reduced_motion='reduce')
@@ -21,7 +24,7 @@ def run(base,output):
   page.wait_for_selector('.data-desk .data-bar')
   assert urlsplit(page.url).path=='/data/'
   assert page.locator('.data-desk .data-bar').count()==18
-  assert page.locator('.data-desk .data-index strong').all_text_contents()==['7.10%','4.95%','4.17%']
+  assert page.locator('.data-desk .data-index strong').all_text_contents()==expected_values
   assert page.locator('link[rel=canonical]').get_attribute('href')=='https://www.politicshub.in/data/'
   bar=page.locator('.data-bar').first
   bar.focus();assert page.locator('.article-data-tooltip').first.is_visible()
@@ -36,7 +39,7 @@ def run(base,output):
   page.locator('.data-desk-nav a').nth(1).click()
   assert page.url.endswith('#india-consumer-price-inflation-2019-2024')
   page.locator('.article-data-table summary').nth(1).click()
-  assert '4.9530355097366' in page.locator('.article-data-table table').nth(1).inner_text()
+  assert str(datasets[1]['points'][-1]['value']) in page.locator('.article-data-table table').nth(1).inner_text()
   page.evaluate("document.documentElement.dataset.theme='dark'")
   page.locator('.article-data').nth(1).screenshot(path=str(output/'data-desk-dark.png'))
   plain=browser.new_context(java_script_enabled=False,viewport={'width':390,'height':900})

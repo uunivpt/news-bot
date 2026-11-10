@@ -1,4 +1,5 @@
 import copy
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 from app import article_visuals as visuals
@@ -7,6 +8,13 @@ from api import index as api
 
 
 class DataDeskTests(unittest.TestCase):
+    def setUp(self):
+        registry_patch = patch.object(visuals, 'REGISTRY', Path(__file__).parent / 'fixtures' / 'article-visuals-2024.json')
+        registry_patch.start()
+        visuals.registry.cache_clear()
+        self.addCleanup(visuals.registry.cache_clear)
+        self.addCleanup(registry_patch.stop)
+
     def test_three_reviewed_series_are_distinct_and_new_series_do_not_attach_to_stories(self):
         data=visuals.catalog()
         self.assertEqual(len(data),3)

@@ -1,6 +1,6 @@
 """Public statistical context built exclusively from the reviewed chart registry."""
 from html import escape
-from .article_visuals import catalog, number, render
+from .article_visuals import catalog, number, render, freshness
 
 LABELS = {
  'india-gdp-growth-2019-2024': 'GDP growth',
@@ -13,10 +13,12 @@ def cards():
     parts = []
     for data in catalog():
         latest = data['points'][-1]
+        checked, _ = freshness(data)
         parts.append(f'''<a class="data-index" href="/data/#{escape(data['id'])}">
 <span>{escape(LABELS.get(data['id'], data['measure']))}</span>
 <strong>{escape(number(latest['value']) + data['unit'])}</strong>
-<small>{escape(latest['label'])} · latest in this series</small>
+<small>{escape(latest['label'])} · annual observation</small>
+<small>{escape(checked)}: {escape(data['source']['retrieved_on'])}</small>
 <span class="data-index-source">World Bank · Annual observations <b aria-hidden="true">↗</b></span></a>''')
     return '<div class="data-index-grid">' + ''.join(parts) + '</div>' if parts else ''
 
@@ -43,8 +45,8 @@ def page(origin):
 </head><body><header id="hd"><div class="top"><a class="logo" href="/"><img src="/favicon.svg" alt="PoliticsHub.in"></a><a class="data-home-link" href="/">Back to the newsroom ↗</a></div></header>
 <main class="wrap data-desk"><div class="data-desk-intro"><p class="article-data-eyebrow">POLITICSHUB / THE DATA DESK</p>
 <h1>Understand the numbers.<br><em>See the context.</em></h1><p>Explore the indicators behind the headlines. Original sources, clear definitions and exact values, together in one place.</p>
-<div class="data-desk-scope"><span>India · 2019–2024</span><span>Annual historical observations</span><span>Reviewed 10 Nov 2026</span></div></div>
-{cards()}<p class="data-desk-disclosure">These are the latest available observations in the reviewed six-year series, not live readings. Provider update and retrieval dates appear with each chart. The unemployment series is a modeled ILO estimate.</p>
+<div class="data-desk-scope"><span>India · Annual observations</span><span>Automatic source checks</span><span>Check dates below</span></div></div>
+{cards()}<p class="data-desk-disclosure">These are the newest stored observations from the linked World Bank annual series, not live readings. They are not India’s latest quarterly GDP, monthly CPI or PLFS survey release. The unemployment series is a modeled ILO estimate. Source release and successful check dates appear with each chart; an overdue check means newer data may be available.</p>
 <nav class="data-desk-nav" aria-label="Jump to an indicator">{nav}</nav>{figures}
 <aside class="data-desk-method"><h2>How to read this desk</h2><p>Compare values within each chart. GDP growth, inflation and unemployment measure different things and should not be combined into a single score. Changes in rates are percentage points. Bar charts include zero; negative GDP growth appears below it.</p><p>Hover, tap or focus a bar to inspect a value. Expand the data table for the provider’s original precision. Historical datasets are checked before publication and can be revised by the source.</p><p><a href="/editorial-policy.html">Editorial policy</a> · <a href="/corrections.html">Request a correction</a></p></aside></main>
 <footer><div class="wrap"><p>PoliticsHub.in · What matters, clearly.</p><p><a href="/">Latest stories</a> · <a href="/sources.html">Sources</a> · <a href="/contact.html">Contact</a></p></div></footer></body></html>'''

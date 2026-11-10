@@ -30,9 +30,11 @@ by the existing Vercel `app/data/**` include rule.
    Invalid, unreviewed or conflicting assignments produce no public figure.
    Articles without a matching approved dataset continue as ordinary text.
 
-The registry is not a live-data service and does not infer charts from article
-prose. A revised series requires a reviewed registry change. Corrections to the
-article itself continue through the existing editorial correction workflow.
+The registry does not infer charts from article prose or call remote services
+while serving a page. New indicators, metric definitions and article associations
+still require editorial review. The three existing annual WDI series now refresh
+automatically under the source-validation rules below. Corrections to article
+copy continue through the existing editorial correction workflow.
 
 ## Initial dataset
 
@@ -59,8 +61,8 @@ themes, no-JavaScript reading, printing and navigation away from the article.
 
 `/data/` now makes the reviewed catalog discoverable from the homepage, public
 navigation and static sitemap. The homepage shows the three latest annual
-observations and the existing GDP chart. The desk contains all three six-year
-charts, source links, exact-value tables and keyboard/touch tooltips. Everything
+observations and the existing GDP chart. The desk contains the six newest published annual observations for each
+indicator, source links, exact-value tables and keyboard/touch tooltips. Everything
 on the desk except the tooltip works without JavaScript. No source API, private
 database or Termux process is contacted while serving the charts.
 
@@ -129,3 +131,76 @@ unchanged.
 Run `python scripts/story_visuals_browser_audit.py` for bar, pie, line, index-card,
 no-data, mobile/desktop, dark-mode, tooltip, exact-table, no-JavaScript and SPA
 navigation checks. Fixtures are never published as real news.
+
+
+## Automatic annual-series refresh (10 November 2026)
+
+The previous API URLs ended at 2024. An unrestricted check of the same WDI
+source (source ID 2, India/IND) found published 2025 observations:
+
+| Indicator | 2025 source value | Display |
+| --- | ---: | ---: |
+| GDP growth, `NY.GDP.MKTP.KD.ZG` | 7.56666179284244 | 7.57% |
+| CPI inflation, `FP.CPI.TOTL.ZG` | 2.39884954182294 | 2.40% |
+| Unemployment, modeled ILO, `SL.UEM.TOTL.ZS` | 4.219 | 4.22% |
+
+All three responses reported `lastupdated: 2026-10-08`; independently retrieved
+10 November 2026. Provider update date and observation year are different fields.
+The six-point window now spans 2020–2025. IDs ending in `2019-2024` are stable
+link/association identifiers, not the current observation range. Headings and
+scope labels no longer hard-code that range.
+
+Run `python scripts/refresh_economic_data.py` to check these exact sources:
+
+- https://api.worldbank.org/v2/country/IND/indicator/NY.GDP.MKTP.KD.ZG?format=json&per_page=100&source=2
+- https://api.worldbank.org/v2/country/IND/indicator/FP.CPI.TOTL.ZG?format=json&per_page=100&source=2
+- https://api.worldbank.org/v2/country/IND/indicator/SL.UEM.TOTL.ZS?format=json&per_page=100&source=2
+
+The `Refresh annual economic data` Actions workflow checks every six hours
+(00:27, 06:27, 12:27, 18:27 UTC; 05:57, 11:57, 17:57, 23:57 IST), and can be
+manually dispatched. GitHub schedules are best-effort and require the workflow on
+the default branch. It publishes verified changes to main, using the existing
+Vercel Git integration to deploy them. Public data endpoints cache for at most
+five minutes after deployment. A new annual reading or historical revision is
+published after the next successful check/deployment; instant or uninterrupted
+provider availability is not promised.
+
+Checks validate complete pagination, exact country/indicator/source identity,
+release/observation dates, duplicate years, finite numeric rates and percentage
+bounds. Null/unreleased years never become zero. Results are sorted by provider
+year, retaining the six newest non-null observations at full source precision.
+Older provider releases or a response whose newest observation predates the
+stored newest observation are rejected. Historical
+revisions within the displayed window are refreshed too. Publication dates and
+article associations are preserved; an article's annual context can advance
+independently of the original article text.
+
+Each failed series retains its last good values and its last successful check
+date. Other independently verified series can still update. Failures leave the
+workflow visibly failed. The public desk and chart show successful check dates;
+a check older than two calendar days displays an overdue warning saying a newer
+release may be available. A recent check of an older observation is not called a
+new observation. Each day records its successful verification date once; identical
+checks on that date generate no commit/deployment. New values can publish within
+the same day. This is separate from the news publication gates, and shares their
+writer concurrency group to avoid push races.
+
+These are annual WDI statistics. They do not replace MoSPI's latest quarterly GDP,
+monthly CPI or PLFS unemployment releases, and the ILO modeled unemployment
+measure must never be silently substituted for a PLFS survey result. News stories
+and charts extracted from their published text retain their original reported
+period; refreshing context must not rewrite historical reporting as current news.
+
+Checks:
+
+```bash
+python -m unittest discover -s tests -p test_economic_data.py -v
+python -m unittest discover -s tests -p test_article_visuals.py -v
+python -m unittest discover -s tests -p test_data_desk.py -v
+python scripts/data_desk_browser_audit.py --output artifacts/data-desk
+python scripts/article_data_browser_audit.py --output artifacts/article-data
+```
+
+Frozen 2024 observations under `tests/fixtures/` exercise exact precision,
+negative growth and tiny unemployment changes without tying automated refreshes
+to last year's test expectations. Browser audits verify the actual bundled series.

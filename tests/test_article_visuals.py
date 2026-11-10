@@ -13,6 +13,10 @@ from api import index as api
 
 class ArticleVisualTests(unittest.TestCase):
     def setUp(self):
+        self.registry_patch = patch.object(visuals, 'REGISTRY', Path(__file__).parent / 'fixtures' / 'article-visuals-2024.json')
+        self.registry_patch.start()
+        self.addCleanup(self.registry_patch.stop)
+        visuals.registry.cache_clear()
         self.data = json.loads(visuals.REGISTRY.read_text())['datasets'][0]
 
     def tearDown(self):

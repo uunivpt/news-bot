@@ -7,7 +7,7 @@
       "article_ids": [
         "17484337260322"
       ],
-      "title": "India GDP growth: six-year context",
+      "title": "India GDP growth: annual context",
       "series": "India",
       "measure": "GDP growth (annual %)",
       "unit": "%",
@@ -16,7 +16,7 @@
       "source": {
         "name": "World Bank · World Development Indicators",
         "url": "https://data.worldbank.org/indicator/NY.GDP.MKTP.KD.ZG?locations=IN",
-        "data_url": "https://api.worldbank.org/v2/country/IND/indicator/NY.GDP.MKTP.KD.ZG?format=json&per_page=8&date=2017:2024",
+        "data_url": "https://api.worldbank.org/v2/country/IND/indicator/NY.GDP.MKTP.KD.ZG?format=json&per_page=100&source=2",
         "updated_on": "2026-10-08",
         "retrieved_on": "2026-11-10",
         "license": "CC BY 4.0",
@@ -24,10 +24,6 @@
       },
       "note": "Provider year labels are retained. Values are rounded to two decimal places for display; the table retains the source precision. Data can be revised by the provider.",
       "points": [
-        {
-          "label": "2019",
-          "value": 3.87143694070524
-        },
         {
           "label": "2020",
           "value": -5.77772470687303
@@ -47,6 +43,10 @@
         {
           "label": "2024",
           "value": 7.09927893176518
+        },
+        {
+          "label": "2025",
+          "value": 7.56666179284244
         }
       ]
     },
@@ -63,7 +63,7 @@
       "source": {
         "name": "World Bank · World Development Indicators",
         "url": "https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG?locations=IN",
-        "data_url": "https://api.worldbank.org/v2/country/IND/indicator/FP.CPI.TOTL.ZG?format=json&per_page=6&date=2019:2024",
+        "data_url": "https://api.worldbank.org/v2/country/IND/indicator/FP.CPI.TOTL.ZG?format=json&per_page=100&source=2",
         "updated_on": "2026-10-08",
         "retrieved_on": "2026-11-10",
         "license": "CC BY 4.0",
@@ -71,10 +71,6 @@
       },
       "note": "Provider year labels and source precision are retained in the table. Values are rounded to two decimals; changes below 0.005 percentage points use three decimals. Historical values may be revised.",
       "points": [
-        {
-          "label": "2019",
-          "value": 3.72950573539123
-        },
         {
           "label": "2020",
           "value": 6.62343677628529
@@ -94,6 +90,10 @@
         {
           "label": "2024",
           "value": 4.9530355097366
+        },
+        {
+          "label": "2025",
+          "value": 2.39884954182294
         }
       ],
       "desk_only": true
@@ -111,7 +111,7 @@
       "source": {
         "name": "World Bank · World Development Indicators",
         "url": "https://data.worldbank.org/indicator/SL.UEM.TOTL.ZS?locations=IN",
-        "data_url": "https://api.worldbank.org/v2/country/IND/indicator/SL.UEM.TOTL.ZS?format=json&per_page=6&date=2019:2024",
+        "data_url": "https://api.worldbank.org/v2/country/IND/indicator/SL.UEM.TOTL.ZS?format=json&per_page=100&source=2",
         "updated_on": "2026-10-08",
         "retrieved_on": "2026-11-10",
         "license": "CC BY 4.0",
@@ -119,10 +119,6 @@
       },
       "note": "Provider year labels and source precision are retained in the table. Values are rounded to two decimals; changes below 0.005 percentage points use three decimals. Historical values may be revised.",
       "points": [
-        {
-          "label": "2019",
-          "value": 6.51
-        },
         {
           "label": "2020",
           "value": 7.859
@@ -142,6 +138,10 @@
         {
           "label": "2024",
           "value": 4.173
+        },
+        {
+          "label": "2025",
+          "value": 4.219
         }
       ],
       "desk_only": true
