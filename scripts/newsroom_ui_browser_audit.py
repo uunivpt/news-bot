@@ -121,7 +121,7 @@ def run(base: str, output: Path) -> None:
                     require(page.locator('.ph14-cats a[aria-current="page"]').inner_text() == 'India', 'Server category route lost the active news desk')
                     require(page.locator('.ph14-kicker').inner_text().lower() == 'india', 'Server category route mixed the lead story desk')
                 else:
-                    require(page.locator('.ph-guides').count() == 1, 'Static document fixture did not use public/index.html')
+                    require(page.evaluate("Array.from(document.styleSheets).some(sheet => sheet.href && new URL(sheet.href).pathname === '/assets/home-critical.css')"), 'Static homepage fixture did not load its bundled stylesheet')
             home()
         check('server-rendered categories and the static homepage both load the newsroom assets', delivery_paths)
 

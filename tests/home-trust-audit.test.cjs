@@ -25,7 +25,7 @@ test('homepage attribution uses an organizational desk, never a fake person', ()
 test('the homepage has discoverable contact and grounded social channels', () => {
   assert.match(home, /href="\/contact.html">Contact Us<\/a>/);
   assert.match(home, /mailto:politicshub.in@gmail.com/);
-  for (const url of ['https://www.instagram.com/politicshubin/', 'https://t.me/politicshubin']) {
+  for (const url of ['https://www.instagram.com/politicshub.in/', 'https://t.me/politicshubin']) {
     assert.ok(home.includes(url), url);
     assert.ok(contact.includes(url), url);
   }

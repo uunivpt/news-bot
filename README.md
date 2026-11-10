@@ -75,6 +75,9 @@ destination and streaming size checks; see
 [the source hardening notes](docs/SOURCE_SAFETY_2026-10-31.md) for exact scope.
 
 Public API cards omit full articles; `/api/news/<id>` returns the article body.
+Reviewed numerical datasets can add source-linked metric cards, interactive
+charts and exact-value tables to individual articles. Canonical figures also
+work without JavaScript. See [article data authoring](docs/ARTICLE_DATA.md).
 The command center uses the uncached `/api/admin/news` endpoint for private
 listing/filtering. Anonymous public responses avoid `Vary: Cookie`, which would
 disable Vercel CDN caching. Authenticated responses remain `private, no-store`.
