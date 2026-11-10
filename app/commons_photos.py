@@ -119,7 +119,7 @@ def valid_photo(photo):
 
 def _json_query(host, params, transport):
     endpoint = "https://" + host + "/w/api.php?" + urlencode({**params, "action": "query", "format": "json", "formatversion": "2"})
-    response = transport(endpoint, timeout=8, max_bytes=300_000)
+    response = transport(endpoint, headers={"User-Agent": "PoliticsHubMediaAttributionBot/1.0 (+https://politicshub.in/contact.html)"}, timeout=8, max_bytes=300_000)
     return json.loads(response.content)
 
 
