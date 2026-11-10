@@ -136,4 +136,29 @@
     }
   }
 
+  // Hide broken, thumbnail-sized and extreme-aspect images; never let a
+  // publisher's low-res icon occupy a full story photo slot.
+  function removeUnusablePhoto(image) {
+    if (!image?.matches?.('[data-news-photo]')) return;
+    const wrapper = image.closest('.ph14-media,.ph14-thumb,.ahero,.tile.cv');
+    if (wrapper) { wrapper.remove(); return; }
+    const card = image.closest('.card');
+    if (card) { card.classList.remove('im'); card.classList.add('tx'); }
+    image.remove();
+  }
+  document.addEventListener('error', event => {
+    if (event.target?.matches?.('[data-news-photo]')) removeUnusablePhoto(event.target);
+  }, true);
+  document.addEventListener('load', event => {
+    const photo = event.target;
+    if (!photo?.matches?.('[data-news-photo]')) return;
+    const width=photo.naturalWidth, height=photo.naturalHeight;
+    const large=Boolean(photo.closest('.ph14-media,.ahero,.tile.cv'));
+    if (!width || !height || width < (large ? 480 : 280) ||
+        height < (large ? 210 : 140) ||
+        width / height > 3.5 || width / height < 0.5) {
+      removeUnusablePhoto(photo);
+    }
+  }, true);
+
 })();
