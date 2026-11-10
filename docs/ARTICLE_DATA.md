@@ -82,3 +82,50 @@ numbers are not treated as verified observations.
 Run `python scripts/data_desk_browser_audit.py` for homepage discovery, three
 indicators, responsive layouts, touch/keyboard interactions, no-JavaScript
 reading and the summary-request outage fallback.
+
+## Article-specific visual storytelling
+
+The main reader now derives **The story in numbers** from that article’s own
+published copy using `app/story_visuals.py`. This is separate from the historical
+registry. The unrelated homepage indicator dashboard is no longer promoted.
+Existing `/data/` URLs remain available for readers who saved them.
+
+* Named comparisons in the same unit become bar charts, e.g. regional sales in
+  rupees/crore or party seat tallies. Figures remain attributed to the report.
+* Clearly labelled two-column tables with year rows become line charts.
+* Explicit share/distribution data becomes a pie chart only when the reported
+  nonnegative percentages total 100. Partial shares remain comparisons; no
+  “Other” category or missing remainder is created.
+* Standalone quantities and explicitly labelled AQI/Nifty/Sensex figures become
+  metric cards with the surrounding article wording. Dates alone are not data.
+* Mixed units, mixed indicators, ranges and vague comparisons are not charted.
+  Articles without suitable numerical data remain ordinary articles.
+
+Example article copy (retain the actual source and observation context):
+
+```text
+Seat tally: Party A: 132 seats; Party B: 99 seats; Party C: 41 seats.
+
+Vote share: Party A: 55%; Party B: 45%.
+
+Year | GDP growth (%)
+2022 | 7.6
+2023 | 7.2
+2024 | 7.1
+```
+
+The parser is deliberately conservative; it does not promise to understand every
+sentence containing a number. It never imports unrelated World Bank observations
+into a new article, calls an AI model, or writes to the story. HTML/table content,
+Devanagari digits, escaped labels, exact reported table values and source links
+are supported. Existing explicitly reviewed registry associations still work.
+Canonical pages and the SPA share the server extractor and renderer. The SPA
+chart endpoint resolves the corresponding existing public article and refuses
+pending/rejected copy, including when the requesting reader is an administrator.
+Its story-dependent response is private/no-store so subsequent edits cannot
+leave a separately cached graph behind. Publication and editing workflows are
+unchanged.
+
+Run `python scripts/story_visuals_browser_audit.py` for bar, pie, line, index-card,
+no-data, mobile/desktop, dark-mode, tooltip, exact-table, no-JavaScript and SPA
+navigation checks. Fixtures are never published as real news.

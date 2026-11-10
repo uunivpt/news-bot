@@ -38,8 +38,8 @@ def page(origin):
 <meta name="description" content="Explore India GDP growth, consumer price inflation and unemployment with source-linked historical charts, exact values and observation dates.">
 <link rel="canonical" href="{escape(origin)}/data/"><link rel="icon" href="/favicon.svg">
 <link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/polish.css?v=phui30">
-<link rel="stylesheet" data-article-data-style href="/assets/article-data.css?v=2">
-<script src="/assets/ui.js?v=datadesk1" defer></script><script type="module" src="/assets/article-data.js?v=2"></script>
+<link rel="stylesheet" data-article-data-style href="/assets/article-data.css?v=3">
+<script src="/assets/ui.js?v=datadesk1" defer></script><script type="module" src="/assets/article-data.js?v=3"></script>
 </head><body><header id="hd"><div class="top"><a class="logo" href="/"><img src="/favicon.svg" alt="PoliticsHub.in"></a><a class="data-home-link" href="/">Back to the newsroom ↗</a></div></header>
 <main class="wrap data-desk"><div class="data-desk-intro"><p class="article-data-eyebrow">POLITICSHUB / THE DATA DESK</p>
 <h1>Understand the numbers.<br><em>See the context.</em></h1><p>Explore the indicators behind the headlines. Original sources, clear definitions and exact values, together in one place.</p>

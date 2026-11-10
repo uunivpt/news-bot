@@ -82,7 +82,7 @@ class ArticleVisualTests(unittest.TestCase):
 
     def test_public_endpoint_needs_no_database_and_uses_only_reviewed_registry(self):
         client = api.app.test_client()
-        with patch.object(api, 'db', side_effect=AssertionError('Must not open a database')), patch.object(api, '_public_rate_allowed', return_value=True):
+        with patch.object(api, 'db', side_effect=AssertionError('Must not open a database')), patch.object(api, '_public_rate_allowed', return_value=True), patch.object(api,'article',return_value=({'error':'not found'},404)):
             found = client.get('/api/article-visuals/17484337260322')
             missing = client.get('/api/article-visuals/9999999')
         self.assertEqual(found.status_code, 200)
@@ -114,7 +114,7 @@ class ArticleVisualTests(unittest.TestCase):
         self.assertIn('Original publisher', document)
         self.assertIn('<svg', document)
         self.assertIn('<table>', document)
-        self.assertIn('article-data.js?v=2', document)
+        self.assertIn('article-data.js?v=3', document)
         with api.app.test_request_context('/'):
             document = api._article_html(dict(row, id=99))
         self.assertNotIn('article-data.js', document)
