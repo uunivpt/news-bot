@@ -498,3 +498,9 @@ html[data-theme=light] .ph14-editorial-visual{background:linear-gradient(140deg,
 html[data-theme=light] .ph14-editorial-visual:before{background:radial-gradient(circle at 65% 43%,rgba(220,45,55,.09),transparent 55%)}
 html[data-theme=light] .ph14-visual-label,html[data-theme=light] .ph14-visual-footer small{color:#4d5865}html[data-theme=light] .ph14-visual-footer b{color:#1a2633}
 @media(max-width:720px){.ph14-editorial-visual{height:235px!important;min-height:235px;padding:18px}.ph14-editorial-visual svg{max-height:150px;width:58%}.ph14-visual-footer b{font-size:25px}}
+
+/* Prevent long imported headlines and editorial cards from widening the page. */
+#app,#app .ph14-home,#app .ph14-hero,#app .ph14-lead,#app .ph14-copy,#app .ph14-side,#app .ph14-feed,#app .ph14-row,#app .ph14-brief,#app .ph14-media,#app .bento,#app .tile,#app .grid,#app .card{min-width:0;max-width:100%}
+#app .ph14-copy h1,#app .ph14-row h3,#app .ph14-brief h3,#app .hl h1,#app .card h3{overflow-wrap:anywhere;word-break:normal}
+#app .bento{grid-template-columns:repeat(12,minmax(0,1fr))}
+#app .ph14-media svg{display:block;max-width:100%;min-width:0}
