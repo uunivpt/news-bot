@@ -159,7 +159,20 @@ function newsPhoto(item){
  if(/(?:^|[\/._-])(?:logo|placeholder|no[-_]?image|default[-_]?image|fallback|favicon|avatar|sprite|icon)(?:[\/._-]|$)/i.test(url.pathname))return '';
  if(!/\.(?:jpe?g|png|webp|avif)$/i.test(url.pathname))return '';
  const license=String(item?.image_license||'').trim().toLowerCase().split(/\s+/)[0];
- if(String(item?.image_source||'').toLowerCase()!=='article-source'||!['cc0','pdm','rights-owned','licensed'].includes(license))return '';
+ const provenance=String(item?.image_source||'').toLowerCase();
+ if(provenance==='wikimedia-commons'){
+  if(url.hostname!=='upload.wikimedia.org'||!url.pathname.startsWith('/wikipedia/commons/'))return '';
+  if(!['cc0','pdm','cc-by-4.0','cc-by-sa-4.0'].includes(license))return '';
+  if(!String(item?.image_credit||'').trim())return '';
+  try{
+   const page=new URL(item?.image_source_url||'');
+   const rights=new URL(item?.image_license_url||'');
+   if(page.protocol!=='https:'||page.hostname!=='commons.wikimedia.org'||!page.pathname.startsWith('/wiki/File:'))return '';
+   if(rights.protocol!=='https:'||rights.hostname!=='creativecommons.org')return '';
+  }catch(_){return ''}
+  return url.href;
+ }
+ if(provenance!=='article-source'||!['cc0','pdm','rights-owned','licensed'].includes(license))return '';
  if(!String(item?.image_credit||'').trim())return '';
  return url.href;
 }
@@ -276,8 +289,10 @@ async function article(id){setActive('');
   ? `<time class="article-published" datetime="${storyPublishedAt.toISOString()}">Published: ${esc(storyPublishedAt.toLocaleString('en-IN',{day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit',timeZone:'Asia/Kolkata'}))} IST</time>`
   : '<span class="article-published">Publication date unavailable</span>';
  const paras=(it.body||'').split(/\n+/).filter(Boolean).map(p=>`<p>${articleInline(p)}</p>`).join('')||(it.summary?`<p>${articleInline(it.summary)}</p>`:'');
+ const commonsPhoto=it.image&&it.image_source==='wikimedia-commons';
+ const photoCredit=commonsPhoto ? '<div class="ph-photo-credit">Illustrative archive photo — not a photo of the reported event · '+esc(it.image_credit||'Wikimedia Commons')+' · <a target="_blank" rel="noopener noreferrer" href="'+esc(safeSourceUrl(it.image_source_url))+'">File source</a> · <a target="_blank" rel="noopener noreferrer" href="'+esc(safeSourceUrl(it.image_license_url))+'">License</a></div>' : (it.image&&it.image_credit ? '<div class="ph-photo-credit">Photo: '+esc(it.image_credit)+' · '+esc(it.image_license||'Licensed')+'</div>' : '');
  const rel=S.items.filter(i=>i.id!==it.id&&i.category===it.category).concat(S.items.filter(i=>i.id!==it.id&&i.category!==it.category)).slice(0,3);
- $('#app').innerHTML=`<article class="art" data-k="${ck(it)}"><div class="ah"><a class="chip" href="${hl(CATS.find(c=>it.category.toLowerCase().includes(c[0]))?.[0]||'all')}">${esc(it.category)}</a><h1>${esc(it.title)}</h1>${it.summary&&it.body&&it.summary.replace(/\s+/g," ").trim()!==it.body.replace(/\s+/g," ").trim()?`<p class="dek">${articleInline(it.summary)}</p>`:''}<div class="by"><span>Compiled by <a href="/author/politicshub-news-desk">PoliticsHub Editorial Desk</a></span>${articleDateHtml}<span>${esc(it.source)}</span></div></div>${it.image?`<div class="ahero"><div class="im">${img(it)}</div></div>`:''}<div class="body">${paras}</div><div class="src"><strong>Story format:</strong> ${it.source_type==='manual'?'Editorially prepared PoliticsHub copy. Review the cited sources and corrections for context.':'Source-linked brief based on reporting from the named publisher. It is not independently reported by PoliticsHub.'}</div>${it.url?`<div class="src">Source: ${esc(it.source||'original report')}. <a href="${esc(safeSourceUrl(it.url))}" target="_blank" rel="noopener noreferrer">Read the original report</a></div>`:''}<button class="article-share" type="button" data-share-title="${esc(it.title)}" aria-haspopup="dialog" aria-label="Share this story"><span aria-hidden="true">↗</span><b>Share</b></button></article><section class="rel"><div class="sh"><h2>Related stories</h2></div><div class="grid">${rel.map(card).join('')}</div></section>`;fx();
+ $('#app').innerHTML=`<article class="art" data-k="${ck(it)}"><div class="ah"><a class="chip" href="${hl(CATS.find(c=>it.category.toLowerCase().includes(c[0]))?.[0]||'all')}">${esc(it.category)}</a><h1>${esc(it.title)}</h1>${it.summary&&it.body&&it.summary.replace(/\s+/g," ").trim()!==it.body.replace(/\s+/g," ").trim()?`<p class="dek">${articleInline(it.summary)}</p>`:''}<div class="by"><span>Compiled by <a href="/author/politicshub-news-desk">PoliticsHub Editorial Desk</a></span>${articleDateHtml}<span>${esc(it.source)}</span></div></div>${it.image?`<div class="ahero"><div class="im">${img(it)}</div>${photoCredit}</div>`:''}<div class="body">${paras}</div><div class="src"><strong>Story format:</strong> ${it.source_type==='manual'?'Editorially prepared PoliticsHub copy. Review the cited sources and corrections for context.':'Source-linked brief based on reporting from the named publisher. It is not independently reported by PoliticsHub.'}</div>${it.url?`<div class="src">Source: ${esc(it.source||'original report')}. <a href="${esc(safeSourceUrl(it.url))}" target="_blank" rel="noopener noreferrer">Read the original report</a></div>`:''}<button class="article-share" type="button" data-share-title="${esc(it.title)}" aria-haspopup="dialog" aria-label="Share this story"><span aria-hidden="true">↗</span><b>Share</b></button></article><section class="rel"><div class="sh"><h2>Related stories</h2></div><div class="grid">${rel.map(card).join('')}</div></section>`;fx();
  const visualRoot=$('#app .art');
  import('/assets/article-data.js?v=3').then(module=>module.mount(visualRoot,it.id)).catch(()=>{});
  return it.id}

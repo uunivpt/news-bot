@@ -623,13 +623,17 @@ def _public_title(title,source_text=""):
 
 def _publicize(row):
  row=dict(row)
+ from app.commons_photos import snapshot_photo_for_url, valid_photo
+ if not _is_source_supplied_image(row) and not valid_photo(row):
+  illustrative=snapshot_photo_for_url(row.get('url'))
+  if illustrative:row.update(illustrative)
  from app.monetization import is_monetizable
  ads_eligible=is_monetizable(dict(row))
  # Public news documents use a positive projection. Unknown fields from old
  # database schemas never become JSON/API fields, even for an admin request.
  public_fields={"phone_public_id","public_revision","editorial_featured","editorial_featured_at","id","title","url","source_name","source_type","summary","bot_summary","bot_article",
   "article","body","published_at","published_at_site","published_at_iso","category","status",
-  "image_url","image_source","image_license","image_credit","image_source_url","public_source",
+  "image_url","image_source","image_license","image_credit","image_source_url","image_license_url","public_source",
   "view_count","last_viewed_at","editorial_value","source_count","exam_region","exam_authority"}
  r={k:v for k,v in dict(row).items() if k in public_fields}
  if not admin_ok():
@@ -658,8 +662,8 @@ def _publicize(row):
   article_text=re.sub(r"(?:\n|\s)*Why it matters:\s*$","",article_text,flags=re.I).strip()
   r["article"]=article_text
   r["url"]=_safe_source_url(r.get("url"))
-  # Website images are source-only. Separately generated images
-  # (Wikimedia/Openverse/etc.) must never appear on the website.
+  # Publisher photos require verified rights. Curated Commons archival files
+  # are labelled illustrative, not shown as news-event photographs.
   r["image_url"]=_public_image_path(r)
   r.pop("editorial_context",None)
   if "editorial_value" in r: r["editorial_value"]=bool(r.get("editorial_value"))
@@ -703,6 +707,8 @@ def _is_source_supplied_image(row):
 
 
 def _public_image_path(row):
+ from app.commons_photos import valid_photo
+ if valid_photo(row):return str(row.get("image_url"))
  if isinstance(row,dict) and row.get("source_type")=="x" and row.get("status")=="published":
   try:return "/api/x-card/"+str(int(row.get("id")))
   except (TypeError,ValueError):return ""
@@ -913,6 +919,10 @@ def _article_publication_datetime(row):
 
 def _article_html(row):
  row=dict(row)
+ from app.commons_photos import snapshot_photo_for_url, valid_photo
+ if not _is_source_supplied_image(row) and not valid_photo(row):
+  illustration=snapshot_photo_for_url(row.get("url"))
+  if illustration:row.update(illustration)
  from app.article_visuals import for_article,render as render_visual
  from app.story_visuals import render as render_story_visuals
  visual_html=render_visual(for_article(row.get('id'))) or render_story_visuals(row)
@@ -961,6 +971,19 @@ def _article_html(row):
  repeated_lead=re.sub(r"\s+"," ",body).strip()==re.sub(r"\s+"," ",summary).strip()
  lead_html="" if repeated_lead else '<p class="dek">'+render_inline_markdown(summary)+'</p>'
  paras="".join(f"<p>{render_inline_markdown(p.strip())}</p>" for p in re.split(r"\n+",body) if p.strip())
+ photo_url=_public_image_path(row)
+ photo_html=""
+ if photo_url:
+  commons=valid_photo(row)
+  source_link=_safe_source_url(row.get("image_source_url")) if commons else ""
+  license_link=_safe_source_url(row.get("image_license_url")) if commons else ""
+  caption=("Illustrative archive photo (not the reported event). " if commons else "Photo: ")
+  caption+=html.escape(str(row.get("image_credit") or "Original source"))
+  caption+=" · "+html.escape(str(row.get("image_license") or "Licensed"))
+  if source_link:caption+=" · <a target='_blank' rel='noopener noreferrer' href='"+html.escape(source_link,quote=True)+"'>Photo source</a>"
+  if license_link:caption+=" · <a target='_blank' rel='noopener noreferrer' href='"+html.escape(license_link,quote=True)+"'>License</a>"
+  photo_html="<figure class='ahero'><img data-news-photo src='"+html.escape(photo_url,quote=True)+"' alt='"+("Illustrative archive photo, not this event" if commons else "Licensed source photograph")+"' loading='eager' decoding='async'><figcaption class='ph-photo-credit'>"+caption+"</figcaption></figure>"
+
  return f"""<!doctype html>
 <html lang="{language}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -981,7 +1004,7 @@ def _article_html(row):
 <main class="wrap"><article class="art" data-k="{html.escape(category.lower())}">
 <div class="ah"><span class="chip">{html.escape(category)}</span><h1>{html.escape(title)}</h1>{lead_html}
 <div class="by"><small>News No. {html.escape(news_number(row))}</small><span>{"Reviewed by" if ads_eligible else "Compiled by"} <a href="/author/politicshub-news-desk">{EDITORIAL_DESK}</a></span>{date_html}<span>{html.escape(source)}</span></div></div>
-{"<figure class='ahero'><img data-news-photo src='"+html.escape(str(_public_image_path(row)),quote=True)+"' alt='Licensed source photograph' loading='eager' decoding='async'><figcaption class='ph-photo-credit'>Photo: "+html.escape(str(row.get("image_credit") or "Original source"))+" · "+html.escape(str(row.get("image_license") or "Licensed"))+"</figcaption></figure>" if _public_image_path(row) else ""}
+{photo_html}
 {visual_html}
 <div class="body">{paras}</div>
 {history_html}

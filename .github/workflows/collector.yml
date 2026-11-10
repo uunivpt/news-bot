@@ -13,6 +13,8 @@ on:
       - ".github/workflows/collector.yml"
       - "config/sources.json"
       - "scripts/offline_snapshot.py"
+      - "scripts/enrich_commons_photos.py"
+      - "app/commons_photos.py"
       - "scripts/refresh_official_exams.py"
       - "app/official_exams.py"
       - "config/official-exam-sources.json"
@@ -44,6 +46,8 @@ jobs:
         env:
           NEWSDATA_API_KEY: ${{ secrets.NEWSDATA_API_KEY }}
         run: PYTHONPATH=. python scripts/offline_snapshot.py
+      - name: Attach verified Commons archive photos where article subject matches
+        run: PYTHONPATH=. python scripts/enrich_commons_photos.py
       - name: Refresh official examination notices
         run: PYTHONPATH=. python scripts/refresh_official_exams.py
       - name: Coalesce feed updates
@@ -56,7 +60,7 @@ jobs:
         run: |
           git config user.name "politicshub-feed-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/news-data.json public/exam-notices.json app/data/public-archive.json.gz app/data/official-exams.json .github/feed-release-state/news.json
+          git add app/data/commons-photo-cache.json public/news-data.json public/exam-notices.json app/data/public-archive.json.gz app/data/official-exams.json .github/feed-release-state/news.json
           git diff --staged --quiet && exit 0
           git commit -m "Refresh PoliticsHub public news snapshot"
           git pull --rebase origin main

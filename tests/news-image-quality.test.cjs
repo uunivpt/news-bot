@@ -25,7 +25,7 @@ test('licensed and credited sources display real photos and keep attribution',()
  const html=phMedia(row,true);
  assert.match(html,/class="ph14-media"/);
  assert.match(html,/data-news-photo/);
- assert.match(html,/Illustrative source photo/);
+ assert.match(html,/Source photo/);
  assert.match(html,/Photographer &amp; agency/);
  assert.match(html,/referrerpolicy="no-referrer"/);
 });
