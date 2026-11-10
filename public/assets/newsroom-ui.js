@@ -20,6 +20,15 @@
     const feed = home.querySelector('.ph14-feed');
     if (feed) feed.dataset.density = state.density;
     home.querySelectorAll('[data-news-density]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.newsDensity === state.density)));
+    home.querySelectorAll('.ph-ui-density').forEach(group => {
+      const active = group.querySelector('[aria-pressed=true]');
+      if (!active) return;
+      group.style.setProperty('--pill-x', active.offsetLeft + 'px');
+      group.style.setProperty('--pill-y', active.offsetTop + 'px');
+      group.style.setProperty('--pill-width', active.offsetWidth + 'px');
+      group.style.setProperty('--pill-height', active.offsetHeight + 'px');
+      group.classList.add('ph-ui-pill-ready');
+    });
   }
 
   function observe(home) {
@@ -30,9 +39,15 @@
       home.classList.remove('ph-ui-motion-ready');
       return;
     }
-    if (!observer) observer = new IntersectionObserver(entries => entries.forEach(entry => {
-      if (entry.isIntersecting) { entry.target.classList.add('is-visible'); observer.unobserve(entry.target); }
-    }), { rootMargin: '0px 0px 40px 0px', threshold: 0.01 });
+    if (!observer) observer = new IntersectionObserver(entries => {
+      let index = 0;
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.style.setProperty('--reveal-delay', Math.min(index++, 3) * 45 + 'ms');
+          entry.target.classList.add('is-visible'); observer.unobserve(entry.target);
+        }
+      });
+    }, { rootMargin: '0px 0px 40px 0px', threshold: 0.01 });
     home.classList.add('ph-ui-motion-ready');
     home.querySelectorAll('.ph-ui-reveal:not(.is-visible)').forEach(element => {
       // Keyboard navigation must never land on an invisible link.
@@ -69,6 +84,9 @@
   }
 
   if (typeof window !== 'undefined') {
+    // Fonts and responsive layouts can change the selector's button widths.
+    document.fonts?.ready.then(() => { if (currentHome?.isConnected) applyDensity(currentHome); });
+    window.addEventListener('resize', () => { if (currentHome?.isConnected) applyDensity(currentHome); }, { passive: true });
     window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', () => observe(currentHome));
     document.addEventListener('keydown', event => {
       if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== 'k' || event.repeat) return;

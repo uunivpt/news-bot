@@ -232,3 +232,47 @@ html[data-theme=dark] .ph-ui-home {
 
 /* Without the sidebar, main news rows use the full feed width. */
 .ph-ui-home .ph14-feed { grid-template-columns: minmax(0, 1fr); }
+
+/* Watermelon Continuous Tabs and Command Search, adapted to native browser UI.
+   Source and MIT notice: docs/WATERMELON_UI_LICENSE.md. */
+.ph-ui-density { position: relative; isolation: isolate; }
+.ph-ui-density.ph-ui-pill-ready::before {
+  content: ''; position: absolute; pointer-events: none; z-index: -1;
+  left: 0; top: 0; width: var(--pill-width); height: var(--pill-height);
+  transform: translate(var(--pill-x), var(--pill-y));
+  border-radius: 6px; background: var(--ink);
+}
+.ph-ui-density.ph-ui-pill-ready button[aria-pressed=true] { background: transparent; }
+.ph-ui-home .ph14-cats a { position: relative; }
+.ph-ui-home .ph14-cats a::after {
+  content: ''; position: absolute; inset: auto 15px 4px; height: 2px;
+  border-radius: 2px; background: currentColor; transform: scaleX(0);
+  transform-origin: left; pointer-events: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ph-ui-density.ph-ui-pill-ready::before {
+    transition: transform .32s cubic-bezier(.22, 1, .36, 1), width .32s cubic-bezier(.22, 1, .36, 1), height .2s;
+  }
+  .ph-ui-density button { transition: color .18s ease; }
+  .ph-ui-home .btn { transition: translate .18s ease, box-shadow .2s ease, background-color .2s ease; }
+  .ph-ui-home .btn:active { translate: 0 1px; }
+  .ph-ui-home .ph14-read b { transition: transform .24s cubic-bezier(.22, 1, .36, 1); }
+  .ph-ui-home .ph14-lead:is(:hover, :focus-visible) .ph14-read b { transform: translate(2px, -2px); }
+  .ph-ui-home .ph14-cats a::after { transition: transform .22s ease; }
+  .ph-ui-home .ph14-cats a:focus-visible::after { transform: scaleX(1); }
+  .ph-ui-home .ph-ui-intro { animation: ph-ui-arrive .38s ease-out; }
+  #sp.open .sb { animation: ph-ui-search-enter .24s cubic-bezier(.22, 1, .36, 1); }
+  .ph-ui-home .ph14-newsletter-fields input { transition: border-color .2s ease, box-shadow .2s ease; }
+  .ph-ui-home .ph14-newsletter-fields input:focus-visible { box-shadow: 0 0 0 3px var(--ui-accent-soft); }
+  @keyframes ph-ui-arrive { from { opacity: .6; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @keyframes ph-ui-search-enter { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: none; } }
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .ph-ui-home .ph14-cats a:hover::after { transform: scaleX(1); }
+  .ph-ui-home .btn:hover { translate: 0 -1px; box-shadow: var(--ui-shadow); }
+  .ph-ui-home .btn:active { translate: 0 1px; }
+}
+@media (forced-colors: active) {
+  .ph-ui-density.ph-ui-pill-ready::before { display: none; }
+  .ph-ui-density.ph-ui-pill-ready button[aria-pressed=true] { background: Highlight; color: HighlightText; }
+}

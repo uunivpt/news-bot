@@ -130,6 +130,13 @@ def run(base: str, output: Path) -> None:
             compact.click()
             require(compact.get_attribute('aria-pressed') == 'true', 'Compact control state did not update')
             require(page.locator('.ph14-feed').get_attribute('data-density') == 'compact', 'Feed density did not update')
+            page.wait_for_function("""() => {
+                const group = document.querySelector('.ph-ui-density');
+                const active = group.querySelector('[aria-pressed=true]');
+                const pill = getComputedStyle(group, '::before');
+                return Math.abs(parseFloat(pill.width) - active.offsetWidth) < 1 &&
+                    Math.abs(new DOMMatrix(pill.transform).m41 - active.offsetLeft) < 1;
+            }""")
             page.evaluate('render(true)')
             require(page.locator('[data-news-density="compact"]').get_attribute('aria-pressed') == 'true', 'A feed refresh lost density preference')
             require(page.locator('.ph14-feed').get_attribute('data-density') == 'compact', 'A feed refresh reset compact rows')
@@ -217,6 +224,9 @@ def run(base: str, output: Path) -> None:
                 reader.wait_for_selector('.ph14-home')
                 require(reader.locator('.ph-ui-home').evaluate('(node) => !node.classList.contains("ph-ui-motion-ready")'), 'Reduced motion enabled scroll reveal')
                 require(reader.locator('.ph-ui-reveal').evaluate_all('(nodes) => nodes.every(node => getComputedStyle(node).opacity === "1")'), 'Reduced-motion content is hidden')
+                require(reader.locator('.ph-ui-intro').evaluate('(node) => getComputedStyle(node).animationName === "none"'), 'Intro ignores reduced motion')
+                reader.locator('[data-news-search]').click()
+                require(reader.locator('#sp .sb').evaluate('(node) => getComputedStyle(node).animationName === "none"'), 'Search ignores reduced motion')
                 require(reader.locator('.ph-ui-dashboard').count() == 0, 'Removed Reading Room returned in reduced-motion mode')
             finally:
                 reduced.close()

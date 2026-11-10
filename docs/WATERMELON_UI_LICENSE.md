@@ -14,6 +14,15 @@ Adapted implementation references:
 - Library Dashboard: src/data/contents/dashboards/library-dashboard/components/library/dashboard-content.tsx
   https://ui.watermelon.sh/dashboards/library-dashboard
 
+- Continuous Tabs registry (sliding spacing selector):
+  https://registry.watermelon.sh/r/continuous-tabs.json
+- Command Search registry (search panel entrance):
+  https://registry.watermelon.sh/r/command-search.json
+
+The additional micro-interaction references above were retrieved on 10 November 2026.
+The sliding pill and search entrance are browser-native adaptations; staggered story
+reveals, button press feedback and link cues are local enhancements.
+
 Adaptation: React/Motion components translated to HTML, CSS and browser-native interactions for PoliticsHub. No upstream example data or external image assets are required.
 
 MIT License
