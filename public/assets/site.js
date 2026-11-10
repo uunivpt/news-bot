@@ -182,7 +182,7 @@ function build(){
 function ticker(){
  const box=$('#tk'),tickEl=$('#tick');
  if(!box||!tickEl)return;
- const rows=S.items.filter(i=>i.title).slice(0,12);
+ const rows=S.items.filter(i=>i.title&&inCat(i,activeFeedCategory())).slice(0,12);
  if(!rows.length){tickEl.hidden=true;return}
  const links=rows.map(i=>'<a href="'+esc(articleHref(i))+'"><b>'+esc(i.category||'NEWS')+'</b>'+esc(i.title)+'</a>').join('');
  box.innerHTML='<div>'+links+links+'</div>';
