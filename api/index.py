@@ -971,6 +971,19 @@ def _article_html(row):
  repeated_lead=re.sub(r"\s+"," ",body).strip()==re.sub(r"\s+"," ",summary).strip()
  lead_html="" if repeated_lead else '<p class="dek">'+render_inline_markdown(summary)+'</p>'
  paras="".join(f"<p>{render_inline_markdown(p.strip())}</p>" for p in re.split(r"\n+",body) if p.strip())
+ photo_url=_public_image_path(row)
+ photo_html=""
+ if photo_url:
+  commons=valid_photo(row)
+  source_link=_safe_source_url(row.get("image_source_url")) if commons else ""
+  license_link=_safe_source_url(row.get("image_license_url")) if commons else ""
+  caption=("Illustrative archive photo (not the reported event). " if commons else "Photo: ")
+  caption+=html.escape(str(row.get("image_credit") or "Original source"))
+  caption+=" · "+html.escape(str(row.get("image_license") or "Licensed"))
+  if source_link:caption+=" · <a target='_blank' rel='noopener noreferrer' href='"+html.escape(source_link,quote=True)+"'>Photo source</a>"
+  if license_link:caption+=" · <a target='_blank' rel='noopener noreferrer' href='"+html.escape(license_link,quote=True)+"'>License</a>"
+  photo_html="<figure class='ahero'><img data-news-photo src='"+html.escape(photo_url,quote=True)+"' alt='"+("Illustrative archive photo, not this event" if commons else "Licensed source photograph")+"' loading='eager' decoding='async'><figcaption class='ph-photo-credit'>"+caption+"</figcaption></figure>"
+
  return f"""<!doctype html>
 <html lang="{language}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -991,7 +1004,7 @@ def _article_html(row):
 <main class="wrap"><article class="art" data-k="{html.escape(category.lower())}">
 <div class="ah"><span class="chip">{html.escape(category)}</span><h1>{html.escape(title)}</h1>{lead_html}
 <div class="by"><small>News No. {html.escape(news_number(row))}</small><span>{"Reviewed by" if ads_eligible else "Compiled by"} <a href="/author/politicshub-news-desk">{EDITORIAL_DESK}</a></span>{date_html}<span>{html.escape(source)}</span></div></div>
-{"<figure class='ahero'><img data-news-photo src='"+html.escape(str(_public_image_path(row)),quote=True)+"' alt='Licensed source photograph' loading='eager' decoding='async'><figcaption class='ph-photo-credit'>Photo: "+html.escape(str(row.get("image_credit") or "Original source"))+" · "+html.escape(str(row.get("image_license") or "Licensed"))+"</figcaption></figure>" if _public_image_path(row) else ""}
+{photo_html}
 {visual_html}
 <div class="body">{paras}</div>
 {history_html}
