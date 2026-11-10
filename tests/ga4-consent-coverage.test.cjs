@@ -12,7 +12,7 @@ test('homepage declares existing GA4 bootstrap without a second external Google 
  assert.match(home,/data-ga4-measurement-id="G-2HVZQST08G"/);
  assert.doesNotMatch(home,/src="https:\/\/www\.googletagmanager\.com\/gtag\/js/);
  const measurement=home.indexOf('src="/assets/measurement.js?v=ga4coverage1"');
- const chrome=home.indexOf('src="/assets/ui.js?v=phui30"');
+ const chrome=home.indexOf('src="/assets/ui.js?v=');
  assert.ok(measurement>0 && measurement<chrome);
 });
 

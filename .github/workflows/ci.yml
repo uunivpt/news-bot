@@ -56,6 +56,10 @@ jobs:
         run: python scripts/newsroom_ui_browser_audit.py --output artifacts/newsroom-ui
       - name: Check article data charts, accessibility and source values
         run: python scripts/article_data_browser_audit.py --output artifacts/article-data
+      - name: Check branded article PDF layout and pagination
+        run: |
+          sudo apt-get install -y --no-install-recommends poppler-utils
+          python scripts/article_print_browser_audit.py --output artifacts/article-print
       - name: Check hosted Admin Room sessions and private diagnostics
         run: python scripts/hosted_admin_browser_audit.py --output artifacts/hosted-admin
       - name: Check article-specific charts and metric cards

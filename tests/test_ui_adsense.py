@@ -1,4 +1,5 @@
 import unittest
+import re
 from html.parser import HTMLParser
 from pathlib import Path
 from unittest.mock import patch
@@ -109,7 +110,7 @@ class UIAdSenseTests(unittest.TestCase):
                 assert '/assets/home-critical.css?v=' in html, path
             else:
                 assert '/assets/polish.css?v=' in html, path
-            assert '/assets/ui.js?v=phui30' in html, path
+            assert re.search(r'/assets/ui\.js\?v=[A-Za-z0-9_-]+',html), path
             assert 'PH.bindChrome()' not in html
             assert 'googletagmanager.com/gtag/js' not in html
         home = (root/'index.html').read_text()
