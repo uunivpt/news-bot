@@ -262,20 +262,27 @@ def _official_exam_rows():
  payload=_official_exam_payload() or {}
  return [dict(r) for r in payload.get('items',[]) if r.get('status')=='published' and r.get('public_source') and r.get('source_type')=='official_exam']
 
+def _public_language_desk(row):
+ """Keep regional-language publisher headlines out of English news desks."""
+ source=str(row.get("source_name") or row.get("source") or row.get("publisher") or "").lower()
+ language=str(row.get("language") or row.get("lang") or row.get("inLanguage") or "").lower().strip()
+ title=str(row.get("title") or row.get("headline") or "")
+ if any(name in source for name in ("tv9 marathi","abp majha","abp माझा","lokmat","loksatta","saamana","सामना")) or language in {"mr","mr-in","marathi"}:
+  return "maharashtra"
+ if language in {"hi","hi-in","hindi"} or re.search(r"[\u0900-\u097f]",title):
+  return "hindi"
+ return None
+
 def _matches_public_desk(row, category):
- # Politics is a topical view, not a recategorization of India articles.
- # Keep original article IDs, categories, canonical URLs and archive history.
- if not category or category=="all":return True
+ # This affects listings only; article IDs, canonical URLs and archive stay intact.
  actual=str(row.get("category") or "").lower()
- # Keep Maharashtra publisher reports discoverable on Home/Archive but do not
- # mix explicitly Marathi-desk headlines into the general India listing.
- source=str(row.get("source_name") or row.get("source") or "").lower()
- if category=="maharashtra" and ("tv9 marathi" in source or "abp majha" in source or "abp माझा" in source):
-  return True
- if category=="india" and ("tv9 marathi" in source or "abp majha" in source or "abp माझा" in source):
-  return False
+ local=_public_language_desk(row)
+ if not category or category=="all":return not local and actual in {"india","world"}
+ if category=="maharashtra":return local=="maharashtra" or actual=="maharashtra"
+ if category=="hindi":return local=="hindi" or (not local and actual=="hindi")
+ if category in {"india","world"}:return not local and actual==category
  return actual==category or (category=="politics" and actual=="india"
-                            and is_political_headline(row.get("title")))
+                            and not local and is_political_headline(row.get("title")))
 
 def _snapshot_rows(category="all", search=None):
  path=Path(app.static_folder or "public") / "news-data.json"
@@ -354,7 +361,7 @@ def _public_rows_for_section(category="all",limit=200):
    return [x for x in rows if _matches_public_desk(x,category)][:limit]
   finally:database.close()
  except RuntimeError:
-  return _rank_public(_snapshot_rows(category))[:limit]
+  return _rank_public([x for x in _snapshot_rows(category) if _matches_public_desk(x,category)])[:limit]
 
 def _section_html(category="all"):
  # Count against the full main feed, not merely the active 40 cards.
@@ -1582,7 +1589,7 @@ def news():
  if not admin_ok():status,review="published","all"
  if hosted_enabled() and request.path=='/api/news':
   records=_hosted_snapshot_rows()
-  if category!='all':records=[row for row in records if _matches_public_desk(row,category)]
+  records=[row for row in records if _matches_public_desk(row,category)]
   if search:records=matching_news(records,search)
   payload=rows_json(_rank_public(records,threshold=0.78)[:limit],compact=compact)
   for item in payload:
@@ -1599,6 +1606,7 @@ def news():
   if not rows and not _snapshot_rows("all"):
    return jsonify({"error":"news backend unavailable"}),503
   rows=_rank_public(rows,threshold=0.78)
+  if not admin_ok():rows=[row for row in rows if _matches_public_desk(row,category)]
   payload=rows_json(rows[:limit],compact=compact)
   if not admin_ok():
    for item in payload:
@@ -1618,7 +1626,7 @@ def news():
    from app.editorial_access import allowed_story
    records=[row for row in records if allowed_story(database,row['id'],g.admin_policy,session.get('admin_user'))]
   rows=_rank_public(records,threshold=0.78)
-  if category!="all":rows=[x for x in rows if (_matches_public_desk(x,category) if public_listing else x.get("category")==category)]
+  rows=[x for x in rows if (_matches_public_desk(x,category) if public_listing else (category=="all" or x.get("category")==category))]
   # A healthy database is authoritative; never resurrect removed stories.
   payload=rows_json(rows[:limit],compact=compact)
   if public_listing:
