@@ -26,6 +26,13 @@ def run(base, output):
     canonical = '/india/' + news_number(row)
     with api.app.test_request_context('/'):
         document = api._article_html(row)
+    from app.article_visuals import for_article, number
+    data = for_article(row['id'])
+    latest, previous = data['points'][-1], data['points'][-2]
+    change = latest['value'] - previous['value']
+    expected_change = format(change, '+.3f') if 1e-6 <= abs(change) < .005 else number(change, True)
+    expected_cards = [number(latest['value']) + '%', number(previous['value']) + '%', expected_change]
+    latest_year = latest['label']
     checks, errors = [], []
 
     def require(condition, message):
@@ -49,20 +56,20 @@ def run(base, output):
         page.on('pageerror', lambda error: errors.append(str(error)))
         page.goto(base + canonical, wait_until='networkidle')
         require(page.locator('.article-data-metric').count() == 3, 'Metric cards missing')
-        require(page.locator('.article-data-metric strong').all_text_contents() == ['7.10%', '7.21%', '-0.11'], 'Cards changed the values or units')
+        require(page.locator('.article-data-metric strong').all_text_contents() == expected_cards, 'Cards changed the values or units')
         require(page.locator('.data-bar').count() == 6, 'Source observations were dropped')
-        require(page.locator('.data-negative').count() == 1, 'Negative growth is not distinguished')
+        require(page.locator('.data-negative').count() == sum(p['value'] < 0 for p in data['points']), 'Negative growth is not distinguished')
         require('2026-10-11' in page.locator('time.article-published').get_attribute('datetime'), 'Data retrieval replaced the article publication date')
         require(page.get_by_role('link', name='Read the original report', exact=True).get_attribute('href') == row['url'], 'Article source changed')
         page.locator('.article-data-table summary').click()
-        require('7.09927893176518' in page.locator('.article-data-table').inner_text(), 'Exact source precision was lost')
+        require(str(latest['value']) in page.locator('.article-data-table').inner_text(), 'Exact source precision was lost')
         page.locator('.article-data-table summary').click()
         checks.append('canonical metrics, negative values, exact-value table and original publication/source')
 
         last = page.locator('.data-bar').last
         last.focus()
         require(page.locator('.article-data-tooltip').is_visible(), 'Keyboard focus did not reveal the value')
-        require('2024' in page.locator('.article-data-tooltip').inner_text(), 'Tooltip has the wrong observation')
+        require(latest_year in page.locator('.article-data-tooltip').inner_text(), 'Tooltip has the wrong observation')
         page.keyboard.press('Escape')
         require(not page.locator('.article-data-tooltip').is_visible(), 'Escape did not dismiss the tooltip')
         require(last.evaluate('(node) => node === document.activeElement'), 'Dismissal moved keyboard focus')
@@ -86,7 +93,7 @@ def run(base, output):
                     page.locator('.data-bar').last.focus()
                     tooltip = page.locator('.article-data-tooltip')
                     require(tooltip.is_visible(), 'Last observation tooltip missing after horizontal scrolling')
-                    page.wait_for_function("() => document.querySelector('.article-data-tooltip').textContent.includes('2024')")
+                    page.wait_for_function("year => document.querySelector('.article-data-tooltip').textContent.includes(year)", arg=latest_year)
                     require(tooltip.bounding_box()['x'] >= page.locator('.article-data-chart').bounding_box()['x'], 'Mobile tooltip scrolled out of view')
         page.emulate_media(media='print')
         require(page.locator('.article-data-source').is_visible(), 'Print hides source attribution')
@@ -106,7 +113,7 @@ def run(base, output):
 
         page.goto(base + '/#/article/' + str(row['id']), wait_until='networkidle')
         page.wait_for_selector('.article-data')
-        require(page.locator('.article-data-metric strong').first.inner_text() == '7.10%', 'SPA article lost the chart')
+        require(page.locator('.article-data-metric strong').first.inner_text() == expected_cards[0], 'SPA article lost the chart')
         require('Original article text' in page.locator('.body').inner_text(), 'SPA body was replaced by the chart')
         page.evaluate("location.hash='/settings'")
         page.wait_for_selector('#prefs')

@@ -1,4 +1,4 @@
-"""Reviewed, source-linked article data; no number extraction or live requests.
+"""Source-validated article data; no number extraction or request-time remote reads.
 
 The public registry is bundled with the application. Editorially selected story
 identities opt into a dataset; arbitrary feed fields can never supply markup.
@@ -105,17 +105,29 @@ def number(value, signed=False):
     return format(value, '+,.2f' if signed else ',.2f')
 
 
+def freshness(data, today=None):
+    """Never describe an unchecked snapshot as current during a refresh outage."""
+    today = today or date.today()
+    checked = date.fromisoformat(data['source']['retrieved_on'])
+    overdue = (today - checked).days > 2 or checked > today
+    label = 'Source check overdue' if overdue else 'Source checked'
+    return label, overdue
+
+
 def render(data):
     """Semantic HTML, a true-zero SVG axis, and an accessible exact-value table."""
     if not data:
         return ''
     e = lambda value: escape(str(value), quote=True)
     points, source, key = data['points'], data['source'], data['id']
+    check_label, overdue = freshness(data)
+    freshness_note = ('Showing the last verified annual observations; a newer provider release may be available.' if overdue
+                      else 'Annual observations; the observation year is separate from the source check date.')
     latest, previous = points[-1], points[-2]
     unit = data['unit']
     change = latest['value'] - previous['value']
     change_label = format(change, '+.3f') if 1e-6 <= abs(change) < .005 else number(change, True)
-    cards = [(latest['label'] + ' · latest observation', number(latest['value']) + unit, data['measure']),
+    cards = [(latest['label'] + ' · newest stored observation', number(latest['value']) + unit, data['measure']),
              (previous['label'] + ' · previous observation', number(previous['value']) + unit, data['measure']),
              ('Change between these observations', change_label, data['difference_unit'])]
     metrics = ''.join('<div class="article-data-metric"><span>' + e(label) + '</span><strong>' + e(value) + '</strong><small>' + e(context) + '</small></div>' for label, value, context in cards)
@@ -150,5 +162,6 @@ def render(data):
 <figure><figcaption id="{key}-caption">{e(data['series'])} · {e(data['measure'])}</figcaption>
 <div class="article-data-chart{crowded}"><svg viewBox="0 0 720 340" role="group" aria-labelledby="{key}-caption"><g>{''.join(ticks)}</g><line class="data-zero" x1="62" x2="700" y1="{baseline:.2f}" y2="{baseline:.2f}"/>{''.join(bars)}</svg><div class="article-data-tooltip" hidden aria-hidden="true"></div></div>
 <p class="article-data-scroll-hint">Swipe horizontally to see every observation.</p><p class="article-data-note">{e(data['note'])}</p></figure>
+<p class="article-data-freshness" role="status">{e(check_label)}: {e(source['retrieved_on'])}. {e(freshness_note)}</p>
 <p class="article-data-source">Source: <a href="{e(source['url'])}" target="_blank" rel="noopener noreferrer">{e(source['name'])}</a> · Data updated {e(source['updated_on'])} · Retrieved {e(source['retrieved_on'])}. <a href="{e(source['data_url'])}" target="_blank" rel="noopener noreferrer">Original data</a> · <a href="{e(source['license_url'])}">{e(source['license'])}</a></p>
 <details class="article-data-table"><summary>View exact values and data table</summary><div><table><caption>{e(data['measure'])} · {e(data['series'])}</caption><thead><tr><th scope="col">Observation</th><th scope="col">Value ({e(unit)})</th></tr></thead><tbody>{rows}</tbody></table></div></details></section>'''
