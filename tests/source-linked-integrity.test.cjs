@@ -11,8 +11,8 @@ test('public publisher attribution survives direct normalization and cached rehy
   const start = site.indexOf('function norm(a,i){');
   const end = site.indexOf('\nconst pick=', start);
   assert.ok(start >= 0 && end > start);
-  const norm = new Function('newsCategory', site.slice(start, end) + '\nreturn norm;')(
-    category => category
+  const norm = new Function('newsCategory','newsPhoto', site.slice(start, end) + '\nreturn norm;')(
+    category => category, () => ''
   );
   const one = norm({id:1,category:'india',title:'India public-affairs update',
                     source_name:'Original Publisher',summary:'Attributed summary'});
@@ -23,7 +23,7 @@ test('public publisher attribution survives direct normalization and cached rehy
 test('exact repeated headlines are merged across independent feed IDs', () => {
   const start = site.indexOf('function norm(a,i){');
   const end = site.indexOf('\nconst pick=', start);
-  const norm = new Function('newsCategory',site.slice(start,end)+'\nreturn norm;')(cat=>cat);
+  const norm = new Function('newsCategory','newsPhoto',site.slice(start,end)+'\nreturn norm;')(cat=>cat,()=> '');
   const from = site.indexOf('function mergeFeeds(a,b){');
   const to = site.indexOf('\nasync function load(',from);
   assert.ok(from>=0 && to>from);
