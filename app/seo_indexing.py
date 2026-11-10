@@ -20,13 +20,20 @@ CATEGORIES = {
     "entertainment": "entertainment", "science": "science", "health": "health", "hindi": "hindi"
 }
 STATIC_PAGES = (
-    "/", "/data/", "/archive/", "/library/", "/exams/", "/about.html", "/contact.html", "/editorial-policy.html",
-    "/corrections.html", "/privacy.html", "/cookies.html", "/terms.html",
-    "/disclaimer.html", "/newsletter.html", "/topics/", "/data-rights.html",
-    "/licenses.html", "/sources.html", "/maharashtra/", "/india/", "/politics/", "/world/", "/hindi/",
-    "/guides/election-results.html", "/guides/maharashtra-mlc.html",
-    "/guides/government-notifications.html", "/guides/reading-breaking-news.html",
-    "/guides/verify-political-claims.html"
+    "/",
+    "/archive/",
+    "/exams/",
+    "/topics/",
+    "/maharashtra/",
+    "/india/",
+    "/politics/",
+    "/world/",
+    "/hindi/",
+    "/guides/election-results.html",
+    "/guides/maharashtra-mlc.html",
+    "/guides/government-notifications.html",
+    "/guides/reading-breaking-news.html",
+    "/guides/verify-political-claims.html",
 )
 
 

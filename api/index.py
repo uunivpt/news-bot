@@ -441,11 +441,11 @@ def _section_html(category="all"):
 def _enhance_section_seo(document, category):
  """Provide structured data and useful metadata on server-rendered news pages."""
  if category == "all":
-  document = document.replace("<title>Latest news — PoliticsHub.in</title>", "<title>India &amp; World News | PoliticsHub.in</title>", 1)
+  document = document.replace("<title>Latest news — PoliticsHub.in</title>", "<title>PoliticsHub.in | Latest India, World &amp; Politics News</title>", 1)
  section = category if category != "all" else "India and world"
  description = (
-  "Explore the latest India and world news, politics, business and technology "
-  "on PoliticsHub.in. Read source-linked reports and editorial updates."
+  "PoliticsHub.in brings you India, world and politics news, source-linked "
+  "updates, original references and explainers. Explore the latest headlines."
   if category == "all" else
   f"Read the latest {section.title()} news and public affairs coverage on PoliticsHub.in, "
   "with source-linked reports, publication details and editorial transparency."
@@ -459,11 +459,13 @@ def _enhance_section_seo(document, category):
  publisher = {"@type": "Organization", "@id": SITE_ORIGIN + "/#publisher",
               "name": "PoliticsHub.in", "url": SITE_ORIGIN + "/",
               "logo": {"@type": "ImageObject", "url": SITE_ORIGIN + "/favicon.svg"}}
- website = {"@type": "WebSite", "name": "PoliticsHub.in",
+ website = {"@type": "WebSite", "@id": SITE_ORIGIN + "/#website", "name": "PoliticsHub.in",
+            "alternateName": ["PoliticsHub", "Politics Hub"],
             "url": SITE_ORIGIN + "/", "publisher": {"@id": publisher["@id"]}}
  page = {"@type": "CollectionPage", "name": ("Latest news" if category == "all" else section.title() + " news"),
-         "url": canonical, "description": description, "isPartOf": {"@type": "WebSite", "url": SITE_ORIGIN + "/"}}
+         "url": canonical, "description": description, "isPartOf": {"@id": website["@id"]}}
  schema = json.dumps({"@context": "https://schema.org", "@graph": [publisher, website, page]}, ensure_ascii=False).replace("<", "\\u003c")
+ if category=='all':page['name']='PoliticsHub.in | Latest India, World & Politics News'
  injection = ('<meta property="og:description" content="' + html.escape(description, quote=True) + '">'
               '<meta name="twitter:description" content="' + html.escape(description, quote=True) + '">'
               '<script type="application/ld+json">' + schema + '</script>')
@@ -1029,8 +1031,9 @@ def _editorial_page(title,lead,kind="page"):
  hrefs={"Home":"/","About":"/about.html","Editorial Policy":"/editorial-policy.html","Corrections":"/corrections.html","Contact":"/contact.html","Disclaimer":"/disclaimer.html","Privacy":"/privacy.html","Cookies":"/cookies.html","Terms":"/terms.html","Newsletter":"/newsletter.html","Settings":"/settings.html"}
  nav="<ul>"+"".join("<li><a href=\""+hrefs[x]+"\">"+html.escape(x)+"</a></li>" for x in links)+"</ul>"
  body="<p>PoliticsHub.in is a source-linked digital newsroom focused on politics, public affairs, India and the world.</p>" if kind=="author" else ""
- page='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(title)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(lead[:160])+'"><link rel="canonical" href="'+SITE_ORIGIN+request.path+'"><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/polish.css?v=phui30"><script src="/assets/ui.js?v=phui30" defer></script></head><body><header id="hd"><div class="top"><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a></div></header><main class="wrap"><article class="art"><div class="ah"><span class="lbl red">PoliticsHub.in</span><h1>'+html.escape(title)+'</h1><p class="dek">'+html.escape(lead)+'</p></div><div class="body">'+body+'</div></article></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><p class="ser">What matters, clearly.</p></div><div><h4>Navigate</h4>'+nav+'</div></div></footer></body></html>'
- return Response(page,mimetype="text/html")
+ robots_meta='<meta name="robots" content="noindex,follow">' if kind=="author" else ""
+ page='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(title)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(lead[:160])+'">'+robots_meta+'<link rel="canonical" href="'+SITE_ORIGIN+request.path+'"><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/polish.css?v=phui30"><script src="/assets/ui.js?v=phui30" defer></script></head><body><header id="hd"><div class="top"><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a></div></header><main class="wrap"><article class="art"><div class="ah"><span class="lbl red">PoliticsHub.in</span><h1>'+html.escape(title)+'</h1><p class="dek">'+html.escape(lead)+'</p></div><div class="body">'+body+'</div></article></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><p class="ser">What matters, clearly.</p></div><div><h4>Navigate</h4>'+nav+'</div></div></footer></body></html>'
+ return Response(page,mimetype="text/html",headers={"X-Robots-Tag":"noindex, follow"} if kind=="author" else {})
 def rows_json(rows,compact=False):
  out=[]
  for row in rows:
