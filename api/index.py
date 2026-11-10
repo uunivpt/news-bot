@@ -691,10 +691,12 @@ def _is_source_supplied_image(row):
  if not url.startswith(("http://","https://")):return False
  source=str(row.get("image_source") or "").strip().lower()
  license_key=str(row.get("image_license") or "").strip().lower().split(" ",1)[0]
- # Never publish a feed/publisher image merely because it arrived with a story.
- # The public website is source-image-only AND requires an explicit low-risk
- # public-domain/CC0-style licence. Unknown-source images remain hidden.
- return source=="article-source" and license_key in {"cc0","pdm"}
+ # Publisher feed thumbnails without verified reuse rights are not public
+ # website media. Explicitly licensed/owned source photographs remain allowed.
+ # These are the same rights categories accepted by the manual editor.
+ credit=str(row.get("image_credit") or "").strip()
+ if not credit or not public_http_url(url):return False
+ return source=="article-source" and license_key in {"cc0","pdm","rights-owned","licensed"}
 
 
 def _public_image_path(row):
@@ -976,7 +978,7 @@ def _article_html(row):
 <main class="wrap"><article class="art" data-k="{html.escape(category.lower())}">
 <div class="ah"><span class="chip">{html.escape(category)}</span><h1>{html.escape(title)}</h1>{lead_html}
 <div class="by"><small>News No. {html.escape(news_number(row))}</small><span>{"Reviewed by" if ads_eligible else "Compiled by"} <a href="/author/politicshub-news-desk">{EDITORIAL_DESK}</a></span>{date_html}<span>{html.escape(source)}</span></div></div>
-{"<div class='ahero'><img src='"+html.escape(str(_public_image_path(row)),quote=True)+"' alt='"+html.escape(title,quote=True)+"' loading='eager'></div>" if _public_image_path(row) else ""}
+{"<figure class='ahero'><img data-news-photo src='"+html.escape(str(_public_image_path(row)),quote=True)+"' alt='Licensed source photograph' loading='eager' decoding='async'><figcaption class='ph-photo-credit'>Photo: "+html.escape(str(row.get("image_credit") or "Original source"))+" · "+html.escape(str(row.get("image_license") or "Licensed"))+"</figcaption></figure>" if _public_image_path(row) else ""}
 {visual_html}
 <div class="body">{paras}</div>
 {history_html}
