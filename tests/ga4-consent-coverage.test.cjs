@@ -8,10 +8,10 @@ const ui=fs.readFileSync('public/assets/ui.js','utf8');
 const analytics=fs.readFileSync('public/assets/measurement.js','utf8');
 
 test('homepage declares existing GA4 bootstrap without a second external Google tag',()=>{
- assert.match(home,/src="\/assets\/measurement\.js\?v=ga4coverage1"/);
+ assert.equal((home.match(/src="\/assets\/measurement\.js\?v=[^"\s]+"/g)||[]).length,1);
  assert.match(home,/data-ga4-measurement-id="G-2HVZQST08G"/);
  assert.doesNotMatch(home,/src="https:\/\/www\.googletagmanager\.com\/gtag\/js/);
- const measurement=home.indexOf('src="/assets/measurement.js?v=ga4coverage1"');
+ const measurement=home.indexOf('src="/assets/measurement.js?v=');
  const chrome=home.indexOf('src="/assets/ui.js?v=phui30"');
  assert.ok(measurement>0 && measurement<chrome);
 });
@@ -25,12 +25,16 @@ test('public pages reuse one measurement bootstrap and exclude noindex/private p
  assert.match(ui,/measurement\.dataset\.ga4MeasurementId = 'G-2HVZQST08G'/);
 });
 
-test('no network GA or ad event is initiated without Google CMP consent',()=>{
+test('measurement declares denied consent defaults and delegates updates to the Google CMP',()=>{
  new vm.Script(analytics);
  assert.match(analytics,/CONSENT_MODE_DATA_READY/);
  assert.match(analytics,/getGoogleConsentModeValues/);
- assert.match(analytics,/if \(!analytics && !ads && !initialized\) return/);
- assert.match(analytics,/if \(analytics && !analyticsConfigured\)/);
- assert.match(analytics,/window\['ga-disable-G-2HVZQST08G'\] = !analytics/);
+ assert.match(analytics,/'consent', 'default'/);
+ assert.match(analytics,/'consent', 'update'/);
+ for(const purpose of ['analytics_storage','ad_storage','ad_user_data','ad_personalization']){
+  assert.ok(analytics.includes(purpose+": 'denied'"));
+ }
+ assert.doesNotMatch(analytics,/'event',\s*'conversion'/);
+ assert.doesNotMatch(analytics,/ph-consent-v1/);
  assert.doesNotMatch(home,/name="google-site-verification"/);
 });
