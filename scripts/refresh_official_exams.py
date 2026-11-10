@@ -27,6 +27,8 @@ def main():
         if not state.get('last_success_at'):
             state['last_success_at']=next((s.get('last_success_at') for s in previous.get('sources',[]) if s['id']==source['id']),None)
         state['notice_count']=len(items)
+        state['stale']=state['status']!='available'
+        # This is a collection-health signal; publication and deadline dates remain original.
         return state,items
     with ThreadPoolExecutor(max_workers=4) as pool:results=list(pool.map(collect,[s for s in sources() if s.get('enabled')]))
     items={row['url']:row for _,batch in results for row in batch}

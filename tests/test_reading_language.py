@@ -43,7 +43,7 @@ class ReadingLanguageTests(unittest.TestCase):
                    title='महाराष्ट्रातील निवडणुकीविषयी ताजी माहिती')
         document = api._article_html(row)
         self.assertIn('<html lang="mr">', document)
-        data = json.loads(re.search(r'<script type="application/ld\\+json">(.*?)</script>', document).group(1))
+        data = json.loads(re.search(r'<script type="application/ld\+json">(.*?)</script>', document).group(1))
         self.assertEqual(data['inLanguage'], 'mr')
 
     def test_server_rendered_hindi_desk_declares_hindi(self):

@@ -57,6 +57,7 @@ class ExamRefreshTests(unittest.TestCase):
     refresh.main()
    result=json.loads(file.read_text());self.assertEqual(result['items'][0]['url'],row['url'])
    self.assertEqual(result['sources'][0]['status'],'unavailable')
+   self.assertTrue(result['sources'][0]['stale'])
    self.assertEqual(result['sources'][0]['last_success_at'],'2026-10-01T00:00:00Z')
    self.assertEqual(result['items'][0]['news_number'],news_number(row))
 
