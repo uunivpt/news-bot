@@ -121,7 +121,9 @@ def run(base, output,admin_fixture=False):
                     page.set_viewport_size({'width': width, 'height': 900})
                     visit(path)
                     page.wait_for_timeout(100)
-                    require(page.evaluate('document.documentElement.scrollWidth <= innerWidth'), f'{path} overflow at {width}px: ' + str(page.evaluate("""() => ({width:innerWidth,scroll:document.documentElement.scrollWidth,offenders:[...document.querySelectorAll('body *')].filter(e=>e.getBoundingClientRect().right>innerWidth+2).slice(0,8).map(e=>({tag:e.tagName,cls:String(e.className).slice(0,80),right:Math.round(e.getBoundingClientRect().right)}))})""")))
+                    # The asynchronous feed and animated ticker can briefly move during
+                    # hydration. Assert the settled viewport, not an intermediate frame.
+                    page.wait_for_function('document.documentElement.scrollWidth <= innerWidth', timeout=4000)
         check('responsive layouts at mobile, tablet and desktop widths', responsive)
 
         def drawer():
