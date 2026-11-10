@@ -26,7 +26,7 @@ class ArticlePublicationDateTests(unittest.TestCase):
         self.assertIn('content="2026-10-15T08:00:00Z"', page)
         schema = json.loads(re.search(r'<script type="application/ld\+json">([^<]+)</script>', page).group(1))
         self.assertEqual(schema["datePublished"], "2026-10-15T08:00:00Z")
-        self.assertEqual(schema["dateModified"], "2026-10-15T08:00:00Z")
+        self.assertNotIn("dateModified", schema)  # No edit time can be inferred from publication.
 
     def test_real_site_publication_date_is_preferred_to_source_date(self):
         actual, label, original_iso = _article_publication_datetime(article(

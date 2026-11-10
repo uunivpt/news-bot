@@ -97,6 +97,9 @@ function slugify(value){
  return String(value||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,110)||'story';
 }
 function ck(item){
+ // Explicit Marathi publisher signal is a desk view, not a URL rewrite.
+ const publisher=typeof item==='string'?'':String(item?.source||item?.source_name||'');
+ if(/tv9 marathi|abp majha|abp माझा/i.test(publisher))return 'maharashtra';
  const raw=typeof item==='string'?item:(item?.category||item?.section||'all');
  const key=String(raw).toLowerCase().trim();
  if(key.includes('maharashtra'))return'maharashtra';

@@ -270,6 +270,8 @@ def _matches_public_desk(row, category):
  # Keep Maharashtra publisher reports discoverable on Home/Archive but do not
  # mix explicitly Marathi-desk headlines into the general India listing.
  source=str(row.get("source_name") or row.get("source") or "").lower()
+ if category=="maharashtra" and ("tv9 marathi" in source or "abp majha" in source or "abp माझा" in source):
+  return True
  if category=="india" and ("tv9 marathi" in source or "abp majha" in source or "abp माझा" in source):
   return False
  return actual==category or (category=="politics" and actual=="india"
@@ -894,7 +896,8 @@ def _article_html(row):
  date_html=('<time class="article-published" datetime="'+html.escape(pub_iso,quote=True)+'">'+html.escape(published_label)+': '+html.escape(published_at.astimezone(ZoneInfo("Asia/Kolkata")).strftime("%d %b %Y, %I:%M %p IST"))+'</time>') if published_at else '<span class="article-published">Publication date unavailable</span>'
  og_published_meta='<meta property="article:published_time" content="'+html.escape(pub_iso,quote=True)+'">' if pub_iso else ''
  summary=plain_source_text(row.get("summary") or row.get("bot_summary"))
- language="hi" if normalize_category(category,title,summary)=="hindi" else "en"
+ from app.seo_indexing import _news_language
+ language=_news_language(row)
  body=plain_source_text(row.get("article") or row.get("bot_article") or row.get("body") or summary,paragraphs=True)
  source=str(row.get("source_name") or "PoliticsHub.in")
  source_url=_safe_source_url(row.get("url"))
@@ -909,7 +912,6 @@ def _article_html(row):
  }
  if published_at:
   data["datePublished"]=pub_iso
-  data["dateModified"]=pub_iso
  if source_url:
   data["isBasedOn"]=source_url
  json_ld=json.dumps(data,ensure_ascii=False).replace("<", "\\u003c")

@@ -2,7 +2,7 @@
  function phTs(v){var raw=String(v||'').trim();if(!raw)return 0;raw=raw.split('·').join(' ').split('•').join(' ');var t=Date.parse(raw);return Number.isFinite(t)?t:0}
  function phSorted(items){return Array.from(items).sort(function(a,b){return Number(!!b.editorial_featured)-Number(!!a.editorial_featured)||phTs(b.editorial_featured_at)-phTs(a.editorial_featured_at)||phTs(b.date)-phTs(a.date)||Number(b.id||0)-Number(a.id||0)})}
  function phMeta(i){return '<span class="meta"><b>'+esc(i.category||'News')+'</b><span>'+esc(ago(i.date)||fmt(i.date))+'</span><span>'+esc(i.source||'PoliticsHub')+'</span></span>'}
- function phMedia(i,lead){if(!i.image)return'';return '<div class="'+(lead?'ph14-media':'ph14-thumb')+'"><img src="'+esc(i.image)+'" alt="" loading="'+(lead?'eager':'lazy')+'" decoding="async"></div>'}
+ function phMedia(i,lead){var graphic=lead&&!i.image&&/^\d+$/.test(String(i.id||''));if(!i.image&&!graphic)return'';var src=graphic?'/api/og/'+encodeURIComponent(String(i.id)):i.image;return '<div class="'+(lead?'ph14-media':'ph14-thumb')+'"><img src="'+esc(src)+'" alt="'+(graphic?'PoliticsHub editorial graphic, not a news photograph':'')+'" loading="'+(lead?'eager':'lazy')+'" decoding="async">'+(graphic?'<small class="ph14-graphic-label">PoliticsHub headline graphic · Not a news photograph</small>':'')+'</div>'}
  home=function(c){
   document.documentElement.lang=c==='hindi'?'hi':'en';
   setActive(c);document.title=(c==='all'?'':(CATS.find(function(x){return x[0]===c})||['',''])[1]+' — ')+'PoliticsHub.in';

@@ -232,3 +232,6 @@ html[data-theme=dark] .ph-ui-home {
 
 /* Without the sidebar, main news rows use the full feed width. */
 .ph-ui-home .ph14-feed { grid-template-columns: minmax(0, 1fr); }
+
+/* Editorial graphics identify missing rights-cleared photography honestly. */
+.ph-ui-home .ph14-media{position:relative}.ph-ui-home .ph14-graphic-label{position:absolute;bottom:10px;left:10px;max-width:calc(100% - 20px);font:650 10px/1.4 Inter,Arial,sans-serif;letter-spacing:.01em;background:rgba(10,10,10,.86);color:#fff;padding:6px 9px;border-radius:5px;pointer-events:none}

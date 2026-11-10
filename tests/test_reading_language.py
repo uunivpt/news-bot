@@ -38,6 +38,14 @@ class ReadingLanguageTests(unittest.TestCase):
         data = json.loads(re.search(r'<script type="application/ld\+json">(.*?)</script>', document).group(1))
         self.assertEqual(data['inLanguage'], 'en')
 
+    def test_marathi_publisher_stays_marathi_even_with_legacy_india_category(self):
+        row = dict(self.row, category='india', source_name='TV9 Marathi - Maharashtra',
+                   title='महाराष्ट्रातील निवडणुकीविषयी ताजी माहिती')
+        document = api._article_html(row)
+        self.assertIn('<html lang="mr">', document)
+        data = json.loads(re.search(r'<script type="application/ld\\+json">(.*?)</script>', document).group(1))
+        self.assertEqual(data['inLanguage'], 'mr')
+
     def test_server_rendered_hindi_desk_declares_hindi(self):
         with patch.object(api, '_public_rows_for_section', return_value=[self.row]):
             response = self.client.get('/api/seo-section/hindi')

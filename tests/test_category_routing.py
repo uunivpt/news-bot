@@ -42,6 +42,8 @@ class EditorialCategoryRoutingTests(unittest.TestCase):
                    "title": "Maharashtra assembly news"}
         abp = dict(marathi, id=102, source_name="ABP Majha - Maharashtra")
         national = dict(marathi, id=103, source_name="The Hindu - India")
+        self.assertTrue(api._matches_public_desk(marathi, "maharashtra"))
+        self.assertTrue(api._matches_public_desk(abp, "maharashtra"))
         self.assertFalse(api._matches_public_desk(marathi, "india"))
         self.assertFalse(api._matches_public_desk(abp, "india"))
         self.assertTrue(api._matches_public_desk(national, "india"))

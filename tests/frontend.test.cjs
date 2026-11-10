@@ -82,6 +82,13 @@ test('Politics desk includes political India headlines without rewriting canonic
  assert.equal(vm.runInContext("articleHref({id:'77',news_number:'8765',category:'india',title:'Three AAP MLAs join BJP in Punjab'})",ctx),'/india/8765');
 });
 
+test('Marathi publishers appear in Maharashtra view but preserve canonical India links',()=>{
+ const ctx=harness({'/api/news?category=all&limit=120':[],'/news-data.json':[]});
+ assert.equal(vm.runInContext("ck({category:'india',source_name:'TV9 Marathi - Maharashtra'})",ctx),'maharashtra');
+ assert.equal(vm.runInContext("inCat({category:'india',source_name:'ABP Majha - Maharashtra'},'maharashtra')",ctx),true);
+ assert.equal(vm.runInContext("inCat({category:'india',source_name:'ABP Majha - Maharashtra'},'india')",ctx),false);
+ assert.equal(vm.runInContext("articleHref({id:'77',news_number:'8765',category:'india',source_name:'TV9 Marathi - Maharashtra'})",ctx),'/india/8765');
+});
 test('source snapshot supersedes stale browser cache and stays source-fed',async()=>{
  const ctx=harness({'/api/news?category=all&limit=120':new Error('database quota'),
   '/news-data.json':[{id:123,title:'Fresh source-linked story',category:'india'}]});
