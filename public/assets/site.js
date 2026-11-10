@@ -1,5 +1,6 @@
 
 const CATS=[['all','Home'],['maharashtra','Maharashtra'],['india','India'],['politics','Politics'],['world','World'],['hindi','Hindi']];
+const NAV_CATS=[['all','Home'],['maharashtra','Maharashtra'],['india','India'],['world','World'],['exams','India Exams']];
 const TABS=[['all','All'],['maharashtra','Maharashtra'],['politics','Politics'],['india','India'],['world','World'],['hindi','Hindi']];
 const ENDPOINTS={api:'/api/news?category=all&limit=120',item:'/api/news/',search:'/api/search',snap:'/news-data.json',hindi:'/api/hindi-feed'};
 // Static reports under source review are not injected into the news feed.
@@ -158,8 +159,8 @@ function moveInd(){
 }
 function build(){
  const nav=$('nav.main'),drawer=$('#dl');
- if(nav)nav.innerHTML='<span id="ind" aria-hidden="true"></span>'+CATS.map(([k,l])=>'<a href="'+hl(k)+'" data-k="'+k+'">'+l+'</a>').join('');
- if(drawer)drawer.innerHTML=CATS.map(([k,l])=>'<a class="l" href="'+hl(k)+'" data-k="'+k+'">'+l+'</a>').join('')+'<a class="l" href="/briefing/">Quick Briefing</a><a class="l" href="/sources.html">Sources & references</a><a class="l" href="/saved.html">Saved stories</a><a class="l" href="/archive/">Full archive</a>';
+ if(nav)nav.innerHTML='<span id="ind" aria-hidden="true"></span>'+NAV_CATS.map(([k,l])=>'<a href="'+hl(k)+'" data-k="'+k+'">'+l+'</a>').join('');
+ if(drawer)drawer.innerHTML=NAV_CATS.map(([k,l])=>'<a class="l" href="'+hl(k)+'" data-k="'+k+'">'+l+'</a>').join('')+'<a class="l" href="/briefing/">Quick Briefing</a><a class="l" href="/sources.html">Sources & references</a><a class="l" href="/saved.html">Saved stories</a><a class="l" href="/archive/">Full archive</a>';
  const y=$('#yr');if(y)y.textContent=new Date().getFullYear();
 }
 function ticker(){

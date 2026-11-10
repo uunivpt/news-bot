@@ -9,7 +9,7 @@
   var list=phSorted(S.items.filter(function(i){return inCat(i,c)})),lead=list[0],briefs=list.slice(1,4),rows=list.slice(4,24),remaining=list.slice(24);
   var found=CATS.find(function(x){return x[0]===c}),label=found?found[1]:'Home',day=new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric',timeZone:'Asia/Kolkata'});
   var ui=window.PHNewsroomUI;
-  var cats=CATS.map(function(x){return '<a href="'+hl(x[0])+'" class="'+(x[0]===c?'on':'')+'"'+(x[0]===c?' aria-current="page"':'')+'>'+esc(x[1])+'</a>'}).join('');
+  var cats=NAV_CATS.map(function(x){return '<a href="'+hl(x[0])+'" class="'+(x[0]===c?'on':'')+'"'+(x[0]===c?' aria-current="page"':'')+'>'+esc(x[1])+'</a>'}).join('');
   var start='<div class="ph14-home ph-ui-home"><div class="ph14-datebar"><strong>PoliticsHub News Desk</strong><span>'+esc(day)+' · '+esc(label)+'</span></div><nav class="ph14-cats" aria-label="News desks">'+cats+'</nav>';
   if(!lead){$('#app').innerHTML=start+'<div class="msg"><h1>No reports in this desk yet</h1><p>Browse another desk or return when more stories are published.</p><p><a class="btn secondary" href="/archive/">Browse the archive</a></p></div>'+'</div>';if(ui)ui.bind($('#app .ph-ui-home'));return}
   var leadPublished=phTs(lead.date);
