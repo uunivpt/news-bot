@@ -97,7 +97,7 @@ class SEOIndexingTests(unittest.TestCase):
         served=Path("public/static-sitemap.xml").read_text(encoding="utf-8").strip()
         generated=static_sitemap_xml()
         self.assertEqual(served,generated)
-        self.assertEqual(len(ET.fromstring(served)),28)
+        self.assertEqual(len(ET.fromstring(served)),14)
 
     def test_active_category_landings_are_discoverable_but_retired_desks_are_not(self):
         from app.seo_indexing import STATIC_PAGES
@@ -193,6 +193,48 @@ class SEOIndexingTests(unittest.TestCase):
             expected='<link rel="canonical" href="'+SITE_ORIGIN+path+'">'
             with self.subTest(path=path):
                 self.assertIn(expected,source)
+
+    def test_search_results_focus_on_home_and_news_not_support_pages(self):
+        from app.seo_indexing import STATIC_PAGES
+        homepage=Path("public/index.html").read_text(encoding="utf-8")
+        self.assertIn("<title>PoliticsHub.in | Latest India, World &amp; Politics News</title>",homepage)
+        self.assertIn('<meta name="robots" content="index,follow,max-image-preview:large">',homepage)
+        self.assertIn('"@type":"WebPage"',homepage)
+        self.assertIn('"@id":"https://www.politicshub.in/#website"',homepage)
+        homepage_xml=ET.fromstring(static_sitemap_xml())
+        urls=[entry[0].text for entry in homepage_xml]
+        self.assertIn(SITE_ORIGIN+"/",urls)
+        for desk in ("/india/", "/politics/", "/world/", "/maharashtra/", "/hindi/", "/exams/"):
+            self.assertIn(SITE_ORIGIN+desk,urls)
+        support=(
+            "/about.html", "/contact.html", "/editorial-policy.html", "/corrections.html",
+            "/privacy.html", "/cookies.html", "/terms.html", "/disclaimer.html",
+            "/newsletter.html", "/data-rights.html", "/licenses.html", "/sources.html",
+            "/library/",
+        )
+        for path in support:
+            with self.subTest(path=path):
+                self.assertNotIn(path,STATIC_PAGES)
+                self.assertNotIn(SITE_ORIGIN+path,urls)
+                disk="public"+path+("index.html" if path.endswith("/") else "")
+                markup=Path(disk).read_text(encoding="utf-8")
+                self.assertIn('<meta name="robots" content="noindex,follow">',markup)
+                self.assertIn('rel="canonical" href="'+SITE_ORIGIN+path+'"',markup)
+        # Visible editorial attribution remains available to humans, but this
+        # shallow bio is not a separate Google search landing page.
+        author=api.app.test_client().get("/author/politicshub-news-desk")
+        self.assertEqual(author.status_code,200)
+        self.assertIn('<meta name="robots" content="noindex,follow">',author.get_data(as_text=True))
+        self.assertEqual(author.headers.get("X-Robots-Tag"),"noindex, follow")
+        self.assertIn('href="/"',author.get_data(as_text=True))
+
+    def test_eligible_news_articles_remain_searchable(self):
+        row=example()
+        self.assertTrue(is_indexable(row))
+        url=SITE_ORIGIN+canonical_path(row)
+        self.assertIn(url,news_sitemap_xml([row]))
+        html_page=api._article_html(row)
+        self.assertNotIn('content="noindex,follow',html_page)
 
     def test_long_headline_sitemap_matches_rendered_page_canonical(self):
         row=example()
