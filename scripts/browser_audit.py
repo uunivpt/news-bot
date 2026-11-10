@@ -877,6 +877,68 @@ def run(base, output,admin_fixture=False):
                 isolated.close()
         check('remembered Topics are removed by every preference withdrawal path and active controls reflect consent', topic_preference_withdrawal)
 
+        def topic_keyboard_continuation():
+            isolated = browser.new_context(viewport={'width': 390, 'height': 844}, service_workers='block')
+            isolated.route('**/*', lambda route: route.continue_() if route.request.url.startswith(base + '/') else route.abort())
+            if admin_fixture:
+                isolated.route(base + '/topics/**', lambda route: route.fulfill(content_type='text/html',
+                    body=(Path(__file__).resolve().parents[1] / 'public/topics/index.html').read_text(encoding='utf-8')))
+            now = datetime.now(timezone.utc)
+            reports = [{'id': 770000 + index, 'news_number': 770000000000 + index,
+                        'title': 'World policy fixture ' + str(index + 1), 'summary': 'Deterministic keyboard-reading fixture.',
+                        'category': 'world', 'source_name': 'Fixture World Desk',
+                        'published_at': (now - timedelta(minutes=index + 1)).isoformat(),
+                        'url': 'https://example.com/report/' + str(index)} for index in range(27)]
+            reports.append(dict(reports[0], id=880000, news_number=880000000000, category='india', title='India fixture'))
+            isolated.route(base + '/api/news?category=all&limit=120', lambda route: route.fulfill(json=reports))
+            isolated.route(base + '/api/hindi-feed', lambda route: route.fulfill(json=[]))
+            isolated.add_init_script("localStorage.setItem('ph-consent-v1', 'essential')")
+            reader = isolated.new_page()
+            reader.on('pageerror', lambda error: errors.append(str(error)))
+            try:
+                reader.goto(base + '/topics/?topic=world', wait_until='networkidle')
+                reader.wait_for_function("() => document.querySelector('#timelineCount').textContent === '27 matching headlines'")
+                reader.locator('#deskSelect').select_option('world')
+                reader.locator('#periodSelect').select_option('7')
+                reader.locator('#topicSearch').fill('World policy')
+                reader.evaluate("""() => {
+                    window.__topicDocument = true;
+                    document.querySelector('#topicFilters').addEventListener('submit', event => {
+                        window.__topicSubmitPrevented = event.defaultPrevented;
+                    });
+                }""")
+                reader.locator('#topicSearch').press('Enter')
+                require(reader.evaluate('window.__topicSubmitPrevented === true'), 'Enter submitted the Topics form instead of keeping its filters')
+                require(reader.evaluate('window.__topicDocument === true'), 'Enter reloaded the Topics document')
+                require(reader.url == base + '/topics/?topic=world', 'Enter changed the topic URL')
+                for control, value in [('topicSelect', 'world'), ('deskSelect', 'world'), ('periodSelect', '7'), ('topicSearch', 'World policy')]:
+                    require(reader.locator('#' + control).input_value() == value, 'Enter reset ' + control)
+                require(reader.locator('#topicSearch').evaluate('(node) => node === document.activeElement'), 'Enter lost the search field focus')
+                links = reader.locator('#timelineResults h3 a')
+                require(links.count() == 12, 'Initial timeline page size changed')
+                original = links.evaluate_all('(nodes) => nodes.map(node => node.getAttribute("href"))')
+                for before, total in [(12, 24), (24, 27)]:
+                    reader.locator('#moreTimeline').focus()
+                    reader.keyboard.press('Enter')
+                    require(links.count() == total, 'Show more dropped or duplicated timeline stories')
+                    require(links.nth(before).evaluate('(node) => node === document.activeElement'), 'Show more skipped keyboard continuation into the new stories')
+                    require(links.nth(before).get_attribute('href') == '/world/' + str(reports[before]['news_number']), 'Timeline chronology or canonical story link changed')
+                    reader.keyboard.press('Tab')
+                    require(reader.locator('#timelineResults > li').nth(before).locator('.ph-story-source').evaluate('(node) => node === document.activeElement'), 'New story source link is not next in the keyboard order')
+                require(not reader.locator('#moreTimeline').is_visible(), 'Exhausted timeline button remained visible')
+                require(links.evaluate_all('(nodes) => nodes.slice(0, 12).map(node => node.getAttribute("href"))') == original, 'Loading more changed existing timeline links')
+                require(reader.locator('#timelineResults > li').first.locator('.ph-story-meta').inner_text().endswith('IST'), 'Timeline lost its publication timezone label')
+                reader.locator('#topicSearch').fill('no such fixture')
+                reader.locator('#topicSearch').press('Enter')
+                require(reader.locator('#timelineCount').inner_text() == '0 matching headlines', 'Empty search changed after Enter')
+                require(not reader.locator('#moreTimeline').is_visible(), 'Empty search exposed load more')
+                reader.locator('#topicSearch').fill('World policy')
+                require(links.count() == 12, 'Changing filters did not reset the timeline page size')
+                require(reader.locator('#topicSearch').evaluate('(node) => node === document.activeElement'), 'Filter change unexpectedly moved focus')
+            finally:
+                isolated.close()
+        check('Topics Enter preserves filters and timeline pagination continues keyboard reading', topic_keyboard_continuation)
+
         def saved():
             visit('/saved.html')
             page.wait_for_selector('[data-reader-consent]')
