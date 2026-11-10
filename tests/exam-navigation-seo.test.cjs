@@ -10,7 +10,7 @@ test('Home Maharashtra India World India Exams are the five primary links',()=>{
  assert.ok(editorial.includes('var cats=NAV_CATS.map'));
  const nav=home.match(/<nav class="main" id="nav"[^>]*>([\s\S]*?)<\/nav>/)?.[1];
  assert.ok(nav);assert.deepEqual(hrefs(nav),['/','/maharashtra/','/india/','/world/','/exams/']);
- assert.ok(home.includes('<li><a href="/exams/">India Exams</a></li>'));
+ assert.ok(home.includes('<li><a href="/exams/">Browse examination updates</a></li>'));
 });
 test('India Exams page is index-eligible, in the sitemap, and links back to primary desks',()=>{
  const page=read('public/exams/index.html'),robots=read('public/robots.txt'),sitemap=read('public/static-sitemap.xml');
