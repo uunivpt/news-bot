@@ -1,24 +1,40 @@
 {
-  "Red Fort": {
-    "checked_at": "2026-11-10T15:14:00+00:00",
-    "photo": {
-      "image_url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2a/Delhi_fort.jpg/1280px-Delhi_fort.jpg",
-      "image_source": "wikimedia-commons",
-      "image_credit": "PerSona77",
-      "image_license": "cc-by-sa-3.0",
-      "image_source_url": "https://commons.wikimedia.org/wiki/File:Delhi_fort.jpg",
-      "image_license_url": "https://creativecommons.org/licenses/by-sa/3.0/"
-    }
+  "Ajit Pawar": {
+    "checked_at": "2026-11-10T15:50:44.290370+00:00",
+    "photo": null
   },
   "Pinarayi Vijayan": {
     "checked_at": "2026-11-10T15:14:00+00:00",
     "photo": {
-      "image_url": "https://upload.wikimedia.org/wikipedia/commons/e/ec/Chief_Minister_Pinarayi_Vijayan_2023.jpg",
-      "image_source": "wikimedia-commons",
       "image_credit": "Augustus Binu",
       "image_license": "cc-by-sa-3.0",
+      "image_license_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+      "image_source": "wikimedia-commons",
       "image_source_url": "https://commons.wikimedia.org/wiki/File:Chief_Minister_Pinarayi_Vijayan_2023.jpg",
-      "image_license_url": "https://creativecommons.org/licenses/by-sa/3.0/"
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/e/ec/Chief_Minister_Pinarayi_Vijayan_2023.jpg"
     }
+  },
+  "Red Fort": {
+    "checked_at": "2026-11-10T15:14:00+00:00",
+    "photo": {
+      "image_credit": "PerSona77",
+      "image_license": "cc-by-sa-3.0",
+      "image_license_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+      "image_source": "wikimedia-commons",
+      "image_source_url": "https://commons.wikimedia.org/wiki/File:Delhi_fort.jpg",
+      "image_url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2a/Delhi_fort.jpg/1280px-Delhi_fort.jpg"
+    }
+  },
+  "Sonia Gandhi": {
+    "checked_at": "2026-11-10T15:50:44.290370+00:00",
+    "photo": null
+  },
+  "Sunetra Pawar": {
+    "checked_at": "2026-11-10T15:50:44.290370+00:00",
+    "photo": null
+  },
+  "Suresh Gopi": {
+    "checked_at": "2026-11-10T15:50:44.290370+00:00",
+    "photo": null
   }
 }
