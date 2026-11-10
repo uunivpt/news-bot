@@ -124,21 +124,29 @@
     });
     if (!counts.size) breakdown.append(el('p','','No sources in current selection.'));
   }
+  function storedTopic() {
+    if (!preferencesAllowed()) return null;
+    try {
+      const value = localStorage.getItem('ph-topic-v1');
+      return Object.prototype.hasOwnProperty.call(TOPICS,value) ? value : null;
+    } catch (_) { return null }
+  }
   function restorePreference() {
+    const saved = storedTopic();
     const q = new URLSearchParams(location.search).get('topic');
     if (q && Object.prototype.hasOwnProperty.call(TOPICS,q)) {
       $('topicSelect').value = q;
-    } else if (preferencesAllowed()) {
-      try {const value=localStorage.getItem('ph-topic-v1'); if (Object.prototype.hasOwnProperty.call(TOPICS,value)) $('topicSelect').value = value} catch (_) {}
+    } else if (saved !== null) {
+      $('topicSelect').value = saved;
     }
-    $('rememberTopic').checked = preferencesAllowed();
+    $('rememberTopic').checked = saved !== null;
   }
   function syncPreferenceConsent() {
     if (!preferencesAllowed()) {
-      $('rememberTopic').checked = false;
       // Also remove a topic left behind by an earlier essential-only choice.
       try {if (localStorage.getItem('ph-consent-v1') === 'essential') localStorage.removeItem('ph-topic-v1')} catch (_) {}
     }
+    $('rememberTopic').checked = storedTopic() !== null;
   }
   for (const event of ['ph-preferences-changed', 'ph-preferences-cleared', 'storage']) {
     window.addEventListener(event, syncPreferenceConsent);
