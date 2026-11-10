@@ -90,7 +90,7 @@ test('published rows leave pending-only results immediately',async()=>{
 });
 
 test('all pending rows expose Verify and publish, including previously reviewed drafts',()=>{
-  const context=vm.createContext({workspace:{access:{read_only:false}},Number});
+  const context=vm.createContext({workspace:{access:{read_only:false}},Number,can:()=>true});
   vm.runInContext(source.slice(source.indexOf('function storyActions('),source.indexOf('function renderNews(')),context);
   const html=vm.runInContext("storyActions({id:44,status:'pending',article_available:false,fact_check_status:'reviewed'})",context);
   assert.match(html,/Verify &amp; publish/);
@@ -99,7 +99,7 @@ test('all pending rows expose Verify and publish, including previously reviewed 
 });
 
 test('phone-published stories can be promoted and checked again without a new article',()=>{
-  const context=vm.createContext({workspace:{access:{read_only:false}},Number});
+  const context=vm.createContext({workspace:{access:{read_only:false}},Number,can:()=>true});
   vm.runInContext(source.slice(source.indexOf('function storyActions('),source.indexOf('function renderNews(')),context);
   const html=vm.runInContext("storyActions({id:44,status:'published',article_available:true})",context);
   assert.match(html,/Make main news \/ check website/);

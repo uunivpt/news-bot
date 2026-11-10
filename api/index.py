@@ -2322,7 +2322,8 @@ def admin_editorial_draft(item_id):
   row=dict(row)
   return jsonify({'id':item_id,'status':row.get('status'),'news_number':news_number(row),'title':row.get('title') or '',
    'summary':row.get('bot_summary') or row.get('summary') or '',
-   'category':row.get('category') or 'general','revision':editorial_revision(row)})
+   'category':row.get('category') or 'general','revision':editorial_revision(row),
+   'article':row.get('bot_article') or row.get('article') or '', 'image_url':row.get('image_url') or ''})
  finally:database.close()
 
 def _editorial_source_packets(database, row, limit=4):

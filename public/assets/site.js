@@ -229,7 +229,7 @@ function home(c){document.documentElement.lang=c==='hindi'?'hi':'en';setActive(c
  <div class="tile sc" style="--d:3"><span class="lbl">Jump to a desk</span><div class="pills">${pl}</div></div>
  <div class="tile lt" style="--d:4"><span class="lbl">Just in</span>${lt}</div></section>`;
  const bs=CATS.slice(1).map(([k,l])=>`<a data-k="${k}" href="${hl(k)}">${l}</a><i>✦</i>`).join(''),band=`<div class="band" aria-label="Browse sections"><div class="bt">${bs}<span class="bt-dup" aria-hidden="true" data-nosnippet>${bs+bs}</span></div></div>`;
- $('#app').innerHTML=hero+band+tabs+`<div class="sh"><h2>Latest stories</h2><span class="lbl">${list.length} stories</span></div><div class="grid">${rest.map(card).join('')||'<p class="msg" style="grid-column:1/-1">That is the only story in this section for now.</p>'}</div><section class="newsletter-card"><span class="lbl red">PoliticsHub Brief</span><h2>Important stories. No noise.</h2><p>Get a concise newsroom update in your inbox.</p><form id="homeNl"><input type="email" required placeholder="you@example.com" aria-label="Email address"><label class="consent-check"><input name="privacy" type="checkbox" required> I agree to receive the newsletter and to the <a href="/privacy.html">Privacy Policy</a>.</label><label class="consent-check"><input name="adult" type="checkbox" required> I confirm I am 18 or older.</label><button class="btn">Subscribe</button></form><small id="homeNlMsg"></small></section>`;fx();enhanceHome(c);bindNewsletter()}
+ $('#app').innerHTML=hero+band+tabs+`<div class="sh"><h2>Latest stories</h2><span class="lbl">${list.length} stories</span></div><div class="grid">${rest.map(card).join('')||'<p class="msg" style="grid-column:1/-1">That is the only story in this section for now.</p>'}</div><section class="newsletter-card"><span class="lbl red">PoliticsHub Brief</span><h2>Important stories. No noise.</h2><p>Get a concise newsroom update in your inbox.</p><form id="homeNl"><input type="email" required placeholder="you@example.com" aria-label="Email address"><label class="consent-check"><input name="privacy" type="checkbox" required> I agree to receive the newsletter and to the <a href="/privacy.html">Privacy Policy</a>.</label><label class="consent-check"><input name="adult" type="checkbox" required> I confirm I am 18 or older.</label><button class="btn">Subscribe</button></form><small id="homeNlMsg"></small></section>`;fx();bindNewsletter()}
 let articleRequest=0,articleController;
 async function article(id){setActive('');
  const requestId=++articleRequest;articleController?.abort();articleController=new AbortController();
@@ -366,17 +366,6 @@ addEventListener('focus',()=>refreshLatest());
 if('serviceWorker' in navigator) addEventListener('load',()=>navigator.serviceWorker.register('/service-worker.js').catch(()=>{}));
 addEventListener('load',()=>showConsentBanner(false));
 
-async function enhanceHome(category){
- const rail=$('#app .ph14-rail'),target=rail||$('#app .grid'); if(!target||S.mode!=='api')return;
- try{
-  const r=await get('/api/trending?limit=5');
-  const filtered=r.filter(i=>inCat(i,category)&&Number(i.view_count)>0);
-  if(!filtered.length||!target.isConnected)return;
-  const section=document.createElement('section');section.className=rail?'ph14-rail-card':'trend-section';
-  section.innerHTML='<h3>Most read</h3><ol class="most-read">'+filtered.map(i=>'<li><a href="'+esc(articleHref(i))+'">'+esc(i.title)+'</a><small>'+Number(i.view_count).toLocaleString('en-IN')+' page views</small></li>').join('')+'</ol>';
-  if(rail)rail.append(section);else target.parentNode.insertBefore(section,target.nextSibling);
- }catch(e){}
-}
 function trackView(id){try{navigator.sendBeacon('/api/news/'+encodeURIComponent(id)+'/view',new Blob(['{}'],{type:'application/json'}))}catch(e){}}
 function updateSearchSources(){
  const select=$('#searchSource');if(!select)return;

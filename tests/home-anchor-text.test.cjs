@@ -2,16 +2,18 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const home=fs.readFileSync('public/index.html','utf8');
-const css=fs.readFileSync('public/assets/reading-guides-home.css','utf8');
-test('homepage guide cards use short, descriptive linked headings',()=>{
-  const cards=[...home.matchAll(/<article class="ph-guide-card">([\s\S]*?)<\/article>/g)];
-  assert.equal(cards.length,5);
-  for(const [,card] of cards){
-    assert.match(card,/<h3><a href="\/[^"]+">[^<]+<\/a><\/h3>/);
-    assert.match(card,/<p>[^<]+<\/p>/);
-    assert.ok(card.indexOf('</a>')<card.indexOf('<p>'),'description must not be link text');
-  }
-  assert.match(css,/\.ph-guides-grid>\.ph-guide-card/);
+test('lengthy explainer sections are absent from the homepage',()=>{
+  assert.doesNotMatch(home,/class="ph-guides(?:\s|")/);
+  assert.doesNotMatch(home,/class="ph-guide-card"/);
+  for(const heading of [
+    'Understand the news, not just the headline.',
+    'What to check before sharing a headline',
+    'How to read and verify our news coverage'
+  ])assert.ok(!home.includes(heading),'unexpected homepage explainer: '+heading);
+  assert.match(home,/<main id="app"/);
+  // Independent guide pages stay discoverable through the footer.
+  assert.match(home,/href="\/guides\/election-results\.html"/);
+  assert.match(home,/href="\/guides\/maharashtra-mlc\.html"/);
 });
 test('static homepage internal anchor texts are distinct and concise',()=>{
  const seen=new Set();
