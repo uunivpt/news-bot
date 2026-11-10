@@ -161,8 +161,8 @@ function newsPhoto(item){
  const license=String(item?.image_license||'').trim().toLowerCase().split(/\s+/)[0];
  const provenance=String(item?.image_source||'').toLowerCase();
  if(provenance==='wikimedia-commons'){
-  if(url.hostname!=='upload.wikimedia.org'||!url.pathname.startsWith('/wikipedia/commons/'))return '';
-  if(!['cc0','pdm','cc-by-4.0','cc-by-sa-4.0'].includes(license))return '';
+  if(!['upload.wikimedia.org','thumb.wikimedia.org'].includes(url.hostname)||!url.pathname.startsWith('/wikipedia/commons/'))return '';
+  if(!['cc0','pdm','cc-by-4.0','cc-by-sa-4.0','cc-by-3.0','cc-by-sa-3.0','cc-by-2.0','cc-by-sa-2.0'].includes(license))return '';
   if(!String(item?.image_credit||'').trim())return '';
   try{
    const page=new URL(item?.image_source_url||'');

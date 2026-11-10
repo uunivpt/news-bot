@@ -12,7 +12,7 @@ from functools import lru_cache
 import json
 from pathlib import Path
 import re
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import urlencode, urlsplit, urlunsplit
 
 from app.source_http import fetch_source, public_http_url
 
@@ -71,6 +71,10 @@ LICENSES = {
     "public domain": ("pdm", "https://creativecommons.org/publicdomain/mark/1.0/"),
     "cc by 4.0": ("cc-by-4.0", "https://creativecommons.org/licenses/by/4.0/"),
     "cc by-sa 4.0": ("cc-by-sa-4.0", "https://creativecommons.org/licenses/by-sa/4.0/"),
+    "cc by 3.0": ("cc-by-3.0", "https://creativecommons.org/licenses/by/3.0/"),
+    "cc by-sa 3.0": ("cc-by-sa-3.0", "https://creativecommons.org/licenses/by-sa/3.0/"),
+    "cc by 2.0": ("cc-by-2.0", "https://creativecommons.org/licenses/by/2.0/"),
+    "cc by-sa 2.0": ("cc-by-sa-2.0", "https://creativecommons.org/licenses/by-sa/2.0/"),
 }
 
 
@@ -93,7 +97,7 @@ def valid_photo(photo):
         parsed = urlsplit(url)
         page = urlsplit(str(photo.get("image_source_url") or ""))
         lic = urlsplit(str(photo.get("image_license_url") or ""))
-        if parsed.scheme != "https" or parsed.hostname != "upload.wikimedia.org":
+        if parsed.scheme != "https" or parsed.hostname not in {"upload.wikimedia.org", "thumb.wikimedia.org"}:
             return False
         if not parsed.path.startswith("/wikipedia/commons/") or parsed.query or parsed.fragment:
             return False
@@ -161,8 +165,14 @@ def lookup_photo(subject, *, transport=fetch_source):
             return None
         artist = "Wikimedia Commons public-domain archive"
     artist = " ".join(artist.split())[:220]
+    source_image = str(info.get("thumburl") or info.get("url") or "")
+    parts = urlsplit(source_image)
+    if parts.scheme != "https" or parts.hostname not in {"upload.wikimedia.org", "thumb.wikimedia.org"}:
+        return None
+    # Wikimedia adds tracking parameters to imageinfo CDN URLs. Discard them.
+    clean_image_url = urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
     result = {
-        "image_url": info.get("thumburl") or info.get("url") or "",
+        "image_url": clean_image_url,
         "image_source": "wikimedia-commons",
         "image_credit": artist,
         "image_license": normalized[0],

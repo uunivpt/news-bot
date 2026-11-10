@@ -30,3 +30,18 @@ test('event photo claims are never made about Commons archive photographs', () =
   assert.match(site,/File source/);
   assert.match(site,/License/);
 });
+
+test('Commons official thumbnail CDN and CC BY-SA 3.0 are accepted with attribution', () => {
+  const image='https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2a/Delhi_fort.jpg/1280px-Delhi_fort.jpg';
+  const subject={
+    ...row,
+    image,
+    image_license:'cc-by-sa-3.0',
+    image_credit:'PerSona77',
+    image_source_url:'https://commons.wikimedia.org/wiki/File:Delhi_fort.jpg',
+    image_license_url:'https://creativecommons.org/licenses/by-sa/3.0/',
+  };
+  assert.equal(newsPhoto(subject), image);
+  assert.equal(newsPhoto({...subject,image:'https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a/logo.jpg/1200px-logo.jpg'}),'');
+  assert.equal(newsPhoto({...subject,image_source_url:'https://other.example/wiki/File:Delhi_fort.jpg'}),'');
+});
