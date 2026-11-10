@@ -47,8 +47,23 @@ class EditorialCategoryRoutingTests(unittest.TestCase):
         self.assertFalse(api._matches_public_desk(marathi, "india"))
         self.assertFalse(api._matches_public_desk(abp, "india"))
         self.assertTrue(api._matches_public_desk(national, "india"))
-        self.assertTrue(api._matches_public_desk(marathi, "all"))
+        self.assertFalse(api._matches_public_desk(marathi, "all"))
         self.assertEqual(api.article_path(marathi), api.article_path(dict(marathi)))
+
+    def test_home_only_english_india_and_world(self):
+        from api import index as api
+        english_india={"category":"india","title":"India Parliament passes a bill","source_name":"The Hindu"}
+        english_world={"category":"world","title":"Global trade summit begins","source_name":"Reuters"}
+        hindi={"category":"india","title":"भारत में बड़ी खबर","source_name":"Hindi publisher"}
+        marathi={"category":"india","title":"महाराष्ट्रातील बातमी","language":"mr","source_name":"Local"}
+        regional_english={"category":"maharashtra","title":"Maharashtra local update"}
+        self.assertTrue(api._matches_public_desk(english_india,"all"))
+        self.assertTrue(api._matches_public_desk(english_world,"all"))
+        for item in (hindi,marathi,regional_english):
+            self.assertFalse(api._matches_public_desk(item,"all"))
+            self.assertFalse(api._matches_public_desk(item,"india"))
+        self.assertTrue(api._matches_public_desk(hindi,"hindi"))
+        self.assertTrue(api._matches_public_desk(marathi,"maharashtra"))
 
     def test_existing_active_categories_unaffected(self):
         self.assertEqual(normalize_category("world", "Indian trade delegation visits USA"), "world")
