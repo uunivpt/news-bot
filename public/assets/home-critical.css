@@ -488,19 +488,14 @@ input[type=email],input[type=search]{background:var(--card);color:var(--ink);fon
 
 #examRetry[hidden]{display:none}
 
-/* Photo-safe fallback: original licensed image when available; restrained desk art otherwise. */
-.ph14-editorial-visual{min-height:290px;display:flex;flex-direction:column;justify-content:space-between;padding:24px;isolation:isolate;overflow:hidden;background:linear-gradient(140deg,#151a23,#0a1018 55%,#141b26)!important;color:#687e92}
-.ph14-editorial-visual:before{content:"";position:absolute;inset:0;z-index:-1;background:radial-gradient(circle at 65% 43%,rgba(255,66,80,.12),transparent 55%);pointer-events:none}
-.ph14-editorial-visual svg{width:min(77%,330px);max-height:70%;align-self:center;flex:1;opacity:.8;filter:drop-shadow(0 8px 40px rgba(255,45,45,.11))}
-.ph14-visual-label,.ph14-visual-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;position:relative;z-index:1;font:700 11px/1.2 Inter,sans-serif;letter-spacing:.13em;color:#bccbd9}
-.ph14-visual-label b{color:#ff5a64}.ph14-visual-footer b{font:800 clamp(22px,3vw,35px)/1 "Bricolage Grotesque",sans-serif;letter-spacing:-.03em;color:#fafafa}.ph14-visual-footer small{font:600 9px Inter,sans-serif;letter-spacing:.11em;color:#a5b2bc}
-html[data-theme=light] .ph14-editorial-visual{background:linear-gradient(140deg,#e5ebf2,#dce3ea 55%,#cbd4df)!important;color:#758da0}
-html[data-theme=light] .ph14-editorial-visual:before{background:radial-gradient(circle at 65% 43%,rgba(220,45,55,.09),transparent 55%)}
-html[data-theme=light] .ph14-visual-label,html[data-theme=light] .ph14-visual-footer small{color:#4d5865}html[data-theme=light] .ph14-visual-footer b{color:#1a2633}
-@media(max-width:720px){.ph14-editorial-visual{height:235px!important;min-height:235px;padding:18px}.ph14-editorial-visual svg{max-height:150px;width:58%}.ph14-visual-footer b{font-size:25px}}
+/* Real photos only; avoid simulated news art and keep proper attribution. */
+.ph14-media,.ph14-thumb{margin:0;position:relative;overflow:hidden}
+.ph14-photo-credit{position:absolute;z-index:2;bottom:9px;left:9px;right:9px;max-width:calc(100% - 18px);display:block;padding:6px 9px;border-radius:6px;background:rgba(12,15,20,.86);color:#fff;font:600 10px/1.45 Inter,Arial,sans-serif;letter-spacing:0;overflow-wrap:anywhere}
+.ph14-lead:not(:has(.ph14-media)){min-height:0}
+
 
 /* Prevent long imported headlines and editorial cards from widening the page. */
 #app,#app .ph14-home,#app .ph14-hero,#app .ph14-lead,#app .ph14-copy,#app .ph14-side,#app .ph14-feed,#app .ph14-row,#app .ph14-brief,#app .ph14-media,#app .bento,#app .tile,#app .grid,#app .card{min-width:0;max-width:100%}
 #app .ph14-copy h1,#app .ph14-row h3,#app .ph14-brief h3,#app .hl h1,#app .card h3{overflow-wrap:anywhere;word-break:normal}
 #app .bento{grid-template-columns:repeat(12,minmax(0,1fr))}
-#app .ph14-media svg{display:block;max-width:100%;min-width:0}
+
