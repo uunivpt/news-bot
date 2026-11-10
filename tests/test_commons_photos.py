@@ -65,6 +65,30 @@ class CommonsPhotoTests(unittest.TestCase):
         self.assertTrue(all(kwargs["timeout"] == 8 for _, kwargs in requests))
         self.assertIsNone(photos.lookup_photo("Unapproved arbitrary search", transport=transport))
 
+    def test_real_commons_thumbnail_host_tracking_and_older_license(self):
+        def transport(url, **kwargs):
+            if "en.wikipedia.org" in url:
+                response = {"query": {"pages": [{"pageimage": "Delhi_fort.jpg"}]}}
+            else:
+                response = {"query": {"pages": [{"imageinfo": [{
+                    "width": 4242, "height": 1949,
+                    "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2a/Delhi_fort.jpg/1280px-Delhi_fort.jpg?utm_source=commons.wikimedia.org",
+                    "descriptionurl": "https://commons.wikimedia.org/wiki/File:Delhi_fort.jpg",
+                    "extmetadata": {
+                        "LicenseShortName": {"value": "CC BY-SA 3.0"},
+                        "Artist": {"value": "<a>PerSona77</a>"},
+                    },
+                }]}]}}
+            return SimpleNamespace(content=json.dumps(response).encode())
+        result = photos.lookup_photo("Red Fort", transport=transport)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["image_license"], "cc-by-sa-3.0")
+        self.assertEqual(result["image_credit"], "PerSona77")
+        self.assertEqual(result["image_url"],
+            "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2a/Delhi_fort.jpg/1280px-Delhi_fort.jpg")
+        self.assertTrue(photos.valid_photo(result))
+        self.assertNotIn("utm_source", result["image_url"])
+
     def test_ambiguous_or_unknown_license_is_never_selected(self):
         def transport(url, **kwargs):
             payload = {"query": {"pages": [{"pageimage": "Rahul_Gandhi.jpg"}]}}
