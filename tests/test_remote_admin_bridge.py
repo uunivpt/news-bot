@@ -22,7 +22,7 @@ class RemoteAdminBridgeTests(unittest.TestCase):
     def test_approved_admin_paths_are_exactly_scoped(self):
         for p in ("/api/admin/login", "/api/admin/me", "/api/admin/workspace",
                   "/api/admin/story/455", "/api/admin/story/455/article",
-                  "/api/admin/dashboard", "/api/admin/health",
+                  "/api/admin/dashboard", "/api/admin/content-quality", "/api/admin/health",
                   "/api/admin/editorial/events", "/api/admin/editorial/sources", "/api/admin/editorial/readiness/probe", "/api/admin/studio/455", "/api/admin/studio/455/save", "/api/admin/editorial/story/455/claims/4", "/api/admin/editorial/story/455/updates/3/publish", "/api/admin/operations.pdf", "/api/admin/diagnostics.pdf", "/api/admin/users", "/api/admin/users/new_staff", "/api/news/455/approve",
                   "/api/news/455/edit", "/api/fact-check"):
             self.assertTrue(is_private_endpoint(p), p)

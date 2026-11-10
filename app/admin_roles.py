@@ -45,7 +45,7 @@ def required_permission(path, method):
     if path == '/api/admin/activity': return 'activity.read'
     if path == '/api/admin/settings': return 'settings.manage'
     if path == '/api/admin/training': return 'training.manage'
-    if path in {'/api/admin/dashboard','/api/admin/operations','/api/admin/upgrade','/api/admin/history','/api/admin/live'}: return 'operations.read'
+    if path in {'/api/admin/dashboard','/api/admin/content-quality','/api/admin/operations','/api/admin/upgrade','/api/admin/history','/api/admin/live'}: return 'operations.read'
     if method not in {'GET','HEAD','OPTIONS'}:
         if path in {'/api/admin/news/create','/api/admin/archive/restore'}: return 'news.create'
         if path == '/api/fact-check' or path.startswith('/api/admin/verification/'): return 'news.publish'
