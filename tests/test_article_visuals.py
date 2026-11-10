@@ -114,7 +114,7 @@ class ArticleVisualTests(unittest.TestCase):
         self.assertIn('Original publisher', document)
         self.assertIn('<svg', document)
         self.assertIn('<table>', document)
-        self.assertIn('article-data.js?v=1', document)
+        self.assertIn('article-data.js?v=2', document)
         with api.app.test_request_context('/'):
             document = api._article_html(dict(row, id=99))
         self.assertNotIn('article-data.js', document)

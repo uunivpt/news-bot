@@ -49,6 +49,102 @@
           "value": 7.09927893176518
         }
       ]
+    },
+    {
+      "id": "india-consumer-price-inflation-2019-2024",
+      "reviewed": true,
+      "article_ids": [],
+      "title": "India consumer price inflation",
+      "series": "India",
+      "measure": "Consumer price inflation (annual %)",
+      "unit": "%",
+      "difference_unit": "percentage points",
+      "description": "Annual changes in consumer prices in the World Bank series. This is historical annual inflation, not the latest monthly CPI release or a live price index.",
+      "source": {
+        "name": "World Bank · World Development Indicators",
+        "url": "https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG?locations=IN",
+        "data_url": "https://api.worldbank.org/v2/country/IND/indicator/FP.CPI.TOTL.ZG?format=json&per_page=6&date=2019:2024",
+        "updated_on": "2026-10-08",
+        "retrieved_on": "2026-11-10",
+        "license": "CC BY 4.0",
+        "license_url": "https://data.worldbank.org/summary-terms-of-use"
+      },
+      "note": "Provider year labels and source precision are retained in the table. Values are rounded to two decimals; changes below 0.005 percentage points use three decimals. Historical values may be revised.",
+      "points": [
+        {
+          "label": "2019",
+          "value": 3.72950573539123
+        },
+        {
+          "label": "2020",
+          "value": 6.62343677628529
+        },
+        {
+          "label": "2021",
+          "value": 5.13140747176363
+        },
+        {
+          "label": "2022",
+          "value": 6.69903414079857
+        },
+        {
+          "label": "2023",
+          "value": 5.64914318907925
+        },
+        {
+          "label": "2024",
+          "value": 4.9530355097366
+        }
+      ],
+      "desk_only": true
+    },
+    {
+      "id": "india-unemployment-2019-2024",
+      "reviewed": true,
+      "article_ids": [],
+      "title": "India unemployment: annual context",
+      "series": "India",
+      "measure": "Unemployment (% of total labour force, modeled ILO estimate)",
+      "unit": "%",
+      "difference_unit": "percentage points",
+      "description": "Modeled ILO estimates published through the World Bank. This is a share of the labour force, not the employment rate or India’s latest PLFS survey estimate.",
+      "source": {
+        "name": "World Bank · World Development Indicators",
+        "url": "https://data.worldbank.org/indicator/SL.UEM.TOTL.ZS?locations=IN",
+        "data_url": "https://api.worldbank.org/v2/country/IND/indicator/SL.UEM.TOTL.ZS?format=json&per_page=6&date=2019:2024",
+        "updated_on": "2026-10-08",
+        "retrieved_on": "2026-11-10",
+        "license": "CC BY 4.0",
+        "license_url": "https://data.worldbank.org/summary-terms-of-use"
+      },
+      "note": "Provider year labels and source precision are retained in the table. Values are rounded to two decimals; changes below 0.005 percentage points use three decimals. Historical values may be revised.",
+      "points": [
+        {
+          "label": "2019",
+          "value": 6.51
+        },
+        {
+          "label": "2020",
+          "value": 7.859
+        },
+        {
+          "label": "2021",
+          "value": 6.38
+        },
+        {
+          "label": "2022",
+          "value": 4.822
+        },
+        {
+          "label": "2023",
+          "value": 4.172
+        },
+        {
+          "label": "2024",
+          "value": 4.173
+        }
+      ],
+      "desk_only": true
     }
   ]
 }

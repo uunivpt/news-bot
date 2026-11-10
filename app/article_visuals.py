@@ -35,7 +35,7 @@ def validate(raw):
         if not text(raw.get(key)):
             return None
     ids, points, source = raw.get('article_ids'), raw.get('points'), raw.get('source')
-    if not isinstance(ids, list) or not 1 <= len(ids) <= 50 or any(not re.fullmatch(r'[1-9][0-9]{0,18}', str(x)) for x in ids):
+    if not isinstance(ids, list) or not 0 <= len(ids) <= 50 or (not ids and raw.get('desk_only') is not True) or any(not re.fullmatch(r'[1-9][0-9]{0,18}', str(x)) for x in ids):
         return None
     if not isinstance(points, list) or not 2 <= len(points) <= 24 or not isinstance(source, dict):
         return None
@@ -77,6 +77,9 @@ def registry():
             data = validate(candidate)
             if not data:
                 continue
+            if data['id'] in result:
+                return {}
+            result[data['id']] = data
             for identity in data['article_ids']:
                 for key in (identity, news_number({'id': int(identity)})):
                     # Conflicting assignments are a registry error, not a choice
@@ -89,8 +92,12 @@ def registry():
         return {}
 
 
+def catalog():
+    return list({data['id']: data for data in registry().values()}.values())
+
+
 def for_article(identity):
-    return registry().get(str(identity))
+    return registry().get(str(identity)) if str(identity).isdigit() else None
 
 
 def number(value, signed=False):
@@ -106,9 +113,11 @@ def render(data):
     points, source, key = data['points'], data['source'], data['id']
     latest, previous = points[-1], points[-2]
     unit = data['unit']
+    change = latest['value'] - previous['value']
+    change_label = format(change, '+.3f') if 1e-6 <= abs(change) < .005 else number(change, True)
     cards = [(latest['label'] + ' · latest observation', number(latest['value']) + unit, data['measure']),
              (previous['label'] + ' · previous observation', number(previous['value']) + unit, data['measure']),
-             ('Change between these observations', number(latest['value'] - previous['value'], True), data['difference_unit'])]
+             ('Change between these observations', change_label, data['difference_unit'])]
     metrics = ''.join('<div class="article-data-metric"><span>' + e(label) + '</span><strong>' + e(value) + '</strong><small>' + e(context) + '</small></div>' for label, value, context in cards)
     values = [p['value'] for p in points]
     low, high = min(0, min(values)), max(0, max(values))

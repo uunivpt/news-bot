@@ -97,7 +97,7 @@ class SEOIndexingTests(unittest.TestCase):
         served=Path("public/static-sitemap.xml").read_text(encoding="utf-8").strip()
         generated=static_sitemap_xml()
         self.assertEqual(served,generated)
-        self.assertEqual(len(ET.fromstring(served)),27)
+        self.assertEqual(len(ET.fromstring(served)),28)
 
     def test_active_category_landings_are_discoverable_but_retired_desks_are_not(self):
         from app.seo_indexing import STATIC_PAGES
@@ -180,7 +180,7 @@ class SEOIndexingTests(unittest.TestCase):
         for path in STATIC_PAGES:
             if path=="/archive/":
                 continue  # Server-rendered dynamic archive, not a static HTML file.
-            if path in {"/india/", "/politics/", "/world/", "/hindi/"}:
+            if path in {"/india/", "/politics/", "/world/", "/hindi/", "/data/"}:
                 with patch.object(api, "_public_rows_for_section", return_value=[]):
                     response=api.app.test_client().get(path)
                 self.assertEqual(response.status_code, 200)
