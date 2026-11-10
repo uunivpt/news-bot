@@ -623,13 +623,17 @@ def _public_title(title,source_text=""):
 
 def _publicize(row):
  row=dict(row)
+ from app.commons_photos import snapshot_photo_for_url, valid_photo
+ if not _is_source_supplied_image(row) and not valid_photo(row):
+  illustrative=snapshot_photo_for_url(row.get('url'))
+  if illustrative:row.update(illustrative)
  from app.monetization import is_monetizable
  ads_eligible=is_monetizable(dict(row))
  # Public news documents use a positive projection. Unknown fields from old
  # database schemas never become JSON/API fields, even for an admin request.
  public_fields={"phone_public_id","public_revision","editorial_featured","editorial_featured_at","id","title","url","source_name","source_type","summary","bot_summary","bot_article",
   "article","body","published_at","published_at_site","published_at_iso","category","status",
-  "image_url","image_source","image_license","image_credit","image_source_url","public_source",
+  "image_url","image_source","image_license","image_credit","image_source_url","image_license_url","public_source",
   "view_count","last_viewed_at","editorial_value","source_count","exam_region","exam_authority"}
  r={k:v for k,v in dict(row).items() if k in public_fields}
  if not admin_ok():
@@ -658,8 +662,8 @@ def _publicize(row):
   article_text=re.sub(r"(?:\n|\s)*Why it matters:\s*$","",article_text,flags=re.I).strip()
   r["article"]=article_text
   r["url"]=_safe_source_url(r.get("url"))
-  # Website images are source-only. Separately generated images
-  # (Wikimedia/Openverse/etc.) must never appear on the website.
+  # Publisher photos require verified rights. Curated Commons archival files
+  # are labelled illustrative, not shown as news-event photographs.
   r["image_url"]=_public_image_path(r)
   r.pop("editorial_context",None)
   if "editorial_value" in r: r["editorial_value"]=bool(r.get("editorial_value"))
@@ -703,6 +707,8 @@ def _is_source_supplied_image(row):
 
 
 def _public_image_path(row):
+ from app.commons_photos import valid_photo
+ if valid_photo(row):return str(row.get("image_url"))
  if isinstance(row,dict) and row.get("source_type")=="x" and row.get("status")=="published":
   try:return "/api/x-card/"+str(int(row.get("id")))
   except (TypeError,ValueError):return ""
@@ -913,6 +919,10 @@ def _article_publication_datetime(row):
 
 def _article_html(row):
  row=dict(row)
+ from app.commons_photos import snapshot_photo_for_url, valid_photo
+ if not _is_source_supplied_image(row) and not valid_photo(row):
+  illustration=snapshot_photo_for_url(row.get("url"))
+  if illustration:row.update(illustration)
  from app.article_visuals import for_article,render as render_visual
  from app.story_visuals import render as render_story_visuals
  visual_html=render_visual(for_article(row.get('id'))) or render_story_visuals(row)
