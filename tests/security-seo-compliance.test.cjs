@@ -37,8 +37,8 @@ test('homepage H1 matches visible introductory text', () => {
   const home = read('public/index.html');
   assert.match(home, /<h1 id="news-home-title">Latest India and World News, Politics and Public Affairs<\/h1>/);
   assert.match(home, /Read the latest India and world news, politics and public affairs coverage/);
-  assert.match(home, /What to check before sharing a headline/);
-  assert.match(home, /href="\/guides\/government-notifications.html"/);
+  assert.doesNotMatch(home, /What to check before sharing a headline/);
+  assert.doesNotMatch(home, /How to read and verify our news coverage/);
 });
 
 test('a substantial source-first explainer is published, linked and discoverable', () => {

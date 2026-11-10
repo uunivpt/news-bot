@@ -50,7 +50,8 @@ test('editorial homepage script is CSP compatible',()=>{
  assert.doesNotMatch(html,/<script id="ph-v14-script">/);
  assert.match(html,/src="\/assets\/editorial-home\.js\?v=[a-z0-9]+"/);
  assert.match(script,/home=function\(c\)/);
- assert.match(script,/READER RESOURCES/);
+ for(const removed of ['EXPLORE MORE','READER RESOURCES','Choose your desk.','Go to the original.','Read with context.']) assert.ok(!script.includes(removed),'unwanted homepage sidebar: '+removed);
+ assert.doesNotMatch(script,/ph14-rail|enhanceHome/);
  assert.doesNotMatch(script,/FEED STATUS|Your news connection/);
  assert.doesNotMatch(script,/onerror=/);
 });

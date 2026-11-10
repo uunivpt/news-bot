@@ -19,6 +19,7 @@ from app.public_delivery import WindowLimiter, read_json_rows, remote_rows
 from app.public_sessions import PublicSessionInterface
 from app.briefing import DESKS as BRIEFING_DESKS, select_briefing, briefing_excerpt
 from app.source_text import source_text as plain_source_text
+from app.article_format import render_inline_markdown
 from app.source_http import fetch_source, public_http_url
 from app.admin_access import configured_users, verify_recovery_owner
 from app.admin_backend import hosted_enabled
@@ -416,7 +417,7 @@ def _section_html(category="all"):
  if category in ("india","all"):
   body+='<section aria-label="Editorial guides" style="margin:20px 0"><h2>Understand the news</h2><p><a href="/guides/election-results.html">How to verify election results</a></p></section>'
  body+='<div class="sh"><h2>Latest stories</h2><span class="lbl">'+str(len(rows))+' stories</span></div><div class="grid">'+"".join(cards)+'</div>'
- return '<!doctype html><html lang="'+language+'" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta name="google-adsense-account" content="ca-pub-1752666987448533"><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/editorial.css?v=phui19"><link rel="stylesheet" href="/assets/polish.css?v=phui30"><link rel="stylesheet" href="/assets/newsroom-ui.css?v=fullimages1"><script src="/assets/ui.js?v=phui30" defer></script></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/archive/">All News Archive</a></p><p><a href="/guides/maharashtra-mlc.html">Maharashtra Council explainer</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="/settings.html">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=privateadmin1"></script><script src="/assets/newsroom-ui.js?v=watermelon1"></script><script src="/assets/editorial-home.js?v=privateadmin1"></script></body></html>'
+ return '<!doctype html><html lang="'+language+'" data-theme="light"><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+html.escape(label)+' — PoliticsHub.in</title><meta name="description" content="'+html.escape(label)+' from PoliticsHub.in."><link rel="canonical" href="'+canonical+'"><meta name="google-adsense-account" content="ca-pub-1752666987448533"><meta property="og:type" content="website"><meta property="og:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta property="og:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="'+html.escape(label)+' — PoliticsHub.in"><meta name="twitter:image" content="'+SITE_ORIGIN+'/api/og-home?v=20261022"><link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/editorial.css?v=phui19"><link rel="stylesheet" href="/assets/polish.css?v=phui30"><link rel="stylesheet" href="/assets/newsroom-ui.css?v=fullimages1"><script src="/assets/ui.js?v=phui30" defer></script></head><body><div id="prog"></div><header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><nav class="main" id="nav" aria-label="Sections"><span id="ind" aria-hidden="true"></span></nav><div class="acts"><button class="ib" id="sbtn" aria-label="Search">⌕</button><a class="ib" href="/about.html" aria-label="About">i</a></div></div><div class="tick" id="tick" hidden><span class="tag">LIVE <i class="dot"></i></span><div class="tk" id="tk"></div><button class="ib" id="pz" aria-label="Pause ticker" aria-pressed="false">Ⅱ</button></div></header><div id="bd"></div><aside id="dr" aria-hidden="true"><button class="ib" id="dx" aria-label="Close menu">×</button><nav id="dl"></nav><div class="ft">PoliticsHub.in<br><span>What matters, clearly.</span></div></aside><div id="cv"></div><section id="sp" aria-hidden="true"><div class="sb"><form id="sf"><input id="si" type="search" autocomplete="off" placeholder="Search the full archive" aria-label="Search the full archive"><button class="ib" id="sx" type="button" aria-label="Close search">×</button></form><p id="sc" class="lbl" style="margin:18px 6px"></p><div id="sres"></div></div></section><main class="wrap"><div id="app">'+body+'</div></main><footer><div class="wrap"><div><img src="/favicon.svg" alt="PoliticsHub.in"><div class="ser">What matters,<br>clearly.</div></div><div><h4>EXPLORE</h4><p><a href="/">Home</a></p><p><a href="/about.html">About</a></p><p><a href="/archive/">All News Archive</a></p><p><a href="/guides/maharashtra-mlc.html">Maharashtra Council explainer</a></p><p><a href="/search.html">Search</a></p></div><div><h4>INFORMATION</h4><p><a href="/privacy.html">Privacy</a></p><p><a href="/cookies.html">Cookies</a></p><p><a href="/terms.html">Terms</a></p><p><a href="/settings.html">Settings</a></p><p><a href="/contact.html">Contact</a></p><p><small>© <span id="yr"></span> PoliticsHub.in</small></p></div></div></footer><script src="/assets/site.js?v=privateadmin1"></script><script src="/assets/newsroom-ui.js?v=watermelon1"></script><script src="/assets/editorial-home.js?v=storycharts1"></script></body></html>'
 
 
 def _enhance_section_seo(document, category):
@@ -877,6 +878,9 @@ def _article_publication_datetime(row):
 
 def _article_html(row):
  row=dict(row)
+ from app.article_visuals import for_article,render as render_visual
+ from app.story_visuals import render as render_story_visuals
+ visual_html=render_visual(for_article(row.get('id'))) or render_story_visuals(row)
  indexable=is_indexable(row)
  from app.monetization import is_monetizable
  ads_eligible=(row["ads_eligible"] is True and indexable) if "ads_eligible" in row else is_monetizable(row)
@@ -910,8 +914,8 @@ def _article_html(row):
   data["isBasedOn"]=source_url
  json_ld=json.dumps(data,ensure_ascii=False).replace("<", "\\u003c")
  repeated_lead=re.sub(r"\s+"," ",body).strip()==re.sub(r"\s+"," ",summary).strip()
- lead_html="" if repeated_lead else '<p class="dek">'+html.escape(summary)+'</p>'
- paras="".join(f"<p>{html.escape(p.strip())}</p>" for p in re.split(r"\n+",body) if p.strip())
+ lead_html="" if repeated_lead else '<p class="dek">'+render_inline_markdown(summary)+'</p>'
+ paras="".join(f"<p>{render_inline_markdown(p.strip())}</p>" for p in re.split(r"\n+",body) if p.strip())
  return f"""<!doctype html>
 <html lang="{language}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -926,12 +930,14 @@ def _article_html(row):
 <meta property="article:section" content="{html.escape(category)}">{og_published_meta}
 <link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/share.css?v=phshare2">
 <script type="application/ld+json">{json_ld}</script>
+{'<link rel="stylesheet" data-article-data-style href="/assets/article-data.css?v=3"><script type="module" src="/assets/article-data.js?v=3"></script>' if visual_html else ""}
 <link rel="stylesheet" href="/assets/polish.css?v=phui30"><script src="/assets/ui.js?v=phui30" defer></script><script src="/assets/share.js?v=phshare2" defer></script></head><body>
 <header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><div class="acts"><a class="ib" href="/" aria-label="Home">⌂</a><a class="ib" href="/about.html" aria-label="About">i</a></div></div></header>
 <main class="wrap"><article class="art" data-k="{html.escape(category.lower())}">
 <div class="ah"><span class="chip">{html.escape(category)}</span><h1>{html.escape(title)}</h1>{lead_html}
 <div class="by"><small>News No. {html.escape(news_number(row))}</small><span>{"Reviewed by" if ads_eligible else "Compiled by"} <a href="/author/politicshub-news-desk">{EDITORIAL_DESK}</a></span>{date_html}<span>{html.escape(source)}</span></div></div>
 {"<div class='ahero'><img src='"+html.escape(str(_public_image_path(row)),quote=True)+"' alt='"+html.escape(title,quote=True)+"' loading='eager'></div>" if _public_image_path(row) else ""}
+{visual_html}
 <div class="body">{paras}</div>
 <div class="src"><strong>Content type:</strong> {"PoliticsHub editorial copy. Readers can check the cited sources and correction history." if row.get("source_type")=="manual" else "Source-linked brief based on the originating publisher. This is not an independently reported PoliticsHub article; consult the original link for full context."}</div>
 <div class="src">Source: {html.escape(source)}. {"<a href='"+html.escape(source_url,quote=True)+"' rel='nofollow noopener noreferrer' target='_blank'>Read the original report</a>" if source_url else ""}</div>
@@ -1686,6 +1692,33 @@ def public_search():
  response.headers["Cache-Control"]="public, max-age=0, s-maxage=30, stale-while-revalidate=30"
  return response
 
+@app.get('/data/', strict_slashes=False)
+@app.get('/api/data-desk')
+def public_data_desk():
+ from app.data_desk import page
+ return Response(page(SITE_ORIGIN),mimetype='text/html',headers={'Cache-Control':'public,max-age=60,s-maxage=300'})
+
+@app.get('/api/data-desk/cards')
+def public_data_cards():
+ from app.data_desk import highlights
+ return jsonify({'html':highlights()}),200,{'Cache-Control':'public,max-age=60,s-maxage=300'}
+
+@app.get('/api/article-visuals/<int:item_id>')
+def article_visual_data(item_id):
+ # Reviewed registry figures remain available; other figures are derived only
+ # from the corresponding published article through the existing public reader.
+ from app.article_visuals import for_article,render
+ if not _public_rate_allowed():return jsonify({'error':'rate limit exceeded'}),429
+ known=for_article(item_id)
+ if known:return jsonify({'html':render(known)}),200,{'Cache-Control':'public,max-age=60,s-maxage=300'}
+ # Resolve through the existing public article path, including hosted/archive
+ # overlays. Never cache a private editor's pending story as public chart HTML.
+ response=app.make_response(article(item_id))
+ row=response.get_json(silent=True) if response.status_code==200 else None
+ from app.story_visuals import render as render_story_visuals
+ visual=render_story_visuals(row) if isinstance(row,dict) and row.get('status')=='published' else ''
+ return jsonify({'html':visual}),200,{'Cache-Control':'private,no-store'}
+
 @app.get("/api/trending")
 def trending():
  if not _public_rate_allowed():return jsonify({"error":"rate limit exceeded"}),429
@@ -2309,7 +2342,8 @@ def admin_editorial_draft(item_id):
   row=dict(row)
   return jsonify({'id':item_id,'status':row.get('status'),'news_number':news_number(row),'title':row.get('title') or '',
    'summary':row.get('bot_summary') or row.get('summary') or '',
-   'category':row.get('category') or 'general','revision':editorial_revision(row)})
+   'category':row.get('category') or 'general','revision':editorial_revision(row),
+   'article':row.get('bot_article') or row.get('article') or '', 'image_url':row.get('image_url') or ''})
  finally:database.close()
 
 def _editorial_source_packets(database, row, limit=4):

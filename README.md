@@ -58,13 +58,7 @@ preserved. See [hosted Admin Room operations](docs/HOSTED_ADMIN_ROOM.md).
 System diagnostics are available inside the authenticated workspace; public
 pages show reading preferences and useful loading/offline notices only.
 
-The homepage includes a Watermelon UI reading dashboard, animated tab indicator,
-pointer glow cards, news-desk coverage, reading shortcuts and comfortable/compact
-story spacing. Dashboard counts use only the loaded feed and distinguish it from
-the full archive; they are not audience statistics. Spacing and tab choices last
-for the current page session without adding browser storage. Animations respect
-reduced-motion settings and keyboard navigation. See the
-[implementation and license notes](docs/WATERMELON_UI_LICENSE.md).
+The homepage prioritizes source-linked stories and reader-friendly density controls. The old public Reading Room dashboard and feed/source/desk statistics were retired, while the news feed, keyboard search, and reduced-motion support remain. See [the UI license notes](docs/WATERMELON_UI_LICENSE.md).
 Run `python scripts/newsroom_ui_browser_audit.py` for the isolated dashboard,
 keyboard and responsive checks.
 
@@ -81,6 +75,9 @@ destination and streaming size checks; see
 [the source hardening notes](docs/SOURCE_SAFETY_2026-10-31.md) for exact scope.
 
 Public API cards omit full articles; `/api/news/<id>` returns the article body.
+Reviewed numerical datasets can add source-linked metric cards, interactive
+charts and exact-value tables to individual articles. Canonical figures also
+work without JavaScript. See [article data authoring](docs/ARTICLE_DATA.md).
 The command center uses the uncached `/api/admin/news` endpoint for private
 listing/filtering. Anonymous public responses avoid `Vary: Cookie`, which would
 disable Vercel CDN caching. Authenticated responses remain `private, no-store`.

@@ -140,13 +140,39 @@ def run(output):
         check('complete publisher inventory search and full-database drill-down',sources)
         def editing():
             page.wait_for_function("() => !document.querySelector('#newsList').hasAttribute('aria-busy')")
-            page.locator('#newsList [data-inspect]').first.click()
-            page.locator('.story-editor summary').click()
+            edit=page.locator('#newsList [data-edit-story]').first
+            sid=int(edit.get_attribute('data-edit-story'))
+            edit.click()
+            page.wait_for_selector('.story-editor[open]')
+            assert page.locator('#news.active').count()==1
+            assert page.locator('#studio.active').count()==0
+            assert page.url.endswith('#news')
+            page.locator('#editArticle').wait_for(state='visible')
             page.locator('#editTitle').fill('Local fixture editorial headline')
+            article='English original-language article edited in the Newsroom. '*20
+            page.locator('#editArticle').fill(article)
+            page.locator('#editImage').fill('https://example.org/newsroom-photo.jpg')
             page.locator('#editSummary').fill('Reviewed local fixture summary with source attribution.')
             page.locator('#editStoryForm [type="submit"]').click()
             page.wait_for_function("() => !document.querySelector('#inspector').open && document.querySelector('#newsList').textContent.includes('Local fixture editorial headline')")
-        check('headline and summary edits persist through the server',editing)
+            database=api.db()
+            try:
+                saved=database.get_by_id(sid)
+                assert saved['bot_article']==article.strip()
+                assert saved['image_url']=='https://example.org/newsroom-photo.jpg'
+            finally:
+                database.close()
+            page.set_viewport_size({'width':390,'height':844})
+            page.locator(f'[data-edit-story="{sid}"]').click()
+            page.wait_for_selector('.story-editor[open]')
+            page.wait_for_function('()=>!document.querySelector("#editArticle").disabled')
+            assert page.locator('#editArticle').input_value().startswith('English original-language article')
+            assert page.locator('#editImage').input_value()=='https://example.org/newsroom-photo.jpg'
+            assert page.evaluate('document.documentElement.scrollWidth<=innerWidth+1')
+            page.screenshot(path=str(output/'news-editor-mobile.png'))
+            page.keyboard.press('Escape')
+            page.set_viewport_size({'width':1440,'height':1000})
+        check('Newsroom Edit opens full language-neutral editor and persists article and image on mobile',editing)
         def stale_refresh():
             before=page.locator('#newsList .story').count()
             page.route('**/api/admin/workspace', lambda route:route.fulfill(

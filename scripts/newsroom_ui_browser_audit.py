@@ -32,7 +32,7 @@ def run(base: str, output: Path) -> None:
             'id': 880000 + index,
             'news_number': 880000 + index,
             'title': f'Newsroom fixture {index + 1}: India policy and public affairs update',
-            'summary': 'A deterministic source-linked briefing for testing the reading dashboard, story cards and navigation.',
+            'summary': 'A deterministic source-linked briefing for testing the story cards and navigation.',
             'category': ['india', 'politics', 'world'][index % 3],
             'source_name': ['Fixture News Desk', 'Fixture World Wire'][index % 2],
             'published_at': (now - timedelta(minutes=index + 1)).isoformat(),
@@ -102,53 +102,28 @@ def run(base: str, output: Path) -> None:
         def home():
             response = page.goto(base + '/', wait_until='networkidle')
             require(response.status == 200, 'Homepage did not load')
-            page.wait_for_selector('.ph-ui-dashboard')
+            page.wait_for_selector('.ph14-home')
             consent = page.locator('[data-consent-choice="essential"]')
             if consent.count() and consent.first.is_visible():
                 consent.first.click()
 
-        check('homepage loads the real UI renderer with deterministic source-linked reports', home)
+        check('homepage loads the story UI without Reading Room statistics', home)
+        require(page.locator('.ph-ui-dashboard, .ph-ui-stats, #ph-ui-overview-tab, #ph-ui-desks-tab').count() == 0, 'Reading Room still appears publicly')
 
         def delivery_paths():
             for path in ('/india/', '/__newsroom_static_fixture'):
                 response = page.goto(base + path, wait_until='networkidle')
                 require(response.status == 200, path + ' did not load')
-                page.wait_for_selector('.ph-ui-dashboard')
+                page.wait_for_selector('.ph14-home')
                 require(page.evaluate("typeof window.PHNewsroomUI?.bind === 'function'"), path + ' omits the newsroom controller')
                 require(page.evaluate("Array.from(document.styleSheets).some(sheet => sheet.href && new URL(sheet.href).pathname === '/assets/newsroom-ui.css')"), path + ' omits newsroom styles')
                 if path == '/india/':
                     require(page.locator('.ph14-cats a[aria-current="page"]').inner_text() == 'India', 'Server category route lost the active news desk')
                     require(page.locator('.ph14-kicker').inner_text().lower() == 'india', 'Server category route mixed the lead story desk')
                 else:
-                    require(page.locator('.ph-guides').count() == 1, 'Static document fixture did not use public/index.html')
+                    require(page.evaluate("Array.from(document.styleSheets).some(sheet => sheet.href && new URL(sheet.href).pathname === '/assets/home-critical.css')"), 'Static homepage fixture did not load its bundled stylesheet')
             home()
         check('server-rendered categories and the static homepage both load the newsroom assets', delivery_paths)
-
-        def indicator():
-            page.wait_for_function("""() => {
-                const active = document.querySelector('.ph-ui-tab[aria-selected="true"]');
-                const indicator = document.querySelector('.ph-ui-tab-indicator');
-                return active && indicator && Math.abs(parseFloat(indicator.style.left) - active.offsetLeft) <= 1 &&
-                    Math.abs(parseFloat(indicator.style.width) - active.offsetWidth) <= 1;
-            }""")
-
-        def tabs():
-            overview = page.locator('#ph-ui-overview-tab')
-            desks = page.locator('#ph-ui-desks-tab')
-            overview.focus()
-            for key, selected in [('ArrowRight', desks), ('ArrowRight', overview), ('End', desks), ('Home', overview), ('ArrowLeft', desks)]:
-                page.keyboard.press(key)
-                require(selected.get_attribute('aria-selected') == 'true', key + ' failed to select the expected tab')
-                require(selected.evaluate('(node) => node === document.activeElement'), key + ' lost keyboard focus')
-                expected_panel = selected.get_attribute('aria-controls')
-                require(page.locator('#' + expected_panel).is_visible(), key + ' did not show its panel')
-                require(page.locator('.ph-ui-panel[hidden]').count() == 1, 'Both dashboard panels are exposed')
-                indicator()
-            for width in (390, 768, 1440):
-                page.set_viewport_size({'width': width, 'height': 1050})
-                indicator()
-            overview.click()
-        check('dashboard tabs support arrows, Home, End, hidden panels and a responsive indicator', tabs)
 
         def density():
             compact = page.locator('[data-news-density="compact"]')
@@ -220,13 +195,12 @@ def run(base: str, output: Path) -> None:
             for width in (320, 390, 768, 1000, 1440):
                 page.set_viewport_size({'width': width, 'height': 1050})
                 require(page.evaluate('document.documentElement.scrollWidth <= innerWidth'), f'Homepage overflows at {width}px')
-                indicator()
+                require(page.locator('.ph-ui-dashboard').count() == 0, 'Removed Reading Room appeared on responsive layout')
                 if width == 1000:
                     require(page.locator('.ph14-side').evaluate('(node) => getComputedStyle(node).display') == 'block', 'Tablet lead sidebar retained the stacked mobile grid')
                 if width in (390, 1440):
                     page.evaluate('scrollTo(0, 0)')
                     page.screenshot(path=str(output / f'newsroom-home-{width}.png'), animations='disabled')
-                    page.locator('.ph-ui-dashboard').screenshot(path=str(output / f'newsroom-dashboard-{width}.png'), animations='disabled')
             page.evaluate("document.documentElement.dataset.theme = 'dark'")
             page.evaluate('scrollTo(0, 0)')
             page.screenshot(path=str(output / 'newsroom-home-dark-1440.png'), animations='disabled')
@@ -240,14 +214,13 @@ def run(base: str, output: Path) -> None:
             reader.on('pageerror', lambda error: errors.append(str(error)))
             try:
                 reader.goto(base + '/', wait_until='networkidle')
-                reader.wait_for_selector('.ph-ui-dashboard')
+                reader.wait_for_selector('.ph14-home')
                 require(reader.locator('.ph-ui-home').evaluate('(node) => !node.classList.contains("ph-ui-motion-ready")'), 'Reduced motion enabled scroll reveal')
                 require(reader.locator('.ph-ui-reveal').evaluate_all('(nodes) => nodes.every(node => getComputedStyle(node).opacity === "1")'), 'Reduced-motion content is hidden')
-                reader.locator('#ph-ui-desks-tab').click()
-                require(reader.locator('#ph-ui-desks').is_visible(), 'Reduced motion broke dashboard tabs')
+                require(reader.locator('.ph-ui-dashboard').count() == 0, 'Removed Reading Room returned in reduced-motion mode')
             finally:
                 reduced.close()
-        check('reduced motion keeps all stories and dashboard content visible', reduced_motion)
+        check('reduced motion keeps all story content visible', reduced_motion)
 
         require(not errors, 'Browser errors: ' + '; '.join(errors))
         context.close()
