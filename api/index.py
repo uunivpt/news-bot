@@ -893,8 +893,13 @@ def _article_html(row):
  canonical=SITE_ORIGIN+article_path(row)
  published_at,published_label,pub_iso=_article_publication_datetime(row)
  pub_iso=pub_iso or ""
+ from app.public_story_history import public_updates,newest_modified,render_history
+ update_history=public_updates(row,db)
+ history_html=render_history(update_history)
+ modified_iso=newest_modified(update_history,pub_iso)
  date_html=('<time class="article-published" datetime="'+html.escape(pub_iso,quote=True)+'">'+html.escape(published_label)+': '+html.escape(published_at.astimezone(ZoneInfo("Asia/Kolkata")).strftime("%d %b %Y, %I:%M %p IST"))+'</time>') if published_at else '<span class="article-published">Publication date unavailable</span>'
  og_published_meta='<meta property="article:published_time" content="'+html.escape(pub_iso,quote=True)+'">' if pub_iso else ''
+ og_modified_meta='<meta property="article:modified_time" content="'+html.escape(modified_iso,quote=True)+'">' if modified_iso else ''
  summary=plain_source_text(row.get("summary") or row.get("bot_summary"))
  from app.seo_indexing import _news_language
  language=_news_language(row)
@@ -912,6 +917,8 @@ def _article_html(row):
  }
  if published_at:
   data["datePublished"]=pub_iso
+ if modified_iso:
+  data["dateModified"]=modified_iso
  if source_url:
   data["isBasedOn"]=source_url
  json_ld=json.dumps(data,ensure_ascii=False).replace("<", "\\u003c")
@@ -929,7 +936,7 @@ def _article_html(row):
 <meta property="og:title" content="{html.escape(title)}"><meta property="og:description" content="{html.escape(summary[:200])}">
 <meta property="og:url" content="{html.escape(canonical)}"><meta property="og:image" content="{html.escape(image)}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="{html.escape(title)}"><meta name="twitter:description" content="{html.escape(summary[:200])}"><meta name="twitter:image" content="{html.escape(image)}">
-<meta property="article:section" content="{html.escape(category)}">{og_published_meta}
+<meta property="article:section" content="{html.escape(category)}">{og_published_meta}{og_modified_meta}
 <link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/share.css?v=phshare2">
 <script type="application/ld+json">{json_ld}</script>
 {'<link rel="stylesheet" data-article-data-style href="/assets/article-data.css?v=3"><script type="module" src="/assets/article-data.js?v=3"></script>' if visual_html else ""}
@@ -941,6 +948,7 @@ def _article_html(row):
 {"<div class='ahero'><img src='"+html.escape(str(_public_image_path(row)),quote=True)+"' alt='"+html.escape(title,quote=True)+"' loading='eager'></div>" if _public_image_path(row) else ""}
 {visual_html}
 <div class="body">{paras}</div>
+{history_html}
 <div class="src"><strong>Content type:</strong> {"PoliticsHub editorial copy. Readers can check the cited sources and correction history." if row.get("source_type")=="manual" else "Source-linked brief based on the originating publisher. This is not an independently reported PoliticsHub article; consult the original link for full context."}</div>
 <div class="src">Source: {html.escape(source)}. {"<a href='"+html.escape(source_url,quote=True)+"' rel='nofollow noopener noreferrer' target='_blank'>Read the original report</a>" if source_url else ""}</div>
 <div class="src"><strong>Follow this subject:</strong> <a href="/topics/?topic={topic_key}">Related headlines and publication timeline</a> · <a href="/guides/reading-breaking-news.html">How to verify evolving claims</a>. Topic grouping is based on headlines, not a fact-check.</div>
@@ -1828,6 +1836,15 @@ def stats():
   return jsonify({"total":database.count(),"pending":database.count_status("pending"),"review_needed":database.count_status("published","needs_review"),"published":database.count_status("published"),"website_enabled":settings.get("website_enabled","true")=="true"})
  finally:database.close()
 
+
+@app.get("/api/admin/content-quality")
+def admin_content_quality():
+ err=require_admin()
+ if err:return err
+ from app.public_quality import quality_report
+ # A non-invasive audit of the current public feeds; no editor draft text is returned.
+ report=quality_report(_snapshot_rows("all"),_official_exam_payload())
+ return jsonify(report),200,{"Cache-Control":"private,no-store"}
 
 @app.get("/api/admin/dashboard")
 def admin_dashboard():
