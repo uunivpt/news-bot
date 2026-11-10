@@ -49,7 +49,7 @@ html[data-theme=dark] .ph-ui-home {
 .ph-ui-home .ph14-media { width: 100%; min-height: 0; height: auto; aspect-ratio: 16 / 9; align-self: center; margin: 0; border-radius: 13px; background: var(--ui-tint) !important; }
 /* Preserve the entire source photo, including when a long headline makes the card taller. */
 .ph-ui-home :is(.ph14-media, .ph14-thumb) img { object-fit: contain; object-position: center; transform: none; }
-.ph-ui-home .ph14-lead:not(:has(.ph14-media)) { grid-template-columns: 1fr; min-height: 400px; }
+.ph-ui-home .ph14-lead:not(:has(.ph14-media)) { grid-template-columns: 1fr; min-height: 0; }
 .ph-ui-home .ph14-lead:not(:has(.ph14-media)) .ph14-copy { max-width: 76ch; padding-bottom: 4px; }
 .ph-ui-home .ph14-lead:not(:has(.ph14-media)) .ph14-copy h1 { max-width: 25ch; }
 .ph-ui-home .ph14-side { display: block; min-width: 0; padding: 6px 24px 4px; border: 1px solid var(--line); border-radius: var(--ui-radius); background: var(--ui-surface); box-shadow: var(--ui-shadow); }
@@ -239,3 +239,7 @@ html[data-theme=dark] .ph-ui-home {
 .ph14-source-link,.ph14-sources{display:block;margin:.25rem 0 .8rem;padding:.25rem .5rem;font-size:.85rem}
 .ph14-sources summary{cursor:pointer;font-weight:650}
 .ph14-sources li{margin-block:.5rem}
+
+/* Licensed photographs remain fully visible; neutral story cards do not invent a hero photo. */
+.ph-ui-home .ph14-media,.ph-ui-home .ph14-thumb{margin:0}
+.ph-ui-home .ph14-media img,.ph-ui-home .ph14-thumb img{object-fit:contain;object-position:center}

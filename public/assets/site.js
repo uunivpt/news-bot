@@ -73,9 +73,9 @@ function newsCategory(category,title,summary){
  return raw||'india';
 }
 function norm(a,i){const id=a.id??a.slug??a._id??'n'+i;const img=a.image||a.image_url||a.imageUrl||a.urlToImage||a.thumbnail||a.img||'';
- return{...a,id:String(id),title:a.title||a.headline||'Untitled',summary:a.summary||a.description||a.excerpt||'',body:a.article||a.bot_article||a.content||a.body||a.text||'',image:typeof img==='string'?img:'',category:newsCategory(a.category||a.section||'General',a.title||a.headline,a.summary||a.description||a.excerpt),source:String(a.source_name||(a.source&&a.source.name)||(typeof a.source==='string'?a.source:'')||a.publisher||'').trim(),date:a.published_at_iso||a.publishedAt||a.pubDate||a.date||a.published_at||a.created_at||'',url:a.url||a.link||'',author:a.author||a.author_name||'PoliticsHub Editorial Desk'}}
+ return{...a,id:String(id),title:a.title||a.headline||'Untitled',summary:a.summary||a.description||a.excerpt||'',body:a.article||a.bot_article||a.content||a.body||a.text||'',image:newsPhoto({...a,image:img}),category:newsCategory(a.category||a.section||'General',a.title||a.headline,a.summary||a.description||a.excerpt),source:String(a.source_name||(a.source&&a.source.name)||(typeof a.source==='string'?a.source:'')||a.publisher||'').trim(),date:a.published_at_iso||a.publishedAt||a.pubDate||a.date||a.published_at||a.created_at||'',url:a.url||a.link||'',author:a.author||a.author_name||'PoliticsHub Editorial Desk'}}
 const pick=j=>Array.isArray(j)?j:(j.articles||j.news||j.items||j.data||j.results||[]);
-async function get(u,options={}){const deadline=AbortSignal.timeout(10000);const signal=options.signal?AbortSignal.any([options.signal,deadline]):deadline;const r=await fetch(u,{signal,cache:u===ENDPOINTS.api?'no-store':'default',headers:{'Accept':'application/json'}});if(!r.ok)throw Error('News request failed');if(u===ENDPOINTS.api)S.apiMode=r.headers.get('X-News-Mode')||'live';const rows=pick(await r.json());if(!Array.isArray(rows))throw Error('Invalid news response');const normalizedRows=rows.filter(x=>x&&typeof x==='object'&&!Array.isArray(x)).map((x,i)=>{const img=x.image_url||x.image||x.imageUrl||x.urlToImage||x.thumbnail||x.img||'';const source=x.source_name||(x.source&&x.source.name)||x.source||x.publisher||'PoliticsHub';const date=x.published_at_iso||x.published_at_site||x.publishedAt||x.pubDate||x.date||x.published_at||x.created_at||'';const body=x.article||x.bot_article||x.content||x.body||x.text||'';const summary=x.summary||x.bot_summary||x.description||x.excerpt||'';return {...x,title:String(x.title||x.headline||'Untitled'),category:newsCategory(x.category||x.section||'india',x.title||x.headline,summary),id:String(x.id??x.slug??x._id??'n'+i),image:typeof img==='string'?img:'',source:String(source),date,body:String(body),summary:String(summary)};});const total=r.headers.get('X-Search-Total');if(total!==null&&Number.isFinite(Number(total)))normalizedRows.searchTotal=Number(total);return normalizedRows}
+async function get(u,options={}){const deadline=AbortSignal.timeout(10000);const signal=options.signal?AbortSignal.any([options.signal,deadline]):deadline;const r=await fetch(u,{signal,cache:u===ENDPOINTS.api?'no-store':'default',headers:{'Accept':'application/json'}});if(!r.ok)throw Error('News request failed');if(u===ENDPOINTS.api)S.apiMode=r.headers.get('X-News-Mode')||'live';const rows=pick(await r.json());if(!Array.isArray(rows))throw Error('Invalid news response');const normalizedRows=rows.filter(x=>x&&typeof x==='object'&&!Array.isArray(x)).map((x,i)=>{const img=x.image_url||x.image||x.imageUrl||x.urlToImage||x.thumbnail||x.img||'';const source=x.source_name||(x.source&&x.source.name)||x.source||x.publisher||'PoliticsHub';const date=x.published_at_iso||x.published_at_site||x.publishedAt||x.pubDate||x.date||x.published_at||x.created_at||'';const body=x.article||x.bot_article||x.content||x.body||x.text||'';const summary=x.summary||x.bot_summary||x.description||x.excerpt||'';return {...x,title:String(x.title||x.headline||'Untitled'),category:newsCategory(x.category||x.section||'india',x.title||x.headline,summary),id:String(x.id??x.slug??x._id??'n'+i),image:newsPhoto({...x,image:img}),source:String(source),date,body:String(body),summary:String(summary)};});const total=r.headers.get('X-Search-Total');if(total!==null&&Number.isFinite(Number(total)))normalizedRows.searchTotal=Number(total);return normalizedRows}
 const CACHE_KEY='ph-news-cache';
 const LEGACY_CACHE_KEYS=['ph-news-cache-v6','ph-news-cache-v5','ph-news-cache-v4'];
 function cacheSave(items){if(!preferencesAllowed())return;try{localStorage.setItem(CACHE_KEY,JSON.stringify({ts:Date.now(),items}));}catch(e){}}
@@ -146,12 +146,27 @@ function articleHref(item){
  return '/'+(['all','maharashtra'].includes(category)?'india':category)+'/'+String(item?.news_number||id);
 }
 function safeSourceUrl(value){try{const url=new URL(value,location.origin);return /^https?:$/.test(url.protocol)?url.href:'#'}catch(_){return '#'}}
+// Use only documented, rights-cleared source images and first-party story cards.
+// Do not fall back to logos, publisher avatars, icons or unrelated search images.
+function newsPhoto(item){
+ const src=String(item?.image||item?.image_url||'').trim();
+ if(!src||src.length>2000)return '';
+ if(/^\/api\/(?:image|x-card)\/[1-9]\d*$/.test(src))return src;
+ if(!/^https:\/\//i.test(src))return '';
+ let url;
+ try{url=new URL(src)}catch(_){return ''}
+ if(url.username||url.password||!url.hostname)return '';
+ if(/(?:^|[\/._-])(?:logo|placeholder|no[-_]?image|default[-_]?image|fallback|favicon|avatar|sprite|icon)(?:[\/._-]|$)/i.test(url.pathname))return '';
+ if(!/\.(?:jpe?g|png|webp|avif)$/i.test(url.pathname))return '';
+ const license=String(item?.image_license||'').trim().toLowerCase().split(/\s+/)[0];
+ if(String(item?.image_source||'').toLowerCase()!=='article-source'||!['cc0','pdm','rights-owned','licensed'].includes(license))return '';
+ if(!String(item?.image_credit||'').trim())return '';
+ return url.href;
+}
 function img(item){
- const src=String(item?.image||'').trim();
+ const src=newsPhoto(item);
  if(!src)return'';
- const safe=src.startsWith('/')||src.startsWith('http://')||src.startsWith('https://');
- if(!safe)return'';
- return '<img src="'+esc(src)+'" alt="" loading="lazy" decoding="async">';
+ return '<img data-news-photo src="'+esc(src)+'" alt="Licensed article image" loading="lazy" decoding="async">';
 }
 function card(item){
  const k=ck(item),title=String(item?.title||'Untitled'),summary=String(item?.summary||'').trim();

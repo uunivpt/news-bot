@@ -156,6 +156,14 @@ def build(current, collected, now):
                 old.update(summary=story["summary"], bot_summary=story["summary"])
                 fresh += 1
             elif old.get("source_type") == "newsdata" and old.get("summary") != story["summary"]:
+                # A refreshed article excerpt must not erase a separately
+                # licensed, credited image previously attached to this URL.
+                if (old.get("image_source") == "article-source"
+                    and valid_url(old.get("image_url"))
+                    and str(old.get("image_license") or "").lower() in {"cc0", "pdm", "licensed", "rights-owned"}
+                    and str(old.get("image_credit") or "").strip()):
+                    for field in ("image_url", "image_source", "image_license", "image_credit", "image_source_url"):
+                        story[field] = old.get(field)
                 indexed[key] = story
                 fresh += 1
             continue

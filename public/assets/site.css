@@ -331,3 +331,8 @@ html{font-synthesis:none}
 .ph14-newsletter-hint{font-size:11px!important}
 @media(max-width:800px){.ph14-newsletter{grid-template-columns:1fr;gap:20px}}
 @media(max-width:480px){.ph14-newsletter-fields{flex-direction:column}.ph14-newsletter-fields .btn{width:100%}.ph-subscribe-top{padding:8px 10px;font-size:11px}}
+
+/* Source photograph credits and uncropped article images. */
+.ahero{position:relative;margin:18px 0;max-height:none}
+.ahero img{width:100%;height:auto;max-height:540px;object-fit:contain;object-position:center;display:block}
+.ahero .ph-photo-credit{margin:0;padding:9px 12px;background:var(--card);color:var(--mut);font-size:12px;line-height:1.5}
