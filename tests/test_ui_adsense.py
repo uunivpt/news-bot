@@ -118,14 +118,16 @@ class UIAdSenseTests(unittest.TestCase):
         self.assert_adsense_head(home)
 
 
-    def test_google_ads_page_view_conversion_setup(self):
+    def test_google_account_tags_do_not_create_page_view_conversions(self):
         code = (Path('public') / 'assets/measurement.js').read_text()
         self.assertIn("googletagmanager.com/gtag/js?id=", code)
-        self.assertIn("'config', 'G-2HVZQST08G'", code)
-        self.assertIn("'config', 'AW-18495731647'", code)
-        self.assertIn("'send_to': 'AW-18495731647/4NrBCOKXz6UdEL_vufNE'", code)
-        self.assertIn("path === '/' || path === '/index.html'", code)
-        self.assertEqual(code.count("'event', 'conversion'"), 1)
+        self.assertIn("'G-2HVZQST08G'", code)
+        self.assertIn("'AW-18495731647'", code)
+        self.assertIn("'consent', 'default'", code)
+        self.assertIn("analytics_storage: 'denied'", code)
+        self.assertIn("ad_storage: 'denied'", code)
+        self.assertNotIn("'send_to'", code)
+        self.assertNotIn("'event', 'conversion'", code)
         self.assertIn("CONSENT_MODE_DATA_READY", code)
         self.assertIn("google-analytics.com", (Path('api') / 'index.py').read_text())
 

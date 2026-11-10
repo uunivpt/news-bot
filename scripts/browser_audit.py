@@ -123,7 +123,10 @@ def run(base, output,admin_fixture=False):
                     page.wait_for_timeout(100)
                     # The asynchronous feed and animated ticker can briefly move during
                     # hydration. Assert the settled viewport, not an intermediate frame.
-                    page.wait_for_function('document.documentElement.scrollWidth <= innerWidth', timeout=4000)
+                    deadline = time.monotonic() + 4
+                    while not page.evaluate('document.documentElement.scrollWidth <= innerWidth') and time.monotonic() < deadline:
+                        page.wait_for_timeout(100)
+                    require(page.evaluate('document.documentElement.scrollWidth <= innerWidth'), f'{path}: overflow at {width}px')
         check('responsive layouts at mobile, tablet and desktop widths', responsive)
 
         def drawer():
@@ -1130,12 +1133,16 @@ def run(base, output,admin_fixture=False):
         check('pending share actions cannot update or copy for a replacement dialog', share_pending_actions)
 
         def settings():
+            # Earlier withdrawal tests deliberately leave storage disabled.
+            # Remembering appearance requires a fresh, explicit fixture opt-in.
+            page.evaluate("localStorage.setItem('ph-consent-v1','preferences');localStorage.setItem('ph-ls','1')")
             visit('/#/settings')
             page.wait_for_selector('[data-th="dark"]')
             page.locator('[data-th="dark"]').click()
+            require(page.evaluate("localStorage.getItem('ph-theme')") == 'dark', 'Theme choice was not saved after opt-in')
             page.reload(wait_until='domcontentloaded')
             page.wait_for_selector('[data-th="dark"]')
-            require(page.locator('html').get_attribute('data-theme') == 'dark', 'Theme did not persist')
+            page.wait_for_selector('html[data-theme="dark"]')
             page.locator('[data-th="light"]').click()
             require(page.locator('.set h1').inner_text() == 'Settings', 'Cached settings route failed at startup')
         check('cached settings startup and persistent appearance', settings)
@@ -1183,7 +1190,12 @@ def run(base, output,admin_fixture=False):
                 body='<!doctype html><html lang="en"><head><script src="/assets/measurement.js?v=consent1" defer></script></head><body>Consent module fixture</body></html>'))
             visit('/__audit_measurement__')
             page.wait_for_function('() => !!window.googlefc?.callbackQueue?.length')
-            require(not requests, 'Measurement requested before consent data')
+            require(len(requests)==1, 'Advanced consent bootstrap did not load exactly one Google tag')
+            require(page.evaluate("""() => {
+              const first=window.dataLayer[0];
+              return first[0]==='consent' && first[1]==='default' &&
+                ['analytics_storage','ad_storage','ad_user_data','ad_personalization'].every(key=>first[2][key]==='denied');
+            }"""), 'Tag configuration preceded the denied consent defaults')
             page.evaluate("""() => {
               const fc=window.googlefc;
               fc.ConsentModePurposeStatusEnum={CONSENT_MODE_PURPOSE_STATUS_GRANTED:1,
@@ -1195,13 +1207,14 @@ def run(base, output,admin_fixture=False):
               window.auditConsentCallback=fc.callbackQueue.find(x=>x.CONSENT_MODE_DATA_READY).CONSENT_MODE_DATA_READY;
               window.auditConsentCallback();
             }""")
-            require(not requests, 'Denied consent enabled measurement')
-            with page.expect_request('https://www.googletagmanager.com/**'):
-                page.evaluate('() => { window.auditConsent=1; window.auditConsentCallback(); }')
+            require(page.evaluate("window.dataLayer.at(-1)[2].analytics_storage==='denied' && window.dataLayer.at(-1)[2].ad_storage==='denied'"), 'Denied CMP choice granted storage')
+            page.evaluate('() => { window.auditConsent=1; window.auditConsentCallback(); }')
+            require(page.evaluate("window.dataLayer.at(-1)[2].analytics_storage==='granted' && window.dataLayer.at(-1)[2].ad_storage==='granted'"), 'CMP grant was not applied')
             page.evaluate('() => { window.auditConsentCallback(); window.auditConsent=2; window.auditConsentCallback(); }')
             require(len(requests)==1, 'Consent callbacks duplicated the measurement loader')
-            require(page.evaluate("window['ga-disable-G-2HVZQST08G']===true"), 'Consent withdrawal did not disable Analytics')
-        check('measurement waits for consent and handles grant, repeat callbacks and withdrawal', measurement_consent)
+            require(page.evaluate("['analytics_storage','ad_storage','ad_user_data','ad_personalization'].every(key=>window.dataLayer.at(-1)[2][key]==='denied')"), 'Consent withdrawal did not deny storage')
+            require(page.evaluate("!window.dataLayer.some(args=>args[0]==='event')"), 'Reading or consent callbacks generated a false conversion event')
+        check('measurement defaults to denied consent and handles grant, repeat callbacks and withdrawal without conversions', measurement_consent)
 
         if admin_fixture:
             def devanagari_feed():

@@ -14,6 +14,14 @@ from .source_text import source_text
 NUM = r'-?\d[\d,]*(?:\.\d+)?'
 UNITS = r'%|per\s+cent|percent|टक्के|crore|कोटी|lakh|लाख|billion|million|seats?|जागा|votes|मते|cases|रुग्ण|mm|मिमी|km|किमी|tonnes?|टन'
 QUANTITY = re.compile(r'(?<![\w.])(?P<currency>[₹$€])?\s*(?P<value>'+NUM+r')\s*(?P<unit>'+UNITS+r')(?!\w)',re.I)
+# A range may repeat its unit at both ends. Exclude both observations, rather
+# than turning an endpoint into an exact metric or an incomplete comparison.
+RANGE_VALUE = r'[₹$€]?\s*'+NUM+r'\s*(?:'+UNITS+r')?'
+RANGE = re.compile(r'(?<![\w.])(?:\bbetween\s+'+RANGE_VALUE+r'\s+and\s+'+RANGE_VALUE+
+                   r'|[₹$€]?\s*'+NUM+r'\s+and\s+'+RANGE_VALUE+
+                   r'|'+RANGE_VALUE+r'\s*(?:[-–—]|\bto\b|ते)\s*'+RANGE_VALUE+r')(?!\w)', re.I)
+QUALIFIER = re.compile(r'(?:\b(?:over|under|above|below|more than|less than|about|around|up to|nearly|approximately|roughly|at least|at most)|सुमारे|अंदाजे|किमान|कमाल|[~≈<>≤≥])\s*[₹$€]?\s*$', re.I)
+QUALIFIED_END = re.compile(r'^\s*(?:\+|\b(?:or more|or less|and above|and below)\b)', re.I)
 UNIT_MAP = {'per cent':'%','percent':'%','टक्के':'%','कोटी':'crore','लाख':'lakh','seat':'seats','जागा':'seats','मिमी':'mm','किमी':'km','tonne':'tonnes','टन':'tonnes'}
 MEASURES = [(r'\b(?:vote share|voting share)\b|मतांचा वाटा','Vote share'),(r'\b(?:seats?|seat tally)\b|जागा','Seat comparison'),(r'\bturnout\b','Voter turnout'),(r'\bmargin\b','Margin'),(r'\bvotes\b|मते','Vote comparison'),(r'\bcases\b|रुग्ण','Reported cases'),(r'\bAQI\b|air quality index','Air quality index'),(r'\b(?:GDP|growth)\b|वाढ','Growth'),(r'inflation|महागाई','Inflation'),(r'\b(?:sales|revenue)\b|विक्री|महसूल','Sales / revenue'),(r'\b(?:budget|allocation|spending|expenditure)\b|खर्च|अर्थसंकल्प','Budget / allocation'),(r'\b(?:rainfall|rain)\b|पाऊस','Rainfall')]
 COLORS = ['#2463ad','#b51f36','#20927b','#b27a21','#795caa','#50797c','#8e6250','#65758a']
@@ -29,6 +37,12 @@ def numeric(raw):
         value=float(raw.replace(',',''))
         return value if math.isfinite(value) and abs(value)<=1e12 else None
     except ValueError:return None
+
+
+def exact_observation(paragraph, start, end, ranges):
+    return not (any(start < right and end > left for left, right in ranges)
+                or QUALIFIER.search(paragraph[max(0, start-80):start])
+                or QUALIFIED_END.search(paragraph[end:]))
 
 
 def fmt(value):
@@ -101,16 +115,17 @@ def extract(row):
         if not mixed and 2<=len(points)<=12 and len({p['label']for p in points})==len(points):
             chart={'points':points,'unit':unit,'measure':header[1],'context':line,'kind':chart_kind(points,unit,line)};break
     for paragraph in paragraphs:
+        ranges = [match.span() for match in RANGE.finditer(paragraph)]
         for index_match in re.finditer(r'\b(AQI|Nifty(?: 50)?|Sensex)\s*(?:was|is|at|stood at|stands at|[:=])?\s*('+NUM+r')(?![\d.])',paragraph,re.I):
+            if not exact_observation(paragraph, index_match.start(2), index_match.end(), ranges):continue
             value=numeric(index_match[2]);unit='AQI' if index_match[1].upper()=='AQI' else 'points'
             if value is not None and (value,unit) not in seen and len(facts)<3:
                 seen.add((value,unit));facts.append({'label':index_match[1],'value':value,'unit':unit,'context':paragraph[max(0,index_match.start()-100):index_match.end()+180]})
         matches=list(QUANTITY.finditer(paragraph))
-        observations=[]
+        observations=[];uncertain=False
         for index,match in enumerate(matches):
-            # Ranges, estimates and inequalities are not exact observations.
-            before=paragraph[max(0,match.start()-28):match.start()]
-            if re.search(r'(?:\d[\d,.]*\s*(?:[-–]|to|and|ते)\s*|(?:\b(?:over|under|more than|less than|about|around|up to|nearly|approximately)|सुमारे|अंदाजे)\s*)$',before,re.I):continue
+            if not exact_observation(paragraph, match.start('value'), match.end(), ranges):
+                uncertain=True;continue
             value=numeric(match['value'])
             if value is None:continue
             start=matches[index-1].end() if index else 0
@@ -122,7 +137,7 @@ def extract(row):
             identity=(value,unit)
             if identity not in seen and len(facts)<3:
                 seen.add(identity);facts.append({**observation,'context':paragraph[max(0,match.start()-120):match.end()+180]})
-        if chart or len(paragraph)>1800 or not 2<=len(observations)<=8:continue
+        if chart or uncertain or len(paragraph)>1800 or not 2<=len(observations)<=8:continue
         units={p['unit']for p in observations};labels=[p['label']for p in observations]
         measure=measure_for(paragraph) or measure_for(paragraph+' '+title)
         if len(units)!=1 or not all(labels) or len(set(labels))!=len(labels) or not measure:continue

@@ -53,6 +53,47 @@ class StoryVisualTests(unittest.TestCase):
         self.assertIsNone(numeric('1,,234'))
         self.assertEqual(numeric('1,23,456'),123456)
 
+    def test_index_ranges_are_not_presented_as_exact_metric_cards(self):
+        for text in ['The AQI was 300–400 in Delhi.', 'AQI: 300-400.',
+                     'Nifty was 24,100 to 24,200 points during trading.',
+                     'Sensex: 80,000—81,000 points.', 'AQI: 300 or more.']:
+            with self.subTest(text=text):
+                self.assertIsNone(extract(story(text)))
+                self.assertEqual(render(story(text)), '')
+
+    def test_qualified_figures_and_both_range_endpoints_are_not_exact_observations(self):
+        for text in [
+            'Vote share: Party A: at least 55%; Party B: at most 45%.',
+            'Vote share: Party A: roughly 55%; Party B: approximately 45%.',
+            'Vote share: Party A: ≥55%; Party B: ≤45%.',
+            'Rainfall: Mumbai: 100 mm to 120 mm; Pune: 80 mm to 90 mm.',
+            'Vote share: Party A: between 50% and 55%; Party B: between 30% and 35%.',
+            'Rainfall ranged from 100–120 mm in Mumbai.',
+            'Growth was between 7 and 10 percent.',
+            'Growth values were 7 and 10 percent.',
+            'जागा: पक्ष अ: किमान ५० जागा; पक्ष ब: कमाल ४० जागा.',
+            'पाऊस: मुंबई: १०० मिमी ते १२० मिमी.',
+        ]:
+            with self.subTest(text=text):
+                self.assertIsNone(extract(story(text)))
+
+    def test_uncertain_figures_do_not_turn_remaining_observations_into_a_partial_chart(self):
+        data = extract(story('Seat tally: A: 50 seats; B: 40 seats; C: at least 10 seats.'))
+        self.assertIsNone(data['chart'])
+        self.assertEqual([p['value'] for p in data['facts']], [50, 40])
+        data = extract(story('AQI was 300–400 in Delhi.\n\nThe AQI was 220 in Mumbai.'))
+        self.assertEqual([p['value'] for p in data['facts']], [220])
+
+    def test_exact_indices_currency_and_negative_observations_still_work(self):
+        for text, values in [
+            ('AQI was 344 in Delhi.', [344]),
+            ('Nifty 50 was 24,100.50 points.', [24100.5]),
+            ('Budget: Schools: ₹30 crore; Hospitals: ₹40 crore.', [30, 40]),
+            ('GDP growth: Region A: -2.5%; Region B: 3.5%.', [-2.5, 3.5]),
+        ]:
+            with self.subTest(text=text):
+                self.assertEqual([p['value'] for p in extract(story(text))['facts']], values)
+
     def test_marathi_digits_units_and_escaped_context(self):
         row=story('जागा: पक्ष अ: ५० जागा; पक्ष ब: ४० जागा.')
         self.assertEqual([p['value']for p in extract(row)['chart']['points']],[50,40])
