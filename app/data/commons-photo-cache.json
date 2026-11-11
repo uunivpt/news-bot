@@ -33,6 +33,17 @@
       "image_url": "https://upload.wikimedia.org/wikipedia/commons/e/ec/Chief_Minister_Pinarayi_Vijayan_2023.jpg"
     }
   },
+  "Rahul Gandhi": {
+    "checked_at": "2026-11-11T04:50:37.859113+00:00",
+    "photo": {
+      "image_credit": "Himanshu Arya Khowal",
+      "image_license": "cc-by-4.0",
+      "image_license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "image_source": "wikimedia-commons",
+      "image_source_url": "https://commons.wikimedia.org/wiki/File:Rahul_Gandhi.png",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/9/91/Rahul_Gandhi.png"
+    }
+  },
   "Red Fort": {
     "checked_at": "2026-11-10T15:14:00+00:00",
     "photo": {
