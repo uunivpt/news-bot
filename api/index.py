@@ -2391,7 +2391,7 @@ def edit_news(item_id):
  database=db()
  try:
   existing=database.get_by_id(item_id)
-  if not existing:return jsonify({'error':'story not found'}),404)
+  if not existing:return jsonify({'error':'story not found'}),404
   if any(key in fields for key in ("image_url","image_source","image_license","image_credit","image_source_url","image_license_url")):
    proposed={**dict(existing),**fields}
    image_url=str(proposed.get("image_url") or "").strip()
