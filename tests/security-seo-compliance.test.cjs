@@ -56,12 +56,13 @@ test('a substantial source-first explainer is published, linked and discoverable
 test('AdSense readiness inputs are packaged with hosted API function', () => {
   const config = JSON.parse(read('vercel.json'));
   const bundled = config.functions?.['api/index.py']?.includeFiles || '';
+  assert.ok(bundled.length <= 256, 'Vercel includeFiles exceeds schema limit');
+  assert.ok(bundled.includes('public/{*.html,ads.txt,exam-notices.json}'), 'Vercel function does not package required public text files');
   for (const page of [
     'ads.txt', 'about.html', 'contact.html', 'privacy.html', 'cookies.html',
     'terms.html', 'editorial-policy.html', 'corrections.html', 'licenses.html'
   ]) {
     assert.ok(fs.existsSync('public/' + page), 'source file missing: ' + page);
-    assert.ok(bundled.includes('public/' + page), 'Vercel function excludes: ' + page);
   }
   assert.ok(read('public/ads.txt').includes('google.com, pub-1752666987448533, DIRECT, f08c47fec0942fa0'));
 });

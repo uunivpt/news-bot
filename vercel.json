@@ -282,7 +282,7 @@
   ],
   "functions": {
     "api/index.py": {
-      "includeFiles": "{app/{data,fonts,templates}/**,config/{sources,official-exam-sources}.json,public/{exam-notices.json,ads.txt,about.html,contact.html,privacy.html,cookies.html,terms.html,editorial-policy.html,corrections.html,licenses.html}}"
+      "includeFiles": "{app/{data,fonts,templates}/**,config/{sources,official-exam-sources}.json,public/{*.html,ads.txt,exam-notices.json}}"
     }
   },
   "redirects": [
