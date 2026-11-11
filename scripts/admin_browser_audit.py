@@ -124,7 +124,10 @@ def run(output):
             assert 'Unavailable' in page.locator('#phase4Metrics').inner_text()
             assert page.locator('#phase4Trend tbody tr').count()==14
             assert 'Not recorded' in page.locator('#phase4Trend').inner_text()
-            assert 'earlier results are not reconstructed' in page.locator('#phase4TrendNote').inner_text()
+            history_note=page.locator('#phase4TrendNote').inner_text()
+            assert 'Earlier outcomes cannot be reconstructed' in history_note
+            assert 'not a verified zero' in history_note
+            assert 'GitHub public-feed runs are separate' in history_note
             page.screenshot(path=str(output/'phase4-source-alerts-desktop.png'))
             page.screenshot(path=str(output/'source-operations-desktop.png'))
             page.locator('#sourceSearch').fill('TV9')
@@ -142,6 +145,14 @@ def run(output):
             page.wait_for_function("() => !document.querySelector('#newsList').hasAttribute('aria-busy')")
             edit=page.locator('#newsList [data-edit-story]').first
             sid=int(edit.get_attribute('data-edit-story'))
+            # This isolated image-edit fixture must carry the reuse metadata
+            # required by the current editor; unlicensed URLs are rejected.
+            database=api.db()
+            try:
+                database.update(sid,image_source='article-source',image_license='rights-owned',
+                                image_credit='Isolated newsroom fixture')
+            finally:
+                database.close()
             edit.click()
             page.wait_for_selector('.story-editor[open]')
             assert page.locator('#news.active').count()==1
@@ -160,6 +171,8 @@ def run(output):
                 saved=database.get_by_id(sid)
                 assert saved['bot_article']==article.strip()
                 assert saved['image_url']=='https://example.org/newsroom-photo.jpg'
+                assert saved['image_license']=='rights-owned'
+                assert saved['image_credit']=='Isolated newsroom fixture'
             finally:
                 database.close()
             page.set_viewport_size({'width':390,'height':844})
