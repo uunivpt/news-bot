@@ -132,6 +132,34 @@ Run `python scripts/story_visuals_browser_audit.py` for bar, pie, line, index-ca
 no-data, mobile/desktop, dark-mode, tooltip, exact-table, no-JavaScript and SPA
 navigation checks. Fixtures are never published as real news.
 
+## Downloading the figures
+
+Each available article figure and reviewed Data Desk series offers **Download
+figures (CSV)**. The ordinary download link works on canonical pages, legacy SPA
+articles and without JavaScript; it requires no account or preference storage.
+
+The UTF-8 CSV contains the same observations as the figure, units, measure,
+report context and source attribution. Reviewed datasets retain full stored
+provider precision, original data/licence links, provider update date and source
+check date. Article figures retain reported numeric tokens (including Marathi
+digits normalized by the existing extractor), the original publication field and
+canonical article link. Source-check dates are not article publication dates.
+An article export does not grant a new licence: original publisher rights apply.
+
+`/api/data-desk/<dataset-id>/csv` exports only the validated registry catalog.
+`/api/article-visuals/<article-id>/csv` resolves the existing public article and
+uses the same conservative extractor as its figure. Omitted ranges and estimates
+do not reappear as exact values. Missing figures and unpublished copy produce no
+article-derived attachment, including for signed-in editors. Reviewed registry
+downloads contain only the independently public dataset. Exports make no provider requests
+or database writes and are private/no-store so edited figures cannot leave a
+stale download behind. Spreadsheet formula-like text is escaped as text; validated
+negative numeric observations retain their numeric value. Only figure context is
+included; the raw article-body field and private editorial fields are not added.
+
+Run `python -m unittest discover -s tests -p test_figure_downloads.py -v` and the
+article-data, story-visuals and data-desk browser audits for download acceptance.
+
 
 ## Automatic annual-series refresh (10 November 2026)
 

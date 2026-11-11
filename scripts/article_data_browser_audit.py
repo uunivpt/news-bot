@@ -3,6 +3,8 @@
 No production writes, accounts, subscriptions or third-party requests.
 """
 import argparse
+import csv
+import io
 import json
 from pathlib import Path
 import sys
@@ -65,6 +67,12 @@ def run(base, output):
         require(str(latest['value']) in page.locator('.article-data-table').inner_text(), 'Exact source precision was lost')
         page.locator('.article-data-table summary').click()
         checks.append('canonical metrics, negative values, exact-value table and original publication/source')
+        with page.expect_download() as event:
+            page.locator('.article-data a[download]').click()
+        exported = list(csv.DictReader(io.StringIO(Path(event.value.path()).read_text(encoding='utf-8-sig'))))
+        require([r['value'] for r in exported] == [str(p['value']) for p in data['points']], 'Reviewed export lost observations or precision')
+        require(all(r['source_url'] == data['source']['url'] and r['licence_url'] == data['source']['license_url'] for r in exported), 'Reviewed export lost provenance')
+        checks.append('reviewed chart downloads exact observations with source and licence')
 
         last = page.locator('.data-bar').last
         last.focus()

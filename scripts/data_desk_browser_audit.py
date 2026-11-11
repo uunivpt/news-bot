@@ -1,5 +1,5 @@
 """Public Data Desk acceptance with local fixtures and reviewed, bundled observations."""
-import argparse,json,sys
+import argparse,csv,io,json,sys
 from pathlib import Path
 from urllib.parse import urlsplit
 from playwright.sync_api import sync_playwright
@@ -26,6 +26,11 @@ def run(base,output):
   assert page.locator('.data-desk .data-bar').count()==18
   assert page.locator('.data-desk .data-index strong').all_text_contents()==expected_values
   assert page.locator('link[rel=canonical]').get_attribute('href')=='https://www.politicshub.in/data/'
+  for index,data in enumerate(datasets):
+   with page.expect_download() as event:page.locator('.article-data a[download]').nth(index).click()
+   values=list(csv.DictReader(io.StringIO(Path(event.value.path()).read_text(encoding='utf-8-sig'))))
+   assert [row['value'] for row in values]==[str(point['value']) for point in data['points']]
+   assert all(row['licence_url']==data['source']['license_url'] and row['source_url']==data['source']['url'] for row in values)
   bar=page.locator('.data-bar').first
   bar.focus();assert page.locator('.article-data-tooltip').first.is_visible()
   page.keyboard.press('Escape');assert page.locator('.article-data-tooltip').first.is_hidden()
@@ -46,11 +51,13 @@ def run(base,output):
   plain.route('**/*',lambda r:r.continue_() if r.request.url.startswith(base+'/') else r.abort())
   reader=plain.new_page();reader.goto(base+'/data/')
   assert reader.locator('.data-bar').count()==18
+  with reader.expect_download() as event:reader.locator('.article-data a[download]').first.click()
+  assert len(list(csv.DictReader(io.StringIO(Path(event.value.path()).read_text(encoding='utf-8-sig')))))==6
   reader.locator('.article-data-table summary').first.click();assert reader.locator('table').first.is_visible()
   plain.close()
   assert not errors,errors
   browser.close()
- report={'passed':True,'checks':['standalone historical desk remains available without a homepage dashboard','three exact indicator series','keyboard, Escape and touch tooltip','320/390/768/1440 layouts','anchor navigation and precise tables','dark mode','no-JavaScript charts'],'browser_errors':errors}
+ report={'passed':True,'checks':['standalone historical desk remains available without a homepage dashboard','three exact indicator series','keyboard, Escape and touch tooltip','320/390/768/1440 layouts','anchor navigation and precise tables','dark mode','no-JavaScript charts','all three CSV downloads retain exact observations and provenance; no-JS download works'],'browser_errors':errors}
  (output/'report.json').write_text(json.dumps(report,indent=2))
  print(json.dumps(report),flush=True)
 
