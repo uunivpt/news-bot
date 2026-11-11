@@ -52,3 +52,16 @@ test('a substantial source-first explainer is published, linked and discoverable
   assert.match(read('public/static-sitemap.xml'), /guides\/government-notifications.html/);
   assert.doesNotMatch(guide, /adsbygoogle.js/);
 });
+
+test('AdSense readiness inputs are packaged with hosted API function', () => {
+  const config = JSON.parse(read('vercel.json'));
+  const bundled = config.functions?.['api/index.py']?.includeFiles || '';
+  for (const page of [
+    'ads.txt', 'about.html', 'contact.html', 'privacy.html', 'cookies.html',
+    'terms.html', 'editorial-policy.html', 'corrections.html', 'licenses.html'
+  ]) {
+    assert.ok(fs.existsSync('public/' + page), 'source file missing: ' + page);
+    assert.ok(bundled.includes('public/' + page), 'Vercel function excludes: ' + page);
+  }
+  assert.match(read('public/ads.txt'), /^google\\.com, pub-1752666987448533, DIRECT, f08c47fec0942fa0$/m);
+});
