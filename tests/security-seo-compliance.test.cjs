@@ -63,5 +63,5 @@ test('AdSense readiness inputs are packaged with hosted API function', () => {
     assert.ok(fs.existsSync('public/' + page), 'source file missing: ' + page);
     assert.ok(bundled.includes('public/' + page), 'Vercel function excludes: ' + page);
   }
-  assert.match(read('public/ads.txt'), /^google\\.com, pub-1752666987448533, DIRECT, f08c47fec0942fa0$/m);
+  assert.ok(read('public/ads.txt').includes('google.com, pub-1752666987448533, DIRECT, f08c47fec0942fa0'));
 });
