@@ -66,7 +66,11 @@ keyboard and responsive checks.
 stores up to 100 article links on the reader's browser after optional preferences
 are allowed. Readers can search saved headlines and sort by save time or headline;
 filtering stays on this browser and does not rewrite the list. Article pages include text-size controls, a print layout and the
-existing share sheet. These features do not require an account.
+existing share sheet. Copy reference collects the displayed headline, source,
+publication label, reading link and available original-report link, with a
+selectable-text fallback if clipboard access is unavailable. It does not copy
+the article body or invent missing publication metadata. These features do not
+require an account.
 
 The source directory supports keyword and source-type filters. BBC World adds
 attributed international headline metadata to the existing RSS sources. Run
