@@ -2379,7 +2379,7 @@ def edit_news(item_id):
  if err:return err
  err=require_csrf()
  if err:return err
- body=request.get_json(silent=True) or {}; fields={k:str(body[k] or "").strip() for k in ("title","summary","category","image_url","bot_summary","bot_article") if k in body}
+ body=request.get_json(silent=True) or {}; fields={k:str(body[k] or "").strip() for k in ("title","summary","category","image_url","image_source","image_license","image_credit","image_source_url","image_license_url","bot_summary","bot_article") if k in body}
  if not fields:return jsonify({"error":"no editable fields supplied"}),400
  policy=getattr(g,"admin_policy",None)
  if policy and policy["categories"] and fields.get("category") and fields["category"] not in policy["categories"]:return jsonify({"error":"That desk is outside your assigned access."}),403
@@ -2391,7 +2391,21 @@ def edit_news(item_id):
  database=db()
  try:
   existing=database.get_by_id(item_id)
-  if not existing:return jsonify({'error':'story not found'}),404
+  if not existing:return jsonify({'error':'story not found'}),404)
+  if any(key in fields for key in ("image_url","image_source","image_license","image_credit","image_source_url","image_license_url")):
+   proposed={**dict(existing),**fields}
+   image_url=str(proposed.get("image_url") or "").strip()
+   if image_url:
+    from urllib.parse import urlsplit
+    parsed=urlsplit(image_url)
+    if parsed.scheme!="https" or not parsed.hostname or parsed.username or parsed.password or len(image_url)>2000 or not public_http_url(image_url):
+     return jsonify({"error":"Image must be a publicly accessible HTTPS URL"}),400
+    from app.commons_photos import valid_photo
+    if not (_is_source_supplied_image(proposed) or valid_photo(proposed)):
+     return jsonify({"error":"Image requires verified reuse rights and appropriate image source, license and credit; Google Images alone does not grant image rights."}),400
+   else:
+    for key in ("image_source","image_license","image_credit","image_source_url","image_license_url"):
+     fields[key]=""
   if existing["approved_at"]:
    fields.update(fact_check_status="pending",fact_check_notes="",approved_at=None,status="pending")
   revision=request.headers.get('If-Match','').strip('"')
