@@ -1792,6 +1792,38 @@ def article_visual_data(item_id):
  visual=render_story_visuals(row) if isinstance(row,dict) and row.get('status')=='published' else ''
  return jsonify({'html':visual}),200,{'Cache-Control':'private,no-store'}
 
+def _figure_csv_response(content, identity):
+ # Both callers derive the filename from a validated registry ID or integer.
+ filename='politicshub-'+re.sub(r'[^a-zA-Z0-9-]','',str(identity))[:100]+'.csv'
+ return Response(content,mimetype='text/csv',headers={
+  'Content-Disposition':'attachment; filename="'+filename+'"',
+  'Cache-Control':'private,no-store',
+ })
+
+@app.get('/api/data-desk/<dataset_id>/csv')
+def download_reviewed_figures(dataset_id):
+ from app.article_visuals import catalog
+ from app.figure_downloads import dataset_csv
+ if not _public_rate_allowed():return jsonify({'error':'rate limit exceeded'}),429
+ data=next((entry for entry in catalog() if entry['id']==dataset_id),None)
+ if not data:return jsonify({'error':'figures not found'}),404
+ return _figure_csv_response(dataset_csv(data),dataset_id)
+
+@app.get('/api/article-visuals/<int:item_id>/csv')
+def download_article_figures(item_id):
+ from app.article_visuals import for_article
+ from app.figure_downloads import article_csv,dataset_csv
+ if not _public_rate_allowed():return jsonify({'error':'rate limit exceeded'}),429
+ known=for_article(item_id)
+ if known:return _figure_csv_response(dataset_csv(known),known['id'])
+ response=app.make_response(article(item_id))
+ if response.status_code!=200:return response
+ row=response.get_json(silent=True)
+ if not isinstance(row,dict) or row.get('status')!='published':return jsonify({'error':'figures not found'}),404
+ content=article_csv(row,SITE_ORIGIN+article_path(row))
+ if content is None:return jsonify({'error':'figures not found'}),404
+ return _figure_csv_response(content,item_id)
+
 @app.get("/api/trending")
 def trending():
  if not _public_rate_allowed():return jsonify({"error":"rate limit exceeded"}),429

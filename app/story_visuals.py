@@ -120,7 +120,7 @@ def extract(row):
             if not exact_observation(paragraph, index_match.start(2), index_match.end(), ranges):continue
             value=numeric(index_match[2]);unit='AQI' if index_match[1].upper()=='AQI' else 'points'
             if value is not None and (value,unit) not in seen and len(facts)<3:
-                seen.add((value,unit));facts.append({'label':index_match[1],'value':value,'unit':unit,'context':paragraph[max(0,index_match.start()-100):index_match.end()+180]})
+                seen.add((value,unit));facts.append({'label':index_match[1],'value':value,'unit':unit,'reported':index_match[2],'context':paragraph[max(0,index_match.start()-100):index_match.end()+180]})
         matches=list(QUANTITY.finditer(paragraph))
         observations=[];uncertain=False
         for index,match in enumerate(matches):
@@ -202,4 +202,6 @@ def render(row):
         figure=table=''
     url=str(row.get('url') or '')
     source=f'<a href="{e(url)}" target="_blank" rel="noopener noreferrer">{e(row.get("source_name") or "Original report")}</a>' if url.startswith('https://') and public_http_url(url) else e(row.get('source_name') or 'This report')
-    return f'<section class="article-data story-numbers" aria-labelledby="{key}"><p class="article-data-eyebrow">THE STORY IN NUMBERS</p><h2 id="{key}">The figures behind this story</h2><p class="article-data-description">Figures from this report. Compare the named observations using the units and source context shown below.</p><div class="article-data-metrics">{cards}</div>{figure}<p class="article-data-source">Source: {source}. Figures as stated in the article; see the original report for context.</p>{table}</section>'
+    identity=str(row.get('id') or '')
+    download=(f'<p class="article-data-note"><a href="/api/article-visuals/{identity}/csv" download>Download figures (CSV)</a> · Includes units and original source details.</p>' if re.fullmatch(r'[1-9][0-9]{0,18}',identity) else '')
+    return f'<section class="article-data story-numbers" aria-labelledby="{key}"><p class="article-data-eyebrow">THE STORY IN NUMBERS</p><h2 id="{key}">The figures behind this story</h2><p class="article-data-description">Figures from this report. Compare the named observations using the units and source context shown below.</p><div class="article-data-metrics">{cards}</div>{figure}<p class="article-data-source">Source: {source}. Figures as stated in the article; see the original report for context.</p>{download}{table}</section>'

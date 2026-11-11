@@ -1,5 +1,5 @@
 """Per-article charts from explicit report data, using isolated article fixtures."""
-import argparse,json,sys
+import argparse,csv,io,json,sys
 from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import urlsplit
@@ -34,13 +34,21 @@ def run(output):
   context.route('**/*',intercept);context.add_init_script("localStorage.setItem('ph-consent-v1','essential')")
   page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
   selectors=['.data-bar','.story-slice','.story-point','.article-data-metric',None,None,None,None]
-  paths=list(documents)
+  paths=list(documents);downloads={}
   for i,selector in enumerate(selectors):
    page.goto(base+paths[i],wait_until='networkidle')
    if selector:
     assert page.locator('.story-numbers '+selector).count()==([3,2,3,1][i])
     assert 'World Bank' not in page.locator('.story-numbers').inner_text()
     assert page.locator('.story-numbers a').first.get_attribute('href')=='https://example.org/report'
+    with page.expect_download() as event:
+     page.locator('.story-numbers a[download]').click()
+    download=event.value;assert download.suggested_filename.endswith('.csv')
+    content=Path(download.path()).read_text(encoding='utf-8-sig');downloads[i]=content
+    values=list(csv.DictReader(io.StringIO(content)))
+    assert len(values)==[3,2,3,1][i]
+    assert all(row['source_url']=='https://example.org/report' and row['article_published_at']=='2026-11-10T00:00:00Z' for row in values)
+    if i==2:assert values[0]['value']=='7.6001234'
     for width in [320,390,1440]:
      page.set_viewport_size({'width':width,'height':1000})
      assert page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),(i,width)
@@ -67,15 +75,19 @@ def run(output):
    assert rows[identity]['article'] in page.locator('.body').inner_text()
   page.goto(base+'/#/article/900002',wait_until='networkidle');page.wait_for_selector('.story-slice')
   assert page.locator('.story-slice').count()==2
+  with page.expect_download() as event:page.locator('.story-numbers a[download]').click()
+  assert Path(event.value.path()).read_text(encoding='utf-8-sig')==downloads[1]
   page.evaluate("location.hash='/settings'");page.wait_for_selector('#prefs');assert page.locator('.story-numbers').count()==0
   page.goto(base+'/',wait_until='networkidle');assert page.locator('.ph-data-home').count()==0
   plain=browser.new_context(java_script_enabled=False,viewport={'width':390,'height':900});plain.route('**/*',intercept)
   reader=plain.new_page();reader.goto(base+paths[1]);assert reader.locator('.story-slice').count()==2
+  with reader.expect_download() as event:reader.locator('.story-numbers a[download]').click()
+  assert Path(event.value.path()).read_text(encoding='utf-8-sig')==downloads[1]
   reader.locator('.article-data-table summary').click();assert reader.locator('table').is_visible()
   reader.goto(base+paths[5]);assert reader.locator('.article-data').count()==0
   assert texts[5][1] in reader.locator('.body').inner_text();plain.close()
   assert not errors,errors;browser.close()
- report={'passed':True,'checks':['article-specific regional comparison','complete-share pie','yearly line trend','AQI metric card','no data means no chart','320/390/1440px layouts','dark mode','keyboard, Escape and touch','source and exact tables','canonical no-JS reading','SPA article and cleanup','no unrelated homepage dashboard','ranges and qualified values omitted from canonical and SPA figures','original uncertainty, publication date and attribution preserved'],'browser_errors':errors}
+ report={'passed':True,'checks':['article-specific regional comparison','complete-share pie','yearly line trend','AQI metric card','no data means no chart','320/390/1440px layouts','dark mode','keyboard, Escape and touch','source and exact tables','canonical no-JS reading','SPA article and cleanup','no unrelated homepage dashboard','ranges and qualified values omitted from canonical and SPA figures','original uncertainty, publication date and attribution preserved','CSV downloads preserve values, units, source and publication; canonical/SPA/no-JS agree'],'browser_errors':errors}
  (output/'report.json').write_text(json.dumps(report,indent=2));print(json.dumps(report),flush=True)
 
 if __name__=='__main__':
