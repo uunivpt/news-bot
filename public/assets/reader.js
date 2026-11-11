@@ -11,6 +11,45 @@
  const storageError="Your browser couldn't update saved stories. Check browser storage settings.";
  let current=null,scheduled=false;
  function notice(text){let node=$('#readerNotice');if(!node){node=document.createElement('p');node.id='readerNotice';node.className='reader-notice';node.setAttribute('role','status');$('.reader-tools')?.append(node)}if(node)node.textContent=text}
+ function referenceText(article){
+  const line=value=>String(value||'').replace(/\s+/g,' ').trim();
+  const title=line(article.querySelector('h1')?.textContent);
+  const reading=window.PHReadingList.clean({url:location.href,title},location.origin);
+  if(!reading)return '';
+  const source=line(article.querySelector('.by > span:last-child')?.textContent)||'Source unavailable';
+  const published=line(article.querySelector('.by .article-published')?.textContent)||'Publication date unavailable';
+  const parts=[title,'Source: '+source,published,'Read on PoliticsHub: '+new URL(reading.url,location.origin).href];
+  const original=[...article.querySelectorAll('.src a[href]')].find(link=>line(link.textContent)==='Read the original report');
+  try{
+   const value=original?.getAttribute('href')||'';
+   if(/^https?:\/\//i.test(value)){
+    const url=new URL(value);
+    if(!url.username&&!url.password)parts.push('Original report: '+url.href);
+   }
+  }catch(_){}
+  return parts.join('\n');
+ }
+ async function copyReference(button){
+  const article=button.closest('article.art'),tools=button.closest('.reader-tools');
+  if(!article||!tools||button.dataset.copying)return;
+  const text=referenceText(article);if(!text)return;
+  const active=()=>article.isConnected&&tools.isConnected&&$('article.art')===article;
+  let status=tools.querySelector('[data-reference-status]');
+  if(!status){status=document.createElement('p');status.dataset.referenceStatus='';status.className='reader-notice';status.setAttribute('role','status');tools.append(status)}
+  tools.querySelector('[data-reference-text]')?.remove();
+  button.dataset.copying='true';button.setAttribute('aria-busy','true');status.textContent='Copying reference…';
+  try{
+   if(!navigator.clipboard?.writeText)throw Error('Clipboard unavailable');
+   await navigator.clipboard.writeText(text);
+   if(active())status.textContent='Reference copied with source and publication details.';
+  }catch(_){
+   if(!active())return;
+   status.textContent='Could not copy automatically. Select and copy the reference below:';
+   const field=document.createElement('textarea');field.dataset.referenceText='';field.readOnly=true;
+   field.setAttribute('aria-label','Article reference');field.rows=7;field.style.cssText='width:100%;color:var(--ink);background:var(--card);border:1px solid var(--line);padding:12px';field.value=text;
+   tools.append(field);field.focus();field.select();
+  }finally{delete button.dataset.copying;button.removeAttribute('aria-busy')}
+ }
  function sync(){
   const button=$('[data-reader-save]');if(!button||!current)return;
   const saved=list.read().some(x=>x.url===current.url);
@@ -23,7 +62,7 @@
   if(!current||article.querySelector('.reader-tools'))return;
   const words=(article.querySelector('.body')?.textContent||'').trim().split(/\s+/).filter(Boolean).length;
   const tools=document.createElement('div');tools.className='reader-tools';tools.setAttribute('aria-label','Reading tools');
-  tools.innerHTML='<span>'+Math.max(1,Math.ceil(words/220))+' min read</span><button type="button" data-reader-save aria-pressed="false">Save story</button><a href="/saved.html">Saved stories</a><label>Text size <select data-reader-size aria-label="Article text size"><option value="normal">Standard</option><option value="large">Large</option><option value="larger">Extra large</option></select></label><button type="button" data-reader-print>Print</button>';
+  tools.innerHTML='<span>'+Math.max(1,Math.ceil(words/220))+' min read</span><button type="button" data-reader-save aria-pressed="false">Save story</button><a href="/saved.html">Saved stories</a><label>Text size <select data-reader-size aria-label="Article text size"><option value="normal">Standard</option><option value="large">Large</option><option value="larger">Extra large</option></select></label><button type="button" data-reader-reference>Copy reference</button><button type="button" data-reader-print>Print</button>';
   (article.querySelector('.ah')||heading).insertAdjacentElement('afterend',tools);
   const size=readingSize();article.setAttribute('data-reader-size',size);tools.querySelector('[data-reader-size]').value=size;sync();
  }
@@ -44,6 +83,7 @@
   $('#savedQuery').value='';$('#savedOrder').value='recent';renderSaved();$('#savedQuery').focus();
  });
  document.addEventListener('click',event=>{
+  const reference=event.target.closest('[data-reader-reference]');if(reference)copyReference(reference);
   if(event.target.closest('[data-reader-save]')){
    if(!allowed()){notice('Allow preferences in Settings to save stories on this device.');return}
    const saved=list.read().some(x=>x.url===current?.url);

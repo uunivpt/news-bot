@@ -1013,6 +1013,80 @@ def run(base, output,admin_fixture=False):
             page.locator('[data-reader-save]').click()
         check('reading list persists, deduplicates and removes stories', saved)
 
+        def reader_reference():
+            from api import index as api
+            from app.news_numbers import news_number
+            row = {'id': 991717, 'title': 'मराठी reference & source fixture', 'category': 'india',
+                   'article': 'BODY-MARKER: this report body must not be copied into the reference.',
+                   'summary': 'Source-linked browser fixture.', 'status': 'published',
+                   'source_name': 'Fixture News & Research', 'url': 'https://example.org/report',
+                   'published_at': '2026-11-10T05:03:28Z', 'source_type': 'rss'}
+            second = dict(row, id=991718, title='Second reference fixture', source_name='Second fixture source', url='https://example.org/second')
+            with api.app.test_request_context('/'):
+                document = api._article_html(row)
+            canonical = '/india/' + news_number(row)
+            isolated = browser.new_context(viewport={'width':390,'height':900}, service_workers='block', permissions=['clipboard-read','clipboard-write'])
+            def intercept(route):
+                path = urlsplit(route.request.url).path
+                if not route.request.url.startswith(base + '/'):
+                    route.abort()
+                elif path == canonical:
+                    route.fulfill(content_type='text/html', body=document)
+                elif path in ['/api/news/991717','/api/news/991718']:
+                    route.fulfill(json=row if path.endswith('991717') else second)
+                else:
+                    route.continue_()
+            isolated.route('**/*', intercept)
+            isolated.add_init_script("localStorage.setItem('ph-consent-v1','essential')")
+            try:
+                reader = isolated.new_page()
+                reader.on('pageerror', lambda error: errors.append(str(error)))
+                for path in [canonical, '/#/article/991717']:
+                    reader.goto(base + path, wait_until='networkidle')
+                    button = reader.locator('[data-reader-reference]');button.wait_for()
+                    published = reader.locator('.by .article-published').inner_text()
+                    button.click()
+                    reader.wait_for_function("() => document.querySelector('[data-reference-status]')?.textContent.includes('Reference copied')")
+                    text = reader.evaluate('navigator.clipboard.readText()')
+                    require(row['title'] in text and 'Source: ' + row['source_name'] in text, 'Reference lost title or source')
+                    require(published in text and 'Original report: ' + row['url'] in text, 'Reference lost publication/source-link metadata')
+                    require('Read on PoliticsHub: ' + base + path in text, 'Reference reading link is incorrect')
+                    require('BODY-MARKER' not in text, 'Reference copied the article body')
+                    require(button.evaluate('(node) => node === document.activeElement'), 'Successful reference copy lost keyboard focus')
+                    require(reader.evaluate("localStorage.getItem('ph-reading-list-v1')") is None, 'Copying a reference wrote optional storage')
+                reader.evaluate("Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:()=>Promise.reject(new Error('denied'))}})")
+                button.click()
+                field = reader.get_by_role('textbox', name='Article reference');field.wait_for()
+                require(field.input_value() == text, 'Manual-copy fallback changed the reference')
+                require(field.evaluate('(node) => node.readOnly && node === document.activeElement && node.selectionStart === 0 && node.selectionEnd === node.value.length'), 'Manual reference text is not focused/selected')
+                button.click();require(reader.locator('[data-reference-text]').count() == 1, 'Retry duplicated the fallback')
+                for width in [320,390,1440]:
+                    reader.set_viewport_size({'width':width,'height':900})
+                    for theme in ['light','dark']:
+                        reader.evaluate('theme => document.documentElement.dataset.theme=theme', theme)
+                        require(reader.evaluate('document.documentElement.scrollWidth<=innerWidth'), 'Reference overflow at ' + str(width))
+                reader.evaluate("document.querySelector('.by .article-published').remove();document.querySelector('.by > span:last-child').textContent='';document.querySelector('.src a[target=\"_blank\"]').href='https://user:credential-token@example.org/report'")
+                button.click()
+                require('Publication date unavailable' in field.input_value() and 'Source unavailable' in field.input_value(), 'Reference invented missing date/source metadata')
+                require('credential-token' not in field.input_value() and 'Original report:' not in field.input_value(), 'Reference copied an unsafe source URL')
+                for outcome in ['resolve','reject']:
+                    reader.goto(base + '/#/article/991717', wait_until='networkidle');reader.wait_for_selector('[data-reader-reference]')
+                    reader.evaluate("Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:()=>new Promise((resolve,reject)=>{window.finishReference=resolve;window.failReference=()=>reject(Error('denied'))})}})")
+                    reader.locator('[data-reader-reference]').click()
+                    reader.evaluate("location.hash='/article/991718'")
+                    reader.wait_for_function("() => document.querySelector('.art h1')?.textContent === 'Second reference fixture'")
+                    reader.wait_for_selector('[data-reader-reference]')
+                    reader.evaluate("async outcome => {outcome==='resolve'?window.finishReference():window.failReference();await new Promise(resolve=>setTimeout(resolve,0));}", outcome)
+                    require(reader.locator('[data-reference-text],[data-reference-status]').count() == 0, 'Late reference completion changed the new article')
+                    require(reader.locator('[data-reader-reference]').get_attribute('aria-busy') is None, 'Old copy action disabled the new article tool')
+                reader.evaluate("Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:text=>{window.copiedReference=text;return Promise.resolve()}}})")
+                reader.locator('[data-reader-reference]').click()
+                reader.wait_for_function("() => document.querySelector('[data-reference-status]')?.textContent.includes('Reference copied')")
+                require('Second reference fixture' in reader.evaluate('window.copiedReference') and 'Second fixture source' in reader.evaluate('window.copiedReference'), 'New article copied a stale reference')
+            finally:
+                isolated.close()
+        check('article reference copying preserves metadata, has a manual fallback and cannot leak across navigation', reader_reference)
+
         def saved_search_and_sort():
             isolated = browser.new_context(viewport={'width': 390, 'height': 900}, service_workers='block')
             isolated.route('**/*', lambda route: route.continue_() if route.request.url.startswith(base + '/') else route.abort())

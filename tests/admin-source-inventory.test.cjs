@@ -144,7 +144,7 @@ test('Phase 4 renders real operational alerts and 14-day history without auto ac
   h.render();
   assert.match(h.elements.get('phase4Metrics').innerHTML,/Active alerts:2/);
   assert.match(h.elements.get('phase4Metrics').innerHTML,/Overdue corrections:1/);
-  assert.match(h.elements.get('phase4Metrics').innerHTML,/Recorded source outcomes:3/);
+  assert.match(h.elements.get('phase4Metrics').innerHTML,/Recorded DB source checks:3/);
   assert.match(h.elements.get('phase4Alerts').innerHTML,/TV9 Marathi/);
   assert.match(h.elements.get('phase4Alerts').innerHTML,/Story #12/);
   assert.match(h.elements.get('phase4Trend').innerHTML,/2026-11-01/);
