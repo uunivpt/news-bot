@@ -29,11 +29,20 @@
  }
  function renderSaved(){
   const root=$('#savedList');if(!root)return;
-  const rows=list.read(),count=$('#savedCount');if(count)count.textContent=rows.length+' saved '+(rows.length===1?'story':'stories');
+  const items=list.read(),query=$('#savedQuery')?.value||'';
+  const rows=window.PHReadingList.select(items,query,$('#savedOrder')?.value||'recent');
+  const count=$('#savedCount');if(count)count.textContent=(items.length&&query.trim()?rows.length+' of '+items.length:items.length)+' saved '+(items.length===1?'story':'stories');
+  const filters=$('#savedFilters');if(filters)filters.hidden=!items.length;
   const choices=$('#savedConsent');if(choices)choices.hidden=allowed();
-  const clear=$('[data-reader-clear]');if(clear)clear.disabled=!rows.length;
-  root.innerHTML=rows.length?rows.map(row=>'<article class="saved-story"><div><h2><a href="'+esc(row.url)+'">'+esc(row.title)+'</a></h2><p>Saved '+esc(new Date(row.savedAt).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}))+'</p></div><button type="button" data-reader-remove="'+esc(row.url)+'" aria-label="Remove '+esc(row.title)+' from saved stories">Remove</button></article>').join(''):'<div class="reader-empty"><h2>Your next read belongs here.</h2><p>Open a report and choose Save story. Your list stays on this browser, with up to 100 stories.</p><a class="btn" href="/">Explore latest news ↗</a></div>';
+  const clear=$('[data-reader-clear]');if(clear)clear.disabled=!items.length;
+  root.innerHTML=rows.length?rows.map(row=>'<article class="saved-story"><div><h2><a href="'+esc(row.url)+'">'+esc(row.title)+'</a></h2><p>Saved '+esc(new Date(row.savedAt).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}))+'</p></div><button type="button" data-reader-remove="'+esc(row.url)+'" aria-label="Remove '+esc(row.title)+' from saved stories">Remove</button></article>').join(''):items.length?'<div class="reader-empty"><h2>No matching saved stories.</h2><p>Try another headline word or reset the filters to see your full list.</p></div>':'<div class="reader-empty"><h2>Your next read belongs here.</h2><p>Open a report and choose Save story. Your list stays on this browser, with up to 100 stories.</p><a class="btn" href="/">Explore latest news ↗</a></div>';
  }
+ $('#savedFilters')?.addEventListener('submit',event=>event.preventDefault());
+ $('#savedQuery')?.addEventListener('input',renderSaved);
+ $('#savedOrder')?.addEventListener('change',renderSaved);
+ $('#savedReset')?.addEventListener('click',()=>{
+  $('#savedQuery').value='';$('#savedOrder').value='recent';renderSaved();$('#savedQuery').focus();
+ });
  document.addEventListener('click',event=>{
   if(event.target.closest('[data-reader-save]')){
    if(!allowed()){notice('Allow preferences in Settings to save stories on this device.');return}
