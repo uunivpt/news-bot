@@ -643,7 +643,7 @@ function renderPhase4Operations() {
   metrics.innerHTML=metric('Active alerts',number(alerts.length),'Only up to '+number(d.alert_limit||30)+' alerts are shown')
     +metric('Overdue corrections',availability.corrections?number(corrections.length):'Unavailable','Pending correction proposals older than 6 hours')
     +metric('Delivery warnings',availability.delivery?number(delivery.length):'Unavailable','Failed delivery or stalled for over 45 minutes')
-    +metric('Recorded source outcomes',history.collector_history_available?number(history.recorded_outcomes):'Unavailable','Completed collector attempts in the last 14 days');
+    +metric('Recorded DB source checks',history.collector_history_available?number(history.recorded_outcomes):'Unavailable','Completed outcomes stored in this database; GitHub runs are separate');
   notice.textContent=(d.status==='attention'?'Recorded incidents require editorial/operational review. ':d.status==='partial'?'Some private histories are not available yet. ':'No current alerts among checked records. ')
     +(d.note||'');
   table.innerHTML=alerts.length
@@ -653,7 +653,7 @@ function renderPhase4Operations() {
     : empty('No current alerts in the available records',d.status==='partial'?'Some source or delivery histories have not been recorded yet; do not interpret this as a verified healthy system.':'The available private evidence has no triggered thresholds; refresh to check again.');
   const series=arr(history.series);
   trend.innerHTML=series.length
-    ? '<table class="table phase4-daily"><thead><tr><th>UTC day</th><th>Successful checks</th><th>Failed checks</th><th>Not configured</th><th>Published stories</th></tr></thead><tbody>'
+    ? '<table class="table phase4-daily"><thead><tr><th>UTC day</th><th>Successful checks</th><th>Failed checks</th><th>Not configured</th><th>DB publishes</th></tr></thead><tbody>'
       +series.map(day=>'<tr><td><b>'+esc(day.day)+'</b></td><td>'+esc(day.healthy==null?'Not recorded':number(day.healthy))+'</td><td>'+esc(day.failed==null?'Not recorded':number(day.failed))+'</td><td>'+esc(day.not_configured==null?'Not recorded':number(day.not_configured))+'</td><td>'+esc(number(day.published))+'</td></tr>').join('')
       +'</tbody></table>'
     : empty('No historical measurements available','No private records have been loaded.');

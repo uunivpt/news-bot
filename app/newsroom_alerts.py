@@ -45,8 +45,6 @@ def _daily_series(database, *, where, params, now):
     recorded = table_exists(database, "ph_source_collection_history")
     outcome_rows = 0
     if recorded:
-        for bucket in daily.values():
-            bucket.update(healthy=0, failed=0, not_configured=0)
         rows = database.conn.execute(
             "SELECT substr(attempted_at,1,10) AS day,status,COUNT(*) AS total "
             "FROM ph_source_collection_history WHERE attempted_at >= "
@@ -57,6 +55,10 @@ def _daily_series(database, *, where, params, now):
         for row in rows:
             day, status, total = str(row["day"]), str(row["status"]), int(row["total"])
             if day in daily and status in {"healthy", "failed", "not_configured"}:
+                # A table can exist before the first completed check.
+                # Only days with recorded outcomes are measurable as zero.
+                if daily[day]["healthy"] is None:
+                    daily[day].update(healthy=0, failed=0, not_configured=0)
                 daily[day][status] += total
                 outcome_rows += total
     p = "%s" if database._postgres else "?"
@@ -76,9 +78,12 @@ def _daily_series(database, *, where, params, now):
         "recorded_outcomes": outcome_rows if recorded else None,
         "series": list(daily.values()),
         "note": (
-            "Collector history starts after the upgraded phone worker records its first "
-            "completed check; earlier results are not reconstructed. Publication counts "
-            "come from committed site-publication timestamps, not live URL checks."
+            "These check counts come only from completed source outcomes stored in this "
+            "connected database. Phone-local collector checks and GitHub public-feed runs "
+            "are separate and are not automatically included. 'Not recorded' means no "
+            "historical evidence is available for that day, not a verified zero or "
+            "failure. Earlier outcomes cannot be reconstructed. DB publishes count "
+            "timestamped published rows here, not every public GitHub feed update."
         ),
     }
 

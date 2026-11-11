@@ -109,6 +109,32 @@ class Phase4AlertsTests(unittest.TestCase):
         self.assertEqual(summary["trend"]["series"][-1]["not_configured"], 1)
         self.assertEqual(len(summary["trend"]["series"]), 14)
 
+    def test_empty_history_table_does_not_report_unmeasured_days_as_zero(self):
+        ensure_collection_schema(self.db)
+        before = self.db.conn.total_changes
+        result = newsroom_alerts(self.db, {"scope": "database", "items": []}, now=NOW)
+        self.assertTrue(result["trend"]["collector_history_available"])
+        self.assertEqual(result["trend"]["recorded_outcomes"], 0)
+        self.assertTrue(all(day["healthy"] is None and day["failed"] is None
+                            and day["not_configured"] is None
+                            for day in result["trend"]["series"]))
+        self.assertEqual(self.db.conn.total_changes, before)
+
+    def test_days_with_no_checks_remain_unrecorded_even_if_another_day_has_checks(self):
+        ensure_collection_schema(self.db)
+        record_collection(self.db, "rss", "Publisher", status="healthy")
+        stamp = (NOW - timedelta(days=1)).isoformat()
+        self.db.conn.execute(
+            "UPDATE ph_source_collection_history SET attempted_at=?",
+            (stamp,),
+        )
+        self.db.conn.commit()
+        result = newsroom_alerts(self.db, {"scope": "database", "items": []}, now=NOW)
+        self.assertEqual(result["trend"]["series"][-2]["healthy"], 1)
+        self.assertEqual(result["trend"]["series"][-2]["failed"], 0)
+        self.assertIsNone(result["trend"]["series"][-1]["healthy"])
+        self.assertIsNone(result["trend"]["series"][-1]["failed"])
+
     def test_overdue_corrections_and_failed_deliveries_trigger_without_mutation(self):
         ident = self.story("india")
         self.db.conn.execute(
