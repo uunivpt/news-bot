@@ -13,14 +13,19 @@
  function phMeta(i){return '<span class="meta"><b>'+esc(i.category||'News')+' · '+reportType(i)+'</b><span>'+esc(ago(i.date)||fmt(i.date))+'</span><span>'+esc(i.source||'PoliticsHub')+'</span></span>'}
  function phMedia(i,lead){
   var photo=typeof newsPhoto==='function'?newsPhoto(i):'';
-  // No invented graphic, recycled social poster, or unrelated picture.
-  // A source story with no approved image is an intentional text-led card.
+  // Use our own headline graphic where a rights-cleared photograph is unavailable.
+  // Never imply that a generated news card is an image of the reported event.
+  var articleId=String(i.id||'');
+  var isGraphic=!photo && /^\d+$/.test(articleId);
+  if(isGraphic)photo='/api/og/'+articleId;
   if(!photo)return '';
   var quoteCard=/^\/api\/x-card\//.test(photo);
   var kind=lead?'ph14-media':'ph14-thumb';
-  var alt=quoteCard?'Source post quote card':(i.image_source==='wikimedia-commons'?'Illustrative archive photo, not this news event':'Licensed source photograph (see photo credit)');
-  var credit=!quoteCard&&lead&&i.image_credit
-   ?'<figcaption class="ph14-photo-credit">'+(i.image_source==='wikimedia-commons'?'Archive photo — not this event':'Source photo')+' · '+esc(String(i.image_credit).slice(0,140))+' · '+esc(i.image_license||'Licensed')+'</figcaption>':'';
+  var alt=isGraphic?'PoliticsHub headline graphic, not a photograph of the event':(quoteCard?'Source post quote card':(i.image_source==='wikimedia-commons'?'Illustrative archive photo, not this news event':'Licensed source photograph (see photo credit)'));
+  var credit=isGraphic
+   ?'<figcaption class="ph14-photo-credit">PoliticsHub headline graphic — not a photograph of the event</figcaption>'
+   :(!quoteCard&&lead&&i.image_credit
+   ?'<figcaption class="ph14-photo-credit">'+(i.image_source==='wikimedia-commons'?'Archive photo — not this event':'Source photo')+' · '+esc(String(i.image_credit).slice(0,140))+' · '+esc(i.image_license||'Licensed')+'</figcaption>':'');
   return '<figure class="'+kind+'"><img data-news-photo src="'+esc(photo)+'" alt="'+esc(alt)+'" loading="'+(lead?'eager':'lazy')+'" decoding="async" referrerpolicy="no-referrer">'+credit+'</figure>';
  }
  home=function(c){
