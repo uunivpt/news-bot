@@ -16,12 +16,20 @@ UNITS = r'%|per\s+cent|percent|टक्के|crore|कोटी|lakh|लाख
 QUANTITY = re.compile(r'(?<![\w.])(?P<currency>[₹$€])?\s*(?P<value>'+NUM+r')\s*(?P<unit>'+UNITS+r')(?!\w)',re.I)
 # A range may repeat its unit at both ends. Exclude both observations, rather
 # than turning an endpoint into an exact metric or an incomplete comparison.
-RANGE_VALUE = r'[₹$€]?\s*'+NUM+r'\s*(?:'+UNITS+r')?'
+RANGE_VALUE = r'[₹$€]?\s*'+NUM+r'\s*(?:'+UNITS+r'|points?|AQI)?'
 RANGE = re.compile(r'(?<![\w.])(?:\bbetween\s+'+RANGE_VALUE+r'\s+and\s+'+RANGE_VALUE+
                    r'|[₹$€]?\s*'+NUM+r'\s+and\s+'+RANGE_VALUE+
                    r'|'+RANGE_VALUE+r'\s*(?:[-–—]|\bto\b|ते)\s*'+RANGE_VALUE+r')(?!\w)', re.I)
 QUALIFIER = re.compile(r'(?:\b(?:over|under|above|below|more than|less than|about|around|up to|nearly|approximately|roughly|at least|at most)|सुमारे|अंदाजे|किमान|कमाल|[~≈<>≤≥])\s*[₹$€]?\s*$', re.I)
 QUALIFIED_END = re.compile(r'^\s*(?:\+|\b(?:or more|or less|and above|and below)\b)', re.I)
+# Market-index names/counts are not levels. Require a reported relation for
+# Nifty/Sensex, while retaining the established bare "AQI 344" shorthand.
+INDEX_READING = re.compile(
+    r'\b(?P<label>AQI|Nifty(?:\s+50)?|Sensex)\b(?:\s+index)?\s*'
+    r'(?P<relation>(?:was|is|at|stood\s+at|stands\s+at)\b|[:=])?\s*'
+    r'(?P<value>'+NUM+r')(?![\w,]|\.\d)(?:\s+points?\b)?', re.I)
+INDEX_OTHER_UNIT = re.compile(r'^\s*(?:%|(?:percent|per\s+cent|टक्के|stocks?|shares?|constituents?|companies)(?!\w))', re.I)
+INDEX_CHANGE = re.compile(r'^\s*(?:higher|lower|up|down)\b', re.I)
 UNIT_MAP = {'per cent':'%','percent':'%','टक्के':'%','कोटी':'crore','लाख':'lakh','seat':'seats','जागा':'seats','मिमी':'mm','किमी':'km','tonne':'tonnes','टन':'tonnes'}
 MEASURES = [(r'\b(?:vote share|voting share)\b|मतांचा वाटा','Vote share'),(r'\b(?:seats?|seat tally)\b|जागा','Seat comparison'),(r'\bturnout\b','Voter turnout'),(r'\bmargin\b','Margin'),(r'\bvotes\b|मते','Vote comparison'),(r'\bcases\b|रुग्ण','Reported cases'),(r'\bAQI\b|air quality index','Air quality index'),(r'\b(?:GDP|growth)\b|वाढ','Growth'),(r'inflation|महागाई','Inflation'),(r'\b(?:sales|revenue)\b|विक्री|महसूल','Sales / revenue'),(r'\b(?:budget|allocation|spending|expenditure)\b|खर्च|अर्थसंकल्प','Budget / allocation'),(r'\b(?:rainfall|rain)\b|पाऊस','Rainfall')]
 COLORS = ['#2463ad','#b51f36','#20927b','#b27a21','#795caa','#50797c','#8e6250','#65758a']
@@ -116,11 +124,14 @@ def extract(row):
             chart={'points':points,'unit':unit,'measure':header[1],'context':line,'kind':chart_kind(points,unit,line)};break
     for paragraph in paragraphs:
         ranges = [match.span() for match in RANGE.finditer(paragraph)]
-        for index_match in re.finditer(r'\b(AQI|Nifty(?: 50)?|Sensex)\s*(?:was|is|at|stood at|stands at|[:=])?\s*('+NUM+r')(?![\d.])',paragraph,re.I):
-            if not exact_observation(paragraph, index_match.start(2), index_match.end(), ranges):continue
-            value=numeric(index_match[2]);unit='AQI' if index_match[1].upper()=='AQI' else 'points'
+        for index_match in INDEX_READING.finditer(paragraph):
+            name=index_match['label'];suffix=paragraph[index_match.end():]
+            if name.upper()!='AQI' and not index_match['relation']:continue
+            if INDEX_OTHER_UNIT.match(suffix) or INDEX_CHANGE.match(suffix):continue
+            if not exact_observation(paragraph, index_match.start('value'), index_match.end(), ranges):continue
+            value=numeric(index_match['value']);unit='AQI' if name.upper()=='AQI' else 'points'
             if value is not None and (value,unit) not in seen and len(facts)<3:
-                seen.add((value,unit));facts.append({'label':index_match[1],'value':value,'unit':unit,'reported':index_match[2],'context':paragraph[max(0,index_match.start()-100):index_match.end()+180]})
+                seen.add((value,unit));facts.append({'label':name,'value':value,'unit':unit,'reported':index_match['value'],'context':paragraph[max(0,index_match.start()-100):index_match.end()+180]})
         matches=list(QUANTITY.finditer(paragraph))
         observations=[];uncertain=False
         for index,match in enumerate(matches):
