@@ -100,6 +100,10 @@ Existing `/data/` URLs remain available for readers who saved them.
   “Other” category or missing remainder is created.
 * Standalone quantities and explicitly labelled AQI/Nifty/Sensex figures become
   metric cards with the surrounding article wording. Dates alone are not data.
+  Market-index levels require an explicit relation such as `was`, `at` or `:`;
+  index names (including the `50` in Nifty 50), component counts and percentage
+  or relative point changes are not index levels. Bare `AQI 344` remains supported.
+  Sentence-ending punctuation is accepted; malformed numeric tokens are omitted.
 * Mixed units, mixed indicators, ranges and vague comparisons are not charted.
   Articles without suitable numerical data remain ordinary articles.
 

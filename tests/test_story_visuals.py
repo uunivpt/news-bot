@@ -94,6 +94,49 @@ class StoryVisualTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual([p['value'] for p in extract(story(text))['facts']], values)
 
+    def test_index_names_and_component_counts_are_not_readings(self):
+        for text in ['The Nifty 50 index rose in early trade.',
+                     'Nifty 50 was around 24,100 points in early trade.',
+                     'Nifty 50: at least 24,100 points.',
+                     'Nifty 50 constituents were reviewed.',
+                     'Sensex 30 stocks were discussed.',
+                     'Sensex was 30 stocks in this comparison.',
+                     'Nifty 50 was 300 points higher in early trade.',
+                     'Sensex was 200 points lower in early trade.',
+                     'Nifty 50 was 24,100 points or more.',
+                     'Nifty 50 was 24,100 points to 24,200 points.',
+                     'AQI was 300 AQI to 400 AQI.']:
+            with self.subTest(text=text):
+                self.assertIsNone(extract(story(text)))
+                self.assertEqual(render(story(text)), '')
+
+    def test_index_percentage_changes_remain_percentages_without_invented_levels(self):
+        for text in ['The Nifty 50 fell 0.5 percent on Monday.',
+                     'Nifty was 0.5% higher in early trade.',
+                     'Sensex was 0.5 per cent higher in early trade.']:
+            with self.subTest(text=text):
+                facts = extract(story(text))['facts']
+                self.assertEqual([(p['value'], p['unit']) for p in facts], [(0.5, '%')])
+
+    def test_explicit_index_levels_keep_full_numeric_tokens_and_sentence_punctuation(self):
+        for text, label, raw in [
+            ('Nifty 50 was 24,100.500012 points.', 'Nifty 50', '24,100.500012'),
+            ('Nifty 50 index stood at 24,100.5 points.', 'Nifty 50', '24,100.5'),
+            ('Sensex: 80,123.45.', 'Sensex', '80,123.45'),
+            ('The AQI was 344.', 'AQI', '344'),
+            ('AQI ३४४ in Delhi.', 'AQI', '344'),
+            ('AQI was 344.123456.', 'AQI', '344.123456'),
+        ]:
+            with self.subTest(text=text):
+                facts = extract(story(text))['facts']
+                self.assertEqual(len(facts), 1)
+                self.assertEqual(facts[0]['label'], label)
+                self.assertEqual(facts[0]['reported'], raw)
+                self.assertEqual(facts[0]['value'], numeric(raw))
+        for text in ['AQI: 344.5.6 in Delhi.', 'Sensex: 80,123abc in early trade.']:
+            with self.subTest(text=text):
+                self.assertIsNone(extract(story(text)))
+
     def test_marathi_digits_units_and_escaped_context(self):
         row=story('जागा: पक्ष अ: ५० जागा; पक्ष ब: ४० जागा.')
         self.assertEqual([p['value']for p in extract(row)['chart']['points']],[50,40])

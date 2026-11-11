@@ -75,6 +75,20 @@ class FigureDownloadTests(unittest.TestCase):
         rows = records(article_csv(story('Seat tally: A: 50 seats; B: 40 seats; C: at least 10 seats.'), 'https://www.politicshub.in/india/123'))
         self.assertEqual([r['value'] for r in rows], ['50', '40'])
 
+    def test_index_csv_distinguishes_names_percentage_changes_and_reported_levels(self):
+        for text in ['The Nifty 50 index rose in early trade.', 'Sensex 30 stocks were discussed.',
+                     'Nifty 50 was around 24,100 points in early trade.']:
+            self.assertIsNone(article_csv(story(text), 'https://www.politicshub.in/india/123'))
+        for text, value, unit in [
+            ('Nifty was 0.5% higher in early trade.', '0.5', '%'),
+            ('Nifty 50 was 24,100.500012 points.', '24,100.500012', 'points'),
+            ('The AQI was 344.', '344', 'AQI'),
+        ]:
+            with self.subTest(text=text):
+                rows = records(article_csv(story(text), 'https://www.politicshub.in/india/123'))
+                self.assertEqual([(r['value'], r['unit']) for r in rows], [(value, unit)])
+                self.assertEqual(rows[0]['article_published_at'], '2026-11-10T05:00:00Z')
+
     def test_csv_quotes_unicode_commas_newlines_and_formula_text_but_keeps_negative_numbers(self):
         data = copy.deepcopy(self.data)
         data['points'][0] = {'label': '=HYPERLINK("https://example.org")', 'value': -2.5}
