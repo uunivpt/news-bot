@@ -1,0 +1,33 @@
+# PoliticsHub.in
+
+> PoliticsHub.in publishes source-linked news briefs, news coverage and explainers on India, world affairs, politics, Maharashtra and Indian examination notices. Check individual article dates and original sources before relying on time-sensitive information.
+
+Website: https://www.politicshub.in/
+Language: English; some sections also cover Marathi and Hindi.
+Editorial contact: politicshub.in@gmail.com
+
+## Main sections
+- [Home](https://www.politicshub.in/): Latest India and world headlines.
+- [India](https://www.politicshub.in/india/): India news and public affairs.
+- [World](https://www.politicshub.in/world/): International news and developments.
+- [Politics](https://www.politicshub.in/politics/): Politics coverage.
+- [Maharashtra](https://www.politicshub.in/maharashtra/): Maharashtra news.
+- [India Exams](https://www.politicshub.in/exams/): Examination notices and updates.
+- [Archive](https://www.politicshub.in/archive/): Browse published articles.
+
+## Editorial information
+- [About](https://www.politicshub.in/about.html): Publisher information.
+- [Editorial policy](https://www.politicshub.in/editorial-policy.html): Editorial approach and sourcing.
+- [Corrections](https://www.politicshub.in/corrections.html): Corrections policy and requests.
+- [Contact](https://www.politicshub.in/contact.html): Contact the newsroom.
+- [Sources](https://www.politicshub.in/sources.html): Source references, where available.
+
+## Discovery
+- [Sitemap index](https://www.politicshub.in/sitemap.xml): Search-engine sitemap listing.
+- [Robots instructions](https://www.politicshub.in/robots.txt): Crawler guidance.
+
+## Usage notes
+- Individual stories may change as reporting develops. Consult the publication/update time and linked original source.
+- Source attribution does not imply endorsement.
+- Summaries and headlines are not substitutes for primary documents, official notices or direct reporting.
+- This file is informational discovery guidance, not a grant of rights to reproduce or train on site content. Consult the site's terms and applicable law.
