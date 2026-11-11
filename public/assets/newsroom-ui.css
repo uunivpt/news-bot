@@ -77,6 +77,14 @@ html[data-theme=dark] .ph-ui-home {
 .ph-ui-home .ph14-row .meta { gap: 7px; font-size: 9px; letter-spacing: .03em; }
 .ph-ui-home .ph14-thumb { align-self: center; height: 140px; background: var(--ui-tint) !important; border-radius: 10px; }
 .ph-ui-home .ph14-row:not(:has(.ph14-thumb)) { grid-template-columns: 1fr; }
+/* Keep licensed news images prominent, without empty image-shaped space on text-only reports. */
+@media (min-width: 1060px) {
+  .ph-ui-home .ph14-row:has(.ph14-thumb) { grid-template-columns: minmax(0, 1fr) clamp(220px, 22vw, 290px); min-height: 214px; }
+  .ph-ui-home .ph14-row:has(.ph14-thumb) .ph14-thumb { height: 176px; width: 100%; }
+  .ph-ui-home .ph14-row:not(:has(.ph14-thumb)) { min-height: 0; padding-top: 20px; padding-bottom: 20px; }
+}
+.ph-ui-home .ph14-thumb img { display:block; width:100%; height:100%; object-fit:contain; object-position:center; }
+
 .ph-ui-home .ph14-feed[data-density=compact] .ph14-row { min-height: 110px; padding: 18px 22px; grid-template-columns: minmax(0, 1fr) 100px; gap: 18px; }
 .ph-ui-home .ph14-feed[data-density=compact] .ph14-row:not(:has(.ph14-thumb)) { grid-template-columns: 1fr; }
 .ph-ui-home .ph14-feed[data-density=compact] .ph14-row h3 { font-size: 21px; margin: 7px 0 0; line-height: 1.3; }
