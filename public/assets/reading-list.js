@@ -33,5 +33,13 @@
    clear(){try{storage.removeItem(KEY);return true}catch(_){return false}}
   };
  }
- return {KEY,MAX_ITEMS,clean,create};
+ function select(items,query='',order='recent'){
+  const normalize=value=>String(value||'').normalize('NFKC').toLocaleLowerCase('en-IN');
+  const words=normalize(query).trim().split(/\s+/).filter(Boolean);
+  const rows=items.filter(row=>words.every(word=>normalize(row.title).includes(word)));
+  if(order==='title')rows.sort((a,b)=>a.title.localeCompare(b.title,'en-IN',{sensitivity:'base',numeric:true}));
+  else rows.sort((a,b)=>order==='oldest'?a.savedAt-b.savedAt:b.savedAt-a.savedAt);
+  return rows;
+ }
+ return {KEY,MAX_ITEMS,clean,create,select};
 });

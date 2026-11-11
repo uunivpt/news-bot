@@ -1013,6 +1013,77 @@ def run(base, output,admin_fixture=False):
             page.locator('[data-reader-save]').click()
         check('reading list persists, deduplicates and removes stories', saved)
 
+        def saved_search_and_sort():
+            isolated = browser.new_context(viewport={'width': 390, 'height': 900}, service_workers='block')
+            isolated.route('**/*', lambda route: route.continue_() if route.request.url.startswith(base + '/') else route.abort())
+            rows = [{'url': '/india/' + str(700000000000 + i), 'title': 'Saved fixture report ' + str(i),
+                     'source': 'Fixture source', 'savedAt': i + 1} for i in range(100)]
+            rows[0]['title'] = 'ＢＵＤＧＥＴ policy 2026'
+            rows[1]['title'] = 'Budget review [final]'
+            rows[2]['title'] = 'महाराष्ट्र निवडणूक निकाल'
+            rows[3]['title'] = '<img src=x onerror="window.savedInjected=true"> literal headline'
+            try:
+                reader = isolated.new_page()
+                reader.on('pageerror', lambda error: errors.append(str(error)))
+                reader.goto(base + '/saved.html', wait_until='networkidle')
+                require(not reader.locator('#savedFilters').is_visible(), 'An empty list exposes search controls')
+                reader.evaluate("rows => {localStorage.setItem('ph-consent-v1','preferences');localStorage.setItem('ph-reading-list-v1',JSON.stringify(rows));}", rows)
+                reader.reload(wait_until='networkidle')
+                require(reader.locator('.saved-story').count() == 100, 'Saved list capacity changed')
+                require(not reader.locator('#savedList img').count() and not reader.evaluate('window.savedInjected'), 'A saved headline became executable markup')
+                raw = reader.evaluate("localStorage.getItem('ph-reading-list-v1')")
+                links = reader.locator('.saved-story h2 a')
+                require(links.first.inner_text() == rows[-1]['title'], 'Newest-saved order is incorrect')
+                reader.locator('#savedOrder').select_option('oldest')
+                require(links.first.inner_text() == rows[0]['title'], 'Oldest-saved order is incorrect')
+                reader.locator('#savedQuery').fill('  budget   POLICY ')
+                require(links.count() == 1 and links.first.inner_text() == rows[0]['title'], 'Normalized multiword headline search failed')
+                reader.locator('#savedQuery').press('Enter')
+                require(reader.url.endswith('/saved.html') and links.count() == 1, 'Enter navigated away or reset search')
+                require(reader.locator('#savedQuery').evaluate('(node) => node === document.activeElement'), 'Typing or Enter lost input focus')
+                require(reader.locator('#savedCount').inner_text() == '1 of 100 saved stories', 'Filtered count is incorrect')
+                reader.locator('#savedQuery').fill('महाराष्ट्र निकाल')
+                require(links.count() == 1 and links.first.inner_text() == rows[2]['title'], 'Marathi search failed')
+                reader.locator('#savedQuery').fill('[final]')
+                require(links.count() == 1 and links.first.inner_text() == rows[1]['title'], 'Search interpreted literal punctuation as a regex')
+                reader.locator('#savedQuery').fill('no fixture matches this')
+                require(links.count() == 0 and 'No matching' in reader.locator('#savedList').inner_text(), 'No-match feedback is missing')
+                require(reader.locator('#savedFilters').is_visible(), 'An empty search hid its recovery controls')
+                reader.locator('#savedReset').click()
+                require(links.count() == 100 and reader.locator('#savedOrder').input_value() == 'recent', 'Reset did not restore the full list/default order')
+                require(reader.locator('#savedQuery').evaluate('(node) => node === document.activeElement'), 'Reset lost search focus')
+                reader.locator('#savedQuery').fill('saved fixture report')
+                reader.locator('#savedOrder').select_option('title')
+                require(links.all_text_contents()[:3] == ['Saved fixture report 4', 'Saved fixture report 5', 'Saved fixture report 6'], 'Natural headline ordering failed')
+                require(reader.evaluate("localStorage.getItem('ph-reading-list-v1')") == raw, 'Search or sorting rewrote saved stories')
+                requests = []
+                reader.on('request', lambda request: requests.append(request.url))
+                reader.locator('#savedQuery').fill('Budget')
+                reader.locator('#savedOrder').select_option('oldest')
+                reader.wait_for_timeout(100)
+                require(not requests, 'Saved search/sort sent a network request')
+                other = isolated.new_page()
+                other.goto(base + '/saved.html', wait_until='networkidle')
+                other.evaluate("localStorage.setItem('ph-reading-list-v1',JSON.stringify([{url:'/world/888888888888',title:'Budget update from another tab',savedAt:999}]))")
+                reader.wait_for_function("() => document.querySelector('#savedCount').textContent === '1 of 1 saved story'")
+                require(reader.locator('#savedQuery').input_value() == 'Budget' and reader.locator('#savedOrder').input_value() == 'oldest', 'Cross-tab update reset current filters')
+                reader.locator('[data-reader-remove]').click()
+                require(reader.locator('#savedCount').inner_text() == '0 saved stories', 'Removing the final story left a misleading count')
+                require(reader.locator('#savedCount').evaluate('(node) => node === document.activeElement'), 'Filtered removal lost status focus')
+                other.evaluate("rows => localStorage.setItem('ph-reading-list-v1',JSON.stringify(rows))", rows[:3])
+                reader.wait_for_function("() => document.querySelectorAll('.saved-story').length === 2")
+                reader.locator('[data-reader-clear]').click()
+                require(reader.evaluate("localStorage.getItem('ph-reading-list-v1')") is None, 'Clear all retained hidden saved stories')
+                require(not reader.locator('#savedFilters').is_visible(), 'Clearing the list retained unusable filters')
+                other.evaluate("rows => localStorage.setItem('ph-reading-list-v1',JSON.stringify(rows))", rows[:3])
+                reader.wait_for_function("() => document.querySelectorAll('.saved-story').length === 2")
+                other.evaluate("localStorage.setItem('ph-consent-v1','essential')")
+                reader.wait_for_function("() => document.querySelectorAll('.saved-story').length === 0")
+                require(not reader.locator('#savedFilters').is_visible() and reader.locator('#savedConsent').is_visible(), 'Consent withdrawal retained saved-search data')
+            finally:
+                isolated.close()
+        check('saved headline search and sorting are local, accessible, reversible and synchronized across tabs', saved_search_and_sort)
+
         def saved_storage_failures():
             seed = [{'url': '/india/123456789012', 'title': 'Browser storage fixture', 'savedAt': 1}]
             for action in ('remove', 'clear', 'consent'):
@@ -1389,6 +1460,31 @@ def run(base, output,admin_fixture=False):
             require('Connection interrupted' in offline_page.locator('h1').inner_text(), 'Offline message missing')
             offline.set_offline(False)
         check('uncached offline navigation has an honest offline page', offline_fallback)
+
+        def offline_saved_search():
+            offline_page.goto(base, wait_until='networkidle')
+            offline_page.evaluate('navigator.serviceWorker.ready')
+            offline_page.wait_for_function('() => !!navigator.serviceWorker.controller')
+            seed = [{'url':'/india/711111111111','title':'Offline budget report 10','savedAt':2},
+                    {'url':'/world/722222222222','title':'Offline budget report 2','savedAt':1}]
+            offline_page.evaluate("rows => {localStorage.setItem('ph-consent-v1','preferences');localStorage.setItem('ph-reading-list-v1',JSON.stringify(rows));}", seed)
+            raw = offline_page.evaluate("localStorage.getItem('ph-reading-list-v1')")
+            offline.set_offline(True)
+            try:
+                # saved.html has not been visited: the install-time shell must
+                # include its new loader and both versioned dependencies.
+                offline_page.goto(base + '/saved.html', wait_until='networkidle')
+                offline_page.wait_for_selector('#savedQuery')
+                offline_page.locator('#savedQuery').fill('budget report 2')
+                offline_page.locator('#savedQuery').press('Enter')
+                require(offline_page.locator('.saved-story').count() == 1, 'Offline saved search failed')
+                offline_page.locator('#savedReset').click()
+                offline_page.locator('#savedOrder').select_option('title')
+                require(offline_page.locator('.saved-story h2 a').first.inner_text() == seed[1]['title'], 'Offline saved sorting failed')
+                require(offline_page.evaluate("localStorage.getItem('ph-reading-list-v1')") == raw, 'Offline filtering changed the stored list')
+            finally:
+                offline.set_offline(False)
+        check('saved search and sorting work offline before the first Saved-page visit', offline_saved_search)
 
         def bounded_cache():
             offline_page.goto(base,wait_until='domcontentloaded')

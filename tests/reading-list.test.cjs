@@ -1,6 +1,6 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
-const {KEY,MAX_ITEMS,clean,create}=require('../public/assets/reading-list.js');
+const {KEY,MAX_ITEMS,clean,create,select}=require('../public/assets/reading-list.js');
 const origin='https://www.politicshub.in';
 function memory(){const data=new Map();return {getItem:k=>data.get(k)||null,setItem:(k,v)=>data.set(k,v),removeItem:k=>data.delete(k)}}
 const story=(id=1)=>({url:'/india/'+id+'-public-report',title:'Public report '+id,savedAt:id});
@@ -51,4 +51,27 @@ test('numeric link support does not permit other routes or external origins',()=
  for(const url of ['/admin/617958005290','/india/not-a-number','/india/617958005290/extra','https://evil.example/india/617958005290','https://user:secret@www.politicshub.in/india/617958005290']){
   assert.equal(clean({title:'Rejected report',url},origin),null,url);
  }
+});
+
+test('saved headline search normalizes text, combines literal words and supports Marathi',()=>{
+ const items=[{...story(1),title:'ＢＵＤＧＥＴ policy 2026'},
+  {...story(2),title:'Budget review [final]'}, {...story(3),title:'महाराष्ट्र निवडणूक निकाल'}];
+ assert.deepEqual(select(items,'  budget   POLICY ').map(x=>x.url),[items[0].url]);
+ assert.deepEqual(select(items,'[final]').map(x=>x.url),[items[1].url]);
+ assert.deepEqual(select(items,'महाराष्ट्र निकाल').map(x=>x.url),[items[2].url]);
+ assert.deepEqual(select(items,'no matching words'),[]);
+ assert.equal(select(items,' \t ').length,3);
+});
+
+test('saved sorting uses save time or natural headline order without mutating stored data',()=>{
+ const storage=memory(),list=create(storage,origin,()=>true);
+ for(const item of [{...story(1),title:'Report 10'}, {...story(2),title:'Report 2'}, {...story(3),title:'Alpha'}])list.add(item);
+ const before=storage.getItem(KEY),items=list.read(),copy=JSON.stringify(items);
+ assert.deepEqual(select(items,'','recent').map(x=>x.savedAt),[3,2,1]);
+ assert.deepEqual(select(items,'','oldest').map(x=>x.savedAt),[1,2,3]);
+ assert.deepEqual(select(items,'','title').map(x=>x.title),['Alpha','Report 2','Report 10']);
+ assert.deepEqual(select(items,'report','title').map(x=>x.title),['Report 2','Report 10']);
+ assert.deepEqual(select(items,'','unknown').map(x=>x.savedAt),[3,2,1]);
+ assert.equal(JSON.stringify(items),copy);assert.equal(storage.getItem(KEY),before);
+ assert.deepEqual(select([], 'anything', 'title'),[]);
 });

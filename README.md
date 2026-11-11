@@ -64,7 +64,8 @@ keyboard and responsive checks.
 
 `/sources.html` links to original publishers and official records. `/saved.html`
 stores up to 100 article links on the reader's browser after optional preferences
-are allowed. Article pages include text-size controls, a print layout and the
+are allowed. Readers can search saved headlines and sort by save time or headline;
+filtering stays on this browser and does not rewrite the list. Article pages include text-size controls, a print layout and the
 existing share sheet. These features do not require an account.
 
 The source directory supports keyword and source-type filters. BBC World adds
