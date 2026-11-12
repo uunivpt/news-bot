@@ -32,6 +32,8 @@
 .article-data caption{text-align:left;font-weight:650;margin-bottom:12px}
 .article-data :is(th,td){padding:10px 12px;text-align:left;border-bottom:1px solid var(--line,#ddd);white-space:nowrap}
 .article-data td{text-align:right}
+.article-data-export{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:16px 0;font-size:12px;line-height:1.7;color:var(--mut,#59636f)}
+@media print{.article-data-export{display:none}}
 @media(prefers-color-scheme:dark){html:not([data-theme=light]) .article-data{--card:#151a20;--ink:#edf1f5;--mut:#aeb8c6;--line:#343c47}}
 html[data-theme=dark] .article-data{--card:#151a20;--ink:#edf1f5;--mut:#aeb8c6;--line:#343c47}
 @media(max-width:600px){.article-data{padding:18px 12px;margin:24px 0;border-radius:13px}.article-data-metrics{grid-template-columns:1fr;gap:8px;margin-bottom:20px}.article-data-metric{padding:14px;display:grid;grid-template-columns:1fr auto;align-items:center;gap:4px 12px}.article-data-metric>strong{grid-column:2;grid-row:1/3}.article-data-metric>small{grid-column:1}.article-data-chart svg{font-size:15px;min-width:560px}.article-data-chart .data-value{font-size:13px}.article-data .article-data-scroll-hint{display:block;font-size:12px;color:var(--mut,#59636f);margin:8px 0}}

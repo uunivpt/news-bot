@@ -81,7 +81,9 @@ destination and streaming size checks; see
 
 Public API cards omit full articles; `/api/news/<id>` returns the article body.
 Reviewed numerical datasets can add source-linked metric cards, interactive
-charts and exact-value tables to individual articles. Canonical figures also
+charts and exact-value tables to individual articles. Download chart (SVG) saves
+a static image with the displayed labels, units and source context; CSV retains
+exact reported precision. Canonical figures also
 work without JavaScript. See [article data authoring](docs/ARTICLE_DATA.md).
 The command center uses the uncached `/api/admin/news` endpoint for private
 listing/filtering. Anonymous public responses avoid `Vary: Cookie`, which would
