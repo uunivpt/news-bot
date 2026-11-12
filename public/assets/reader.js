@@ -74,6 +74,7 @@
   const filters=$('#savedFilters');if(filters)filters.hidden=!items.length;
   const choices=$('#savedConsent');if(choices)choices.hidden=allowed();
   const clear=$('[data-reader-clear]');if(clear)clear.disabled=!items.length;
+  const exporter=$('[data-reader-export]');if(exporter)exporter.disabled=!items.length;
   root.innerHTML=rows.length?rows.map(row=>'<article class="saved-story"><div><h2><a href="'+esc(row.url)+'">'+esc(row.title)+'</a></h2><p>Saved '+esc(new Date(row.savedAt).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}))+'</p></div><button type="button" data-reader-remove="'+esc(row.url)+'" aria-label="Remove '+esc(row.title)+' from saved stories">Remove</button></article>').join(''):items.length?'<div class="reader-empty"><h2>No matching saved stories.</h2><p>Try another headline word or reset the filters to see your full list.</p></div>':'<div class="reader-empty"><h2>Your next read belongs here.</h2><p>Open a report and choose Save story. Your list stays on this browser, with up to 100 stories.</p><a class="btn" href="/">Explore latest news ↗</a></div>';
  }
  $('#savedFilters')?.addEventListener('submit',event=>event.preventDefault());
@@ -83,6 +84,18 @@
   $('#savedQuery').value='';$('#savedOrder').value='recent';renderSaved();$('#savedQuery').focus();
  });
  document.addEventListener('click',event=>{
+  if(event.target.closest('[data-reader-export]')){
+   let url;
+   try{
+    const file=window.PHReadingList.bookmarks(list.read(),location.origin);
+    if(!file.count){notice('Allow preferences and save a story before exporting bookmarks.');return}
+    url=URL.createObjectURL(new Blob([file.html],{type:'text/html;charset=utf-8'}));
+    const link=document.createElement('a');link.href=url;link.download='politicshub-saved-stories.html';
+    document.body.append(link);link.click();link.remove();
+    notice('Prepared '+file.count+' saved '+(file.count===1?'link':'links')+'. Import the file using your browser’s bookmarks manager.');
+   }catch(_){notice('Your browser could not prepare the bookmark file. Try again.')}
+   finally{if(url)setTimeout(()=>URL.revokeObjectURL(url),10000)}
+  }
   const reference=event.target.closest('[data-reader-reference]');if(reference)copyReference(reference);
   if(event.target.closest('[data-reader-save]')){
    if(!allowed()){notice('Allow preferences in Settings to save stories on this device.');return}

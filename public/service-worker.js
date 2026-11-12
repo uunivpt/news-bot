@@ -1,6 +1,6 @@
-const CACHE="politicshub-shell-v30";
+const CACHE="politicshub-shell-v31";
 const MAX_ENTRIES=80;
-const SHELL=["/","/offline.html","/saved.html","/manifest.webmanifest","/assets/site.css?v=phui23","/assets/site.js?v=quality1","/assets/home-critical.css?v=render1","/assets/newsroom-ui.css?v=quality1","/assets/newsroom-ui.js?v=watermelon1","/assets/editorial-home.js?v=quality1","/assets/editorial.css?v=phui19","/assets/polish.css?v=phui30","/assets/ui.js?v=phui30","/assets/reading-list.js?v=ph30","/assets/reader.js?v=ph30","/assets/ui.js?v=savedsearch1","/assets/reading-list.js?v=savedsearch1","/assets/reader.js?v=savedsearch1","/assets/ui.js?v=reference1","/assets/reader.js?v=reference1","/assets/site.js?v=chartexport1","/assets/article-data.js?v=4","/assets/article-data.css?v=4","/favicon.svg"];
+const SHELL=["/","/offline.html","/saved.html","/manifest.webmanifest","/assets/site.css?v=phui23","/assets/site.js?v=quality1","/assets/home-critical.css?v=render1","/assets/newsroom-ui.css?v=quality1","/assets/newsroom-ui.js?v=watermelon1","/assets/editorial-home.js?v=quality1","/assets/editorial.css?v=phui19","/assets/polish.css?v=phui30","/assets/ui.js?v=phui30","/assets/reading-list.js?v=ph30","/assets/reader.js?v=ph30","/assets/ui.js?v=savedsearch1","/assets/reading-list.js?v=savedsearch1","/assets/reader.js?v=savedsearch1","/assets/ui.js?v=reference1","/assets/reader.js?v=reference1","/assets/site.js?v=chartexport1","/assets/article-data.js?v=4","/assets/article-data.css?v=4","/assets/ui.js?v=bookmarkexport1","/assets/reading-list.js?v=bookmarkexport1","/assets/reader.js?v=bookmarkexport1","/favicon.svg"];
 async function remember(req,response){
  const cache=await caches.open(CACHE);await cache.put(req,response);
  const keys=await cache.keys();

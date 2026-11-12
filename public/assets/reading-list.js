@@ -41,5 +41,22 @@
   else rows.sort((a,b)=>order==='oldest'?a.savedAt-b.savedAt:b.savedAt-a.savedAt);
   return rows;
  }
- return {KEY,MAX_ITEMS,clean,create,select};
+ function bookmarks(items,origin){
+  const esc=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const seen=new Set(),links=[];
+  for(const item of (Array.isArray(items)?items:[]).slice(0,MAX_ITEMS)){
+   const safe=clean(item,origin);if(!safe||seen.has(safe.url))continue;
+   seen.add(safe.url);
+   // Backups point to the public site even when tested on a preview. Dates
+   // are deliberately omitted: a saved time is not an article publication date.
+   links.push('<DT><A HREF="'+esc(new URL(safe.url,'https://www.politicshub.in').href)+'">'+esc(safe.title)+'</A>');
+  }
+  if(!links.length)return {html:'',count:0};
+  return {count:links.length,html:['<!DOCTYPE NETSCAPE-Bookmark-file-1>',
+   '<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">',
+   '<META HTTP-EQUIV="Content-Security-Policy" CONTENT="default-src \'none\'">',
+   '<TITLE>PoliticsHub saved stories</TITLE>','<H1>PoliticsHub saved stories</H1>',
+   '<DL><p>','<DT><H3>PoliticsHub saved stories</H3>','<DL><p>',...links,'</DL><p>','</DL><p>'].join('\n')};
+ }
+ return {KEY,MAX_ITEMS,clean,create,select,bookmarks};
 });
