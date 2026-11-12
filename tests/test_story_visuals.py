@@ -84,6 +84,29 @@ class StoryVisualTests(unittest.TestCase):
         data = extract(story('AQI was 300–400 in Delhi.\n\nThe AQI was 220 in Mumbai.'))
         self.assertEqual([p['value'] for p in data['facts']], [220])
 
+    def test_crossed_exceeded_and_surpassed_thresholds_are_not_exact_figures(self):
+        for verb in ['cross', 'crosses', 'crossed', 'crossing', 'exceed', 'exceeds',
+                     'exceeded', 'exceeding', 'surpass', 'surpasses', 'surpassed', 'surpassing']:
+            for figure in ['70%', 'the ७० टक्के', '₹1.25 crore', '$50 billion', '-2.5 percent']:
+                with self.subTest(verb=verb,figure=figure):
+                    row=story('The reported measure '+verb+' '+figure+'.')
+                    self.assertIsNone(extract(row))
+                    self.assertEqual(render(row),'')
+        self.assertIsNone(extract(story('Exports could exceed $50 billion by 2030.')))
+
+    def test_reported_threshold_does_not_create_a_partial_turnout_comparison(self):
+        text=('Sri Sathya Sai district recorded 83% polling by 5 p.m.,'
+              'Annamayya crossed 70% polling by 4 p.m., and Chittoor recorded 63% turnout by 3 p.m.')
+        data=extract(story(text))
+        self.assertIsNone(data['chart'])
+        self.assertEqual([(p['reported'],p['unit']) for p in data['facts']],[('83','%'),('63','%')])
+        self.assertNotIn('<svg',render(story(text)))
+        # Reaching a stated value is different from exceeding it. Names that
+        # merely contain a threshold word must not hide ordinary observations.
+        for prefix in ['Turnout reached', 'Sales touched', 'Revenue was', 'Uncrossed']:
+            with self.subTest(prefix=prefix):
+                self.assertEqual(extract(story(prefix+' 70%.'))['facts'][0]['reported'],'70')
+
     def test_exact_indices_currency_and_negative_observations_still_work(self):
         for text, values in [
             ('AQI was 344 in Delhi.', [344]),

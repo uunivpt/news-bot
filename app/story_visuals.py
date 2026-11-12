@@ -20,7 +20,9 @@ RANGE_VALUE = r'[₹$€]?\s*'+NUM+r'\s*(?:'+UNITS+r'|points?|AQI)?'
 RANGE = re.compile(r'(?<![\w.])(?:\bbetween\s+'+RANGE_VALUE+r'\s+and\s+'+RANGE_VALUE+
                    r'|[₹$€]?\s*'+NUM+r'\s+and\s+'+RANGE_VALUE+
                    r'|'+RANGE_VALUE+r'\s*(?:[-–—]|\bto\b|ते)\s*'+RANGE_VALUE+r')(?!\w)', re.I)
-QUALIFIER = re.compile(r'(?:\b(?:over|under|above|below|more than|less than|about|around|up to|nearly|approximately|roughly|at least|at most)|सुमारे|अंदाजे|किमान|कमाल|[~≈<>≤≥])\s*[₹$€]?\s*$', re.I)
+# Crossing/exceeding a threshold does not state an exact observation, even
+# when the report supplies a precise-looking percentage or currency amount.
+QUALIFIER = re.compile(r'(?:\b(?:over|under|above|below|more than|less than|about|around|up to|nearly|approximately|roughly|at least|at most|(?:cross(?:ed|es|ing)?|exceed(?:ed|s|ing)?|surpass(?:ed|es|ing)?)(?:\s+the)?)|सुमारे|अंदाजे|किमान|कमाल|[~≈<>≤≥])\s*[₹$€]?\s*$', re.I)
 QUALIFIED_END = re.compile(r'^\s*(?:\+|\b(?:or more|or less|and above|and below)\b)', re.I)
 # Market-index names/counts are not levels. Require a reported relation for
 # Nifty/Sensex, while retaining the established bare "AQI 344" shorthand.
