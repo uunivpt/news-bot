@@ -8,11 +8,12 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from scripts.browser_audit import fixture_server
 from app.news_numbers import news_number
 from api import index as api
+from scripts.chart_export_checks import chart_export
 
 
 def run(output):
  output.mkdir(parents=True,exist_ok=True);base='http://127.0.0.1:8069'
- texts=[('regional sales','Chennai recorded liquor sales worth ₹95.85 crore, while the Tiruchi zone clocked ₹98.97 crore, followed by Madurai at ₹88.38 crore'),('vote share','Vote share: Party A: 55%; Party B: 45%.'),('growth trend','Year | GDP growth (%)\n2022 | 7.6001234%\n2023 | 7.2%\n2024 | 7.1%'),('air quality','The AQI was 344 in Delhi, according to the bulletin.'),('ordinary report','The council announced a new policy on 10 November 2026.'),
+ texts=[('regional sales — विक्री & आकडे','Chennai recorded liquor sales worth ₹95.85 crore, while the Tiruchi zone clocked ₹98.97 crore, followed by Madurai at ₹88.38 crore'),('vote share','Vote share: Party A: 55%; Party B: 45%.'),('growth trend','Year | GDP growth (%)\n2022 | 7.6001234%\n2023 | 7.2%\n2024 | 7.1%'),('air quality','The AQI was 344 in Delhi, according to the bulletin.'),('ordinary report','The council announced a new policy on 10 November 2026.'),
         ('qualified vote shares','Vote share: Party A: at least 55%; Party B: at most 45%.'),
         ('AQI range','The AQI was 300–400 in Delhi, according to the bulletin.'),
         ('rainfall ranges','Rainfall: Mumbai: 100 mm to 120 mm; Pune: 80 mm to 90 mm.'),
@@ -60,6 +61,8 @@ def run(output):
     if i in [9,10,11]:
      expected={9:('0.5','%'),10:('24,100.500012','points'),11:('344','AQI')}[i]
      assert [(r['value'],r['unit'])for r in values]==[expected]
+    if i<3:
+     chart_export(page,page.locator('.story-numbers'),[rows[str(900001+i)]['title'],'https://example.org/report','Fixture source','10 Nov 2026','Figures as stated in the article'],output/f'chart-{i}.svg')
     for width in [320,390,1440]:
      page.set_viewport_size({'width':width,'height':1000})
      assert page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),(i,width)
@@ -72,6 +75,8 @@ def run(output):
      page.locator('.article-data-table summary').click();assert page.locator('.article-data-table table').is_visible()
     page.evaluate("document.documentElement.dataset.theme='dark'")
     page.locator('.story-numbers').screenshot(path=str(output/f'chart-{i}-dark.png'))
+    if i==1:chart_export(page,page.locator('.story-numbers'),['Party A','Party B','55%','45%','Fixture source'],output/'chart-dark.svg')
+    if i==3:assert page.get_by_role('button',name='Download chart (SVG)',exact=True).count()==0
    else:
     assert page.locator('.article-data').count()==0
     assert texts[i][1] in page.locator('.body').inner_text()
@@ -92,12 +97,19 @@ def run(output):
    assert [(r['value'],r['unit'])for r in exported]==[(value,unit)]
   page.goto(base+'/#/article/900002',wait_until='networkidle');page.wait_for_selector('.story-slice')
   assert page.locator('.story-slice').count()==2
+  chart_export(page,page.locator('.story-numbers'),['Party A','Party B','55%','45%','Fixture source','https://example.org/report'],output/'chart-spa.svg')
   with page.expect_download() as event:page.locator('.story-numbers a[download]').click()
   assert Path(event.value.path()).read_text(encoding='utf-8-sig')==downloads[1]
+  page.evaluate("()=>{window.originalChartURL=URL.createObjectURL;URL.createObjectURL=()=>{throw Error('unavailable')};}")
+  page.get_by_role('button',name='Download chart (SVG)',exact=True).click()
+  assert 'Could not prepare this chart' in page.locator('.article-data-export [role=status]').inner_text()
+  page.evaluate('()=>{URL.createObjectURL=window.originalChartURL;}')
+  chart_export(page,page.locator('.story-numbers'),['Party A','Party B','55%','45%'],output/'chart-retry.svg')
   page.evaluate("location.hash='/settings'");page.wait_for_selector('#prefs');assert page.locator('.story-numbers').count()==0
   page.goto(base+'/',wait_until='networkidle');assert page.locator('.ph-data-home').count()==0
   plain=browser.new_context(java_script_enabled=False,viewport={'width':390,'height':900});plain.route('**/*',intercept)
   reader=plain.new_page();reader.goto(base+paths[1]);assert reader.locator('.story-slice').count()==2
+  assert reader.get_by_role('button',name='Download chart (SVG)',exact=True).count()==0
   with reader.expect_download() as event:reader.locator('.story-numbers a[download]').click()
   assert Path(event.value.path()).read_text(encoding='utf-8-sig')==downloads[1]
   reader.locator('.article-data-table summary').click();assert reader.locator('table').is_visible()
@@ -108,7 +120,7 @@ def run(output):
   with reader.expect_download() as event:reader.locator('.story-numbers a[download]').click()
   assert '24,100.500012' in Path(event.value.path()).read_text(encoding='utf-8-sig');plain.close()
   assert not errors,errors;browser.close()
- report={'passed':True,'checks':['article-specific regional comparison','complete-share pie','yearly line trend','AQI metric card','no data means no chart','320/390/1440px layouts','dark mode','keyboard, Escape and touch','source and exact tables','canonical no-JS reading','SPA article and cleanup','no unrelated homepage dashboard','ranges and qualified values omitted from canonical and SPA figures','original uncertainty, publication date and attribution preserved','CSV downloads preserve values, units, source and publication; canonical/SPA/no-JS agree','index names/counts and relative changes never become levels; exact levels and percentages retain units/precision across canonical/SPA/no-JS and CSV'],'browser_errors':errors}
+ report={'passed':True,'checks':['article-specific regional comparison','complete-share pie','yearly line trend','AQI metric card','no data means no chart','320/390/1440px layouts','dark mode','keyboard, Escape and touch','source and exact tables','canonical no-JS reading','SPA article and cleanup','no unrelated homepage dashboard','ranges and qualified values omitted from canonical and SPA figures','original uncertainty, publication date and attribution preserved','CSV downloads preserve values, units, source and publication; canonical/SPA/no-JS agree','index names/counts and relative changes never become levels; exact levels and percentages retain units/precision across canonical/SPA/no-JS and CSV'],'chart_export':'attributed static SVG, keyboard download, no network/storage writes; canonical/SPA and metric-only/no-JS fallback verified','browser_errors':errors}
  (output/'report.json').write_text(json.dumps(report,indent=2));print(json.dumps(report),flush=True)
 
 if __name__=='__main__':

@@ -5,6 +5,15 @@ table. Canonical pages render the complete figure without JavaScript. The legacy
 SPA requests the same escaped renderer; tooltip enhancement needs no chart
 library, database write, account, tracking request or third-party browser API.
 
+With JavaScript enabled, **Download chart (SVG)** saves the displayed chart as a
+self-contained image with its title, units, full observation labels, visible
+source/date/licence details and report context. It works for bar, line and pie
+charts, including the retained Data Desk. The file contains static geometry and
+text, with no scripts, external fonts or images. Export uses the displayed
+rounding; use the existing CSV for exact reported precision. Metric-only stories
+do not show the chart download. Existing charts, tables and CSV remain available
+without JavaScript. This action needs no account or optional browser storage.
+
 ## Editorial workflow
 
 Add a dataset to `app/data/article-visuals.json` in a reviewed PR. It is bundled
