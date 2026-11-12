@@ -22,6 +22,17 @@
     "checked_at": "2026-11-10T18:00:46.792194+00:00",
     "photo": null
   },
+  "Jensen Huang": {
+    "checked_at": "2026-11-12T17:01:11.439299+00:00",
+    "photo": {
+      "image_credit": "Anderseidesvik",
+      "image_license": "cc-by-sa-4.0",
+      "image_license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "image_source": "wikimedia-commons",
+      "image_source_url": "https://commons.wikimedia.org/wiki/File:Jensen_Huang_Stanford_2026-04-30_010_(cropped).jpg",
+      "image_url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c8/Jensen_Huang_Stanford_2026-04-30_010_%28cropped%29.jpg/1280px-Jensen_Huang_Stanford_2026-04-30_010_%28cropped%29.jpg"
+    }
+  },
   "Narendra Modi": {
     "checked_at": "2026-11-11T07:51:09.782601+00:00",
     "photo": null
