@@ -114,6 +114,10 @@ Existing `/data/` URLs remain available for readers who saved them.
   or relative point changes are not index levels. Bare `AQI 344` remains supported.
   Sentence-ending punctuation is accepted; malformed numeric tokens are omitted.
 * Mixed units, mixed indicators, ranges and vague comparisons are not charted.
+  Threshold wording such as “turnout crossed 70%” or “exports could exceed
+  $50 billion” is not an exact observation. These thresholds are omitted from
+  cards/downloads and prevent an incomplete comparison of the remaining values;
+  the original wording stays in the article.
   Articles without suitable numerical data remain ordinary articles.
 
 Example article copy (retain the actual source and observation context):

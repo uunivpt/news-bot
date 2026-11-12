@@ -22,7 +22,10 @@ def run(output):
         ('explicit market level','Nifty 50 was 24,100.500012 points.'),
         ('AQI sentence','The AQI was 344.'),
         ('index component count','Sensex 30 stocks were discussed.'),
-        ('relative point change','Sensex was 200 points lower in early trade.')]
+        ('relative point change','Sensex was 200 points lower in early trade.'),
+        ('threshold turnout','Voter turnout crosses 66% in Bapatla.'),
+        ('mixed threshold turnout','Sri Sathya Sai district recorded 83% polling by 5 p.m.,Annamayya crossed 70% polling by 4 p.m., and Chittoor recorded 63% turnout by 3 p.m.'),
+        ('projected threshold','Exports could exceed $50 billion by 2030.')]
  rows={str(900001+i):{'id':900001+i,'title':'Isolated test: '+title,'article':text,'summary':'Source-linked fixture for article visual acceptance.','source_name':'Fixture source','url':'https://example.org/report','category':'india','status':'published','source_type':'rss','published_at':'2026-11-10T00:00:00Z'}for i,(title,text)in enumerate(texts)}
  documents={}
  for row in rows.values():
@@ -41,8 +44,8 @@ def run(output):
   context.route('**/*',intercept);context.add_init_script("localStorage.setItem('ph-consent-v1','essential')")
   page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
   selectors=['.data-bar','.story-slice','.story-point','.article-data-metric',None,None,None,None,
-             None,'.article-data-metric','.article-data-metric','.article-data-metric',None,None]
-  expected_counts=[3,2,3,1,0,0,0,0,0,1,1,1,0,0]
+             None,'.article-data-metric','.article-data-metric','.article-data-metric',None,None,None,'.article-data-metric',None]
+  expected_counts=[3,2,3,1,0,0,0,0,0,1,1,1,0,0,0,2,0]
   paths=list(documents);downloads={}
   for i,selector in enumerate(selectors):
    page.goto(base+paths[i],wait_until='networkidle')
@@ -58,6 +61,10 @@ def run(output):
     assert len(values)==expected_counts[i]
     assert all(row['source_url']=='https://example.org/report' and row['article_published_at']=='2026-11-10T00:00:00Z' for row in values)
     if i==2:assert values[0]['value']=='7.6001234'
+    if i==15:
+     assert [r['value'] for r in values]==['83','63']
+     assert page.locator('.story-numbers svg,.article-data-export').count()==0
+     assert texts[i][1] in page.locator('.body').inner_text()
     if i in [9,10,11]:
      expected={9:('0.5','%'),10:('24,100.500012','points'),11:('344','AQI')}[i]
      assert [(r['value'],r['unit'])for r in values]==[expected]
@@ -82,7 +89,10 @@ def run(output):
     assert texts[i][1] in page.locator('.body').inner_text()
     assert page.get_by_role('link',name='Read the original report',exact=True).get_attribute('href')=='https://example.org/report'
     assert page.locator('time.article-published').get_attribute('datetime').startswith('2026-11-10')
-  for identity in ['900006','900007','900008','900009','900013','900014']:
+    if i in [14,16]:
+     response=page.request.get(base+'/api/article-visuals/'+str(900001+i)+'/csv')
+     assert response.status==404 and 'content-disposition' not in response.headers
+  for identity in ['900006','900007','900008','900009','900013','900014','900015','900017']:
    page.goto(base+'/#/article/'+identity,wait_until='networkidle')
    page.wait_for_selector('.reader-tools')
    # Let the same-origin visual request finish before checking the SPA result.
@@ -95,6 +105,10 @@ def run(output):
    with page.expect_download() as event:page.locator('.story-numbers a[download]').click()
    exported=list(csv.DictReader(io.StringIO(Path(event.value.path()).read_text(encoding='utf-8-sig'))))
    assert [(r['value'],r['unit'])for r in exported]==[(value,unit)]
+  page.goto(base+'/#/article/900016',wait_until='networkidle');page.wait_for_selector('.story-numbers a[download]')
+  assert page.locator('.article-data-metric').count()==2 and page.locator('.story-numbers svg,.article-data-export').count()==0
+  with page.expect_download() as event:page.locator('.story-numbers a[download]').click()
+  assert [r['value'] for r in csv.DictReader(io.StringIO(Path(event.value.path()).read_text(encoding='utf-8-sig')))]==['83','63']
   page.goto(base+'/#/article/900002',wait_until='networkidle');page.wait_for_selector('.story-slice')
   assert page.locator('.story-slice').count()==2
   chart_export(page,page.locator('.story-numbers'),['Party A','Party B','55%','45%','Fixture source','https://example.org/report'],output/'chart-spa.svg')
@@ -118,9 +132,14 @@ def run(output):
   reader.goto(base+paths[8]);assert reader.locator('.article-data').count()==0
   reader.goto(base+paths[10]);assert reader.locator('.article-data-metric').count()==1
   with reader.expect_download() as event:reader.locator('.story-numbers a[download]').click()
-  assert '24,100.500012' in Path(event.value.path()).read_text(encoding='utf-8-sig');plain.close()
+  assert '24,100.500012' in Path(event.value.path()).read_text(encoding='utf-8-sig')
+  reader.goto(base+paths[14]);assert reader.locator('.article-data').count()==0
+  reader.goto(base+paths[15]);assert reader.locator('.article-data-metric').count()==2 and reader.locator('.story-numbers svg').count()==0
+  with reader.expect_download() as event:reader.locator('.story-numbers a[download]').click()
+  assert [r['value'] for r in csv.DictReader(io.StringIO(Path(event.value.path()).read_text(encoding='utf-8-sig')))]==['83','63']
+  plain.close()
   assert not errors,errors;browser.close()
- report={'passed':True,'checks':['article-specific regional comparison','complete-share pie','yearly line trend','AQI metric card','no data means no chart','320/390/1440px layouts','dark mode','keyboard, Escape and touch','source and exact tables','canonical no-JS reading','SPA article and cleanup','no unrelated homepage dashboard','ranges and qualified values omitted from canonical and SPA figures','original uncertainty, publication date and attribution preserved','CSV downloads preserve values, units, source and publication; canonical/SPA/no-JS agree','index names/counts and relative changes never become levels; exact levels and percentages retain units/precision across canonical/SPA/no-JS and CSV'],'chart_export':'attributed static SVG, keyboard download, no network/storage writes; canonical/SPA and metric-only/no-JS fallback verified','browser_errors':errors}
+ report={'passed':True,'checks':['article-specific regional comparison','complete-share pie','yearly line trend','AQI metric card','no data means no chart','320/390/1440px layouts','dark mode','keyboard, Escape and touch','source and exact tables','canonical no-JS reading','SPA article and cleanup','no unrelated homepage dashboard','ranges and qualified values omitted from canonical and SPA figures','original uncertainty, publication date and attribution preserved','CSV downloads preserve values, units, source and publication; canonical/SPA/no-JS agree','index names/counts and relative changes never become levels; exact levels and percentages retain units/precision across canonical/SPA/no-JS and CSV'],'thresholds':'crossed/crosses and projected exceed values omitted; exact cards/CSV, original copy/date/source and canonical/SPA/no-JS preserved','chart_export':'attributed static SVG, keyboard download, no network/storage writes; canonical/SPA and metric-only/no-JS fallback verified','browser_errors':errors}
  (output/'report.json').write_text(json.dumps(report,indent=2));print(json.dumps(report),flush=True)
 
 if __name__=='__main__':
