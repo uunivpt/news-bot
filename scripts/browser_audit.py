@@ -1158,6 +1158,66 @@ def run(base, output,admin_fixture=False):
                 isolated.close()
         check('saved headline search and sorting are local, accessible, reversible and synchronized across tabs', saved_search_and_sort)
 
+        def saved_bookmark_export():
+            from bs4 import BeautifulSoup
+            isolated=browser.new_context(viewport={'width':390,'height':900},service_workers='block')
+            isolated.route('**/*',lambda route:route.continue_() if route.request.url.startswith(base+'/') else route.abort())
+            rows=[{'url':'/india/777000000001?token=fixture-secret','title':'Saved & <script>window.savedInjected=true</script> title'},
+                  {'url':'/#/article/777000000002','title':'महाराष्ट्र निवडणूक निकाल'},
+                  {'url':'/hindi/777000000003','title':'हिन्दी समाचार'},
+                  {'url':'https://evil.example/india/42','title':'Unsafe external'},
+                  {'url':'/admin/','title':'Private page'}]
+            try:
+                reader=isolated.new_page();reader.on('pageerror',lambda error:errors.append(str(error)))
+                reader.goto(base+'/saved.html',wait_until='networkidle')
+                exporter=reader.get_by_role('button',name='Export bookmarks',exact=True)
+                require(exporter.is_disabled(),'Empty/disallowed saved list can be exported')
+                reader.evaluate("rows=>{localStorage.setItem('ph-consent-v1','preferences');localStorage.setItem('ph-reading-list-v1',JSON.stringify(rows));}",rows)
+                reader.reload(wait_until='networkidle');require(exporter.is_enabled(),'Saved links cannot be exported')
+                raw=reader.evaluate("localStorage.getItem('ph-reading-list-v1')")
+                reader.locator('#savedQuery').fill('nothing matches this fixture')
+                require(reader.locator('.saved-story').count()==0 and exporter.is_enabled(),'Filtering hid the backup of saved links')
+                requests=[]
+                reader.on('request',lambda request:requests.append(request.url) if request.url.startswith(('http://','https://')) else None)
+                exporter.focus()
+                with reader.expect_download() as event:reader.keyboard.press('Enter')
+                download=event.value;require(download.suggested_filename=='politicshub-saved-stories.html','Unexpected bookmark filename')
+                content=Path(download.path()).read_text(encoding='utf-8');document=BeautifulSoup(content,'html.parser')
+                links=document.select('a')
+                require([link['href'] for link in links]==['https://www.politicshub.in/india/777000000001','https://www.politicshub.in/#/article/777000000002','https://www.politicshub.in/hindi/777000000003'],'Export links were private, external or missing')
+                require([link.get_text() for link in links]==[row['title'] for row in rows[:3]],'Export lost Unicode or interpreted headline markup')
+                require(not document.select('script,img,iframe,form') and 'fixture-secret' not in content,'Bookmark file contains executable/private data')
+                require('3 saved links' in reader.locator('#readerNotice').inner_text(),'Export count reflects filters rather than the complete list')
+                require(exporter.evaluate('(node)=>node===document.activeElement'),'Keyboard export lost focus')
+                require(reader.evaluate("localStorage.getItem('ph-reading-list-v1')")==raw,'Export rewrote the saved list')
+                require(reader.locator('#savedQuery').input_value()=='nothing matches this fixture','Export reset active search')
+                require(not requests,'Export sent a network request')
+                target=output/'saved-bookmarks.html';target.write_text(content,encoding='utf-8')
+                plain=browser.new_context(java_script_enabled=False)
+                plain.route('**/*',lambda route:route.continue_() if route.request.url.startswith('file:') else route.abort())
+                try:
+                    view=plain.new_page();view.goto(target.resolve().as_uri())
+                    require(view.locator('a').count()==3 and view.locator('a').nth(1).inner_text()==rows[1]['title'],'Standalone bookmark file cannot be read offline')
+                finally:plain.close()
+                reader.evaluate("()=>{window.savedBookmarkURL=URL.createObjectURL;URL.createObjectURL=()=>{throw Error('blocked')};}")
+                exporter.click();require('could not prepare' in reader.locator('#readerNotice').inner_text(),'Export failure lacks feedback')
+                require(reader.evaluate("localStorage.getItem('ph-reading-list-v1')")==raw,'Failed export damaged saved links')
+                reader.evaluate('()=>{URL.createObjectURL=window.savedBookmarkURL;}')
+                with reader.expect_download():exporter.click()
+                for width in [320,390,1440]:
+                    reader.set_viewport_size({'width':width,'height':900})
+                    for theme in ['light','dark']:
+                        reader.evaluate('theme=>document.documentElement.dataset.theme=theme',theme)
+                        require(reader.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),'Bookmark export overflow at '+str(width))
+                other=isolated.new_page();other.goto(base+'/saved.html',wait_until='networkidle')
+                other.evaluate("localStorage.setItem('ph-consent-v1','essential')")
+                reader.wait_for_function("()=>document.querySelector('[data-reader-export]').disabled")
+                require(reader.locator('#savedConsent').is_visible(),'Withdrawal did not disable bookmark export')
+                reader.locator('[data-reader-export]').evaluate('(node)=>{node.disabled=false;node.click()}')
+                require('Allow preferences' in reader.locator('#readerNotice').inner_text(),'Export ignored current consent at the time of click')
+            finally:isolated.close()
+        check('saved bookmarks export all safe links without network/storage writes and respects consent, failure and offline file reading',saved_bookmark_export)
+
         def saved_storage_failures():
             seed = [{'url': '/india/123456789012', 'title': 'Browser storage fixture', 'savedAt': 1}]
             for action in ('remove', 'clear', 'consent'):
@@ -1556,6 +1616,10 @@ def run(base, output,admin_fixture=False):
                 offline_page.locator('#savedOrder').select_option('title')
                 require(offline_page.locator('.saved-story h2 a').first.inner_text() == seed[1]['title'], 'Offline saved sorting failed')
                 require(offline_page.evaluate("localStorage.getItem('ph-reading-list-v1')") == raw, 'Offline filtering changed the stored list')
+                with offline_page.expect_download() as event:offline_page.get_by_role('button',name='Export bookmarks',exact=True).click()
+                content=Path(event.value.path()).read_text(encoding='utf-8')
+                require(content.count('<DT><A ')==2 and 'https://www.politicshub.in/' in content,'First offline Saved visit could not export its links')
+                require(offline_page.evaluate("localStorage.getItem('ph-reading-list-v1')")==raw,'Offline export changed the list')
             finally:
                 offline.set_offline(False)
         check('saved search and sorting work offline before the first Saved-page visit', offline_saved_search)

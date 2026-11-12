@@ -64,8 +64,8 @@
     if (wrapper) wrapper.remove();
   },true);
   // Load local reading tools after the shared chrome; dependency order is explicit.
-  const storeScript=document.createElement('script');storeScript.src='/assets/reading-list.js?v=savedsearch1';
-  storeScript.onload=()=>{const readerScript=document.createElement('script');readerScript.src='/assets/reader.js?v=reference1';document.head.append(readerScript)};
+  const storeScript=document.createElement('script');storeScript.src='/assets/reading-list.js?v=bookmarkexport1';
+  storeScript.onload=()=>{const readerScript=document.createElement('script');readerScript.src='/assets/reader.js?v=bookmarkexport1';document.head.append(readerScript)};
   document.head.append(storeScript);
   // Site-preference consent for non-SPA pages; advertising consent is separately
   // handled by the Google-certified CMP, not by these buttons.

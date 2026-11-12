@@ -1001,7 +1001,7 @@ def _article_html(row):
 <link rel="icon" href="/favicon.svg"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/assets/site.css?v=phui23"><link rel="stylesheet" href="/assets/share.css?v=phshare2">
 <script type="application/ld+json">{json_ld}</script>
 {'<link rel="stylesheet" data-article-data-style href="/assets/article-data.css?v=4"><script type="module" src="/assets/article-data.js?v=4"></script>' if visual_html else ""}
-<link rel="stylesheet" href="/assets/polish.css?v=phui30"><script src="/assets/ui.js?v=reference1" defer></script><script src="/assets/share.js?v=phshare2" defer></script></head><body>
+<link rel="stylesheet" href="/assets/polish.css?v=phui30"><script src="/assets/ui.js?v=bookmarkexport1" defer></script><script src="/assets/share.js?v=phshare2" defer></script></head><body>
 <header id="hd"><div class="top"><button class="ib burger" id="bg" aria-label="Open menu">☰</button><a class="logo" href="/"><img id="lg" src="/favicon.svg" alt="PoliticsHub.in"></a><div class="acts"><a class="ib" href="/" aria-label="Home">⌂</a><a class="ib" href="/about.html" aria-label="About">i</a></div></div></header>
 <main class="wrap"><article class="art" data-k="{html.escape(category.lower())}">
 <div class="ah"><span class="chip">{html.escape(category)}</span><h1>{html.escape(title)}</h1>{lead_html}

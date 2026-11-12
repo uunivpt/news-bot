@@ -65,7 +65,10 @@ keyboard and responsive checks.
 `/sources.html` links to original publishers and official records. `/saved.html`
 stores up to 100 article links on the reader's browser after optional preferences
 are allowed. Readers can search saved headlines and sort by save time or headline;
-filtering stays on this browser and does not rewrite the list. Article pages include text-size controls, a print layout and the
+filtering stays on this browser and does not rewrite the list. Export bookmarks
+downloads all saved links as a browser-compatible bookmark file, including links
+hidden by filters. It contains titles and public reading URLs, not article bodies
+or publication dates, and does not change the saved list. Article pages include text-size controls, a print layout and the
 existing share sheet. Copy reference collects the displayed headline, source,
 publication label, reading link and available original-report link, with a
 selectable-text fallback if clipboard access is unavailable. It does not copy

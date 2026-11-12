@@ -75,3 +75,41 @@ test('saved sorting uses save time or natural headline order without mutating st
  assert.equal(JSON.stringify(items),copy);assert.equal(storage.getItem(KEY),before);
  assert.deepEqual(select([], 'anything', 'title'),[]);
 });
+
+test('bookmark export uses portable public links and escapes Unicode headlines as text',()=>{
+ const {bookmarks}=require('../public/assets/reading-list.js');
+ const rows=[{url:'/india/42?token=fixture-private',title:'Budget & policy <script>alert(1)</script>'},
+  {url:'/#/article/17',title:'महाराष्ट्र निवडणूक निकाल'},
+  {url:'/hindi/57',title:'हिन्दी समाचार'}];
+ const file=bookmarks(rows,'https://preview.example');
+ assert.equal(file.count,3);
+ assert.match(file.html,/^<!DOCTYPE NETSCAPE-Bookmark-file-1>/);
+ assert.match(file.html,/charset=UTF-8/);
+ assert.match(file.html,/HREF="https:\/\/www\.politicshub\.in\/india\/42"/);
+ assert.match(file.html,/HREF="https:\/\/www\.politicshub\.in\/#\/article\/17"/);
+ assert.match(file.html,/Budget &amp; policy &lt;script&gt;/);
+ assert.match(file.html,/महाराष्ट्र निवडणूक निकाल/);
+ assert.doesNotMatch(file.html,/<script|fixture-private|preview\.example|ADD_DATE/i);
+});
+
+test('bookmark export rejects private/external routes and omits article/source/date data',()=>{
+ const {bookmarks}=require('../public/assets/reading-list.js');
+ const good={...story(),source:'private-source-marker',article:'article-body-marker',published_at:'publication-date-marker'};
+ const rows=[good,...['javascript:alert(1)','/admin/','/newsletter/confirm?token=fixture',
+  'https://evil.example/india/42','https://user:fixture@www.politicshub.in/india/42'].map(url=>({url,title:'Unsafe'}))];
+ const before=JSON.stringify(rows),file=bookmarks(rows,origin);
+ assert.equal(file.count,1);assert.equal(JSON.stringify(rows),before);
+ assert.doesNotMatch(file.html,/private-source-marker|article-body-marker|publication-date-marker|Unsafe|evil\.example/);
+ assert.deepEqual(bookmarks([],origin),{html:'',count:0});
+ assert.deepEqual(bookmarks(null,origin),{html:'',count:0});
+});
+
+test('bookmark export is deduplicated and bounded without changing the reading list',()=>{
+ const {bookmarks}=require('../public/assets/reading-list.js');
+ const rows=[story(1),story(1),...Array.from({length:120},(_,i)=>story(i+2))];
+ const original=JSON.stringify(rows),file=bookmarks(rows,origin);
+ assert.equal(file.count,99);assert.equal((file.html.match(/<DT><A /g)||[]).length,99);
+ assert.equal(JSON.stringify(rows),original);
+ const storage=memory(),list=create(storage,origin,()=>false);storage.setItem(KEY,JSON.stringify(rows));
+ assert.equal(bookmarks(list.read(),origin).count,0);assert.equal(storage.getItem(KEY),original);
+});
