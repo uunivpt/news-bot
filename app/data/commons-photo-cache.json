@@ -37,6 +37,17 @@
     "checked_at": "2026-11-11T07:51:09.782601+00:00",
     "photo": null
   },
+  "Nvidia": {
+    "checked_at": "2026-11-13T11:51:08.207893+00:00",
+    "photo": {
+      "image_credit": "Coolcaesar",
+      "image_license": "cc-by-sa-4.0",
+      "image_license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "image_source": "wikimedia-commons",
+      "image_source_url": "https://commons.wikimedia.org/wiki/File:2788-2888_San_Tomas_Expwy.jpg",
+      "image_url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/75/2788-2888_San_Tomas_Expwy.jpg/1280px-2788-2888_San_Tomas_Expwy.jpg"
+    }
+  },
   "Pawan Kalyan": {
     "checked_at": "2026-11-10T18:00:46.792194+00:00",
     "photo": null
