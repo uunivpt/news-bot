@@ -116,5 +116,16 @@
   "Vladimir Putin": {
     "checked_at": "2026-11-12T11:01:14.042445+00:00",
     "photo": null
+  },
+  "White House": {
+    "checked_at": "2026-11-14T06:50:34.280151+00:00",
+    "photo": {
+      "image_credit": "(top) Cezary p (bottom) MattWade",
+      "image_license": "cc-by-sa-4.0",
+      "image_license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "image_source": "wikimedia-commons",
+      "image_source_url": "https://commons.wikimedia.org/wiki/File:White_House_north_and_south_sides.jpg",
+      "image_url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1d/White_House_north_and_south_sides.jpg/1280px-White_House_north_and_south_sides.jpg"
+    }
   }
 }
