@@ -18,7 +18,7 @@
         "url": "https://data.worldbank.org/indicator/NY.GDP.MKTP.KD.ZG?locations=IN",
         "data_url": "https://api.worldbank.org/v2/country/IND/indicator/NY.GDP.MKTP.KD.ZG?format=json&per_page=100&source=2",
         "updated_on": "2026-11-11",
-        "retrieved_on": "2026-11-13",
+        "retrieved_on": "2026-11-14",
         "license": "CC BY 4.0",
         "license_url": "https://data.worldbank.org/summary-terms-of-use"
       },
@@ -113,7 +113,7 @@
         "url": "https://data.worldbank.org/indicator/SL.UEM.TOTL.ZS?locations=IN",
         "data_url": "https://api.worldbank.org/v2/country/IND/indicator/SL.UEM.TOTL.ZS?format=json&per_page=100&source=2",
         "updated_on": "2026-11-11",
-        "retrieved_on": "2026-11-13",
+        "retrieved_on": "2026-11-14",
         "license": "CC BY 4.0",
         "license_url": "https://data.worldbank.org/summary-terms-of-use"
       },
