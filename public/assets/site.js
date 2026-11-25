@@ -151,7 +151,7 @@ function safeSourceUrl(value){try{const url=new URL(value,location.origin);retur
 function newsPhoto(item){
  const src=String(item?.image||item?.image_url||'').trim();
  if(!src||src.length>2000)return '';
- if(/^\/api\/(?:image|x-card)\/[1-9]\d*$/.test(src))return src;
+ if(/^\/api\/(?:image|x-card|poster)\/[1-9]\d*$/.test(src))return src;
  if(!/^https:\/\//i.test(src))return '';
  let url;
  try{url=new URL(src)}catch(_){return ''}
