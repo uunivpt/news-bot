@@ -999,15 +999,10 @@ def _article_html(row):
  photo_url=_public_image_path(row)
  photo_html=""
  if photo_url:
-  commons=valid_photo(row)
-  source_link=_safe_source_url(row.get("image_source_url")) if commons else ""
-  license_link=_safe_source_url(row.get("image_license_url")) if commons else ""
-  caption=("Illustrative archive photo (not the reported event). " if commons else "Photo: ")
-  caption+=html.escape(str(row.get("image_credit") or "Original source"))
-  caption+=" · "+html.escape(str(row.get("image_license") or "Licensed"))
-  if source_link:caption+=" · <a target='_blank' rel='noopener noreferrer' href='"+html.escape(source_link,quote=True)+"'>Photo source</a>"
-  if license_link:caption+=" · <a target='_blank' rel='noopener noreferrer' href='"+html.escape(license_link,quote=True)+"'>License</a>"
-  photo_html="<figure class='ahero'><img data-news-photo src='"+html.escape(photo_url,quote=True)+"' alt='"+("Illustrative archive photo, not this event" if commons else "Licensed source photograph")+"' loading='eager' decoding='async'><figcaption class='ph-photo-credit'>"+caption+"</figcaption></figure>"
+  caption="PoliticsHub editorial poster · News source: "+html.escape(str(row.get("source_name") or "PoliticsHub"))
+  if row.get("image_credit") and row.get("image_license"):
+   caption+=" · Visual credit: "+html.escape(str(row.get("image_credit")))
+  photo_html="<figure class='ahero'><img data-news-photo src='"+html.escape(photo_url,quote=True)+"' alt='PoliticsHub editorial poster: "+html.escape(title,quote=True)+"' loading='eager' decoding='async'><figcaption class='ph-photo-credit'>"+caption+"</figcaption></figure>"
 
  return f"""<!doctype html>
 <html lang="{language}"><head>
