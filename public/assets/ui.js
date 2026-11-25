@@ -81,7 +81,7 @@
       banner.className = 'privacy-consent';
       banner.setAttribute('role', 'region');
       banner.setAttribute('aria-label', 'Site preference choices');
-      banner.innerHTML = '<div><strong>Site preferences</strong><p>Essential storage keeps your choice. Optional storage saves reading preferences and bookmarked stories. Google advertising consent is separate and uses its own privacy message where available.</p><a href="/privacy.html">Privacy Policy</a> · <a href="/cookies.html">Cookie Policy</a></div><div class="privacy-actions"><button type="button" class="btn secondary" data-site-preference="essential">Essential only</button><button type="button" class="btn" data-site-preference="preferences">Allow preferences</button></div>';
+      banner.innerHTML = '<div><strong>Site preferences</strong><p>Essential storage keeps your choice. Optional storage saves reading preferences and bookmarked stories. Google advertising consent is separate and uses its own privacy message where available.</p><a href="/privacy.html">Privacy Policy</a> · <a href="/cookies.html">Cookie Policy</a></div><div class="privacy-actions"><button type="button" class="btn secondary" data-site-preference="essential">Essential Only</button><button type="button" class="btn secondary" data-site-preference="essential">Reject All</button><button type="button" class="btn" data-site-preference="preferences">Allow All</button></div>';
       document.body.append(banner);
       const dismissIfChosen = () => {
         try { if (['essential','preferences'].includes(localStorage.getItem('ph-consent-v1'))) banner.remove(); } catch (_) {}
