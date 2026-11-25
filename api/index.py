@@ -709,14 +709,14 @@ def _is_source_supplied_image(row):
 
 
 def _public_image_path(row):
- from app.commons_photos import valid_photo
- if valid_photo(row):return str(row.get("image_url"))
+ # Every published story gets a branded editorial poster. The poster renderer
+ # uses the bot's already-collected, rights-cleared source photo when available;
+ # otherwise it creates a typography-led branded card without inventing a photo.
  if isinstance(row,dict) and row.get("source_type")=="x" and row.get("status")=="published":
   try:return "/api/x-card/"+str(int(row.get("id")))
   except (TypeError,ValueError):return ""
- if not _is_source_supplied_image(row):return ""
- item_id=row.get("id") if isinstance(row,dict) else None
- try:return "/api/image/"+str(int(item_id))
+ if not isinstance(row,dict) or row.get("status")!="published":return ""
+ try:return "/api/poster/"+str(int(row.get("id")))
  except (TypeError,ValueError):return ""
 
 
@@ -734,6 +734,29 @@ def x_post_quote_card(item_id):
   image=render_x_quote_card(dict(row))
   return Response(image,mimetype="image/jpeg",headers={"Cache-Control":"public, max-age=3600"})
  finally:database.close()
+
+
+@app.get("/api/poster/<int:item_id>")
+def public_editorial_poster(item_id):
+ database=db()
+ try:
+  row=database.get_by_id(int(item_id),"published")
+  row=dict(row) if row else None
+ finally:
+  database.close()
+ if not row:return Response(status=404)
+ try:
+  from pathlib import Path
+  from app.editorial_poster import render_editorial_poster
+  target=Path("/tmp")/("politicshub_editorial_"+str(int(item_id))+".jpg")
+  render_editorial_poster(row,output_path=target)
+  response=Response(target.read_bytes(),mimetype="image/jpeg")
+  response.headers["Cache-Control"]="public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800"
+  response.headers["X-Content-Type-Options"]="nosniff"
+  return response
+ except Exception as exc:
+  app.logger.warning("Editorial poster unavailable for story %s: %s",item_id,type(exc).__name__)
+  return Response(status=404)
 
 
 @app.get("/api/image/<int:item_id>")
