@@ -118,8 +118,11 @@ def render_editorial_poster(row: dict, output_path: str | Path | None = None) ->
     summary = _sanitize(row.get("bot_summary") or row.get("summary"))
     source = _sanitize(row.get("source_name") or row.get("source") or "Original report")
     category = _sanitize(row.get("category") or "India").upper()
-    if len(title.split()) < 4 or len(summary) < 55:
-        raise ValueError("Editorial poster blocked: incomplete headline or source summary")
+    if not title:
+        raise ValueError("Editorial poster blocked: missing headline")
+    # Short source summaries are valid; never invent facts to fill the layout.
+    if len(summary) > 420:
+        summary = summary[:417].rsplit(" ", 1)[0] + "..."
     canvas = Image.new("RGB", (WIDTH, HEIGHT), BLACK)
     d = ImageDraw.Draw(canvas)
     _draw_brand(d)
