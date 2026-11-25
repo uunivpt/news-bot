@@ -51,5 +51,5 @@ test('layout removes misleading generated media and checks broken or small photo
 
 test('published story posters are served through the branded poster endpoint',()=>{
  assert.match(fs.readFileSync('api/index.py','utf8'),/@app\.get\("\/api\/poster\/<int:item_id>"\)/);
- assert.match(site,/api\\\/(?:image\|x-card\|poster)/);
+ assert.match(site,/\\/api\\/(?:image|x-card|poster)\\//);
 });
