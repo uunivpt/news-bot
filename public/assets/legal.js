@@ -18,7 +18,7 @@
       return;
     }
     document.querySelectorAll('[data-consent-error]').forEach(node => node.remove());
-    button.textContent = mode === 'preferences' ? 'Preferences allowed' : 'Essential only selected';
+    button.textContent = mode === 'preferences' ? 'Allow All selected' : (button.textContent.trim() === 'Reject All' ? 'Reject All selected' : 'Essential Only selected');
     document.querySelectorAll('[data-consent-choice]').forEach(el => el.setAttribute('aria-pressed', String(el === button)));
   });
   function bind(form, message, method, data) {
