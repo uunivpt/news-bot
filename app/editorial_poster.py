@@ -32,7 +32,11 @@ def _font(size: int, bold: bool = True):
                 return ImageFont.truetype(str(path), size)
             except OSError:
                 pass
-    raise RuntimeError("Editorial poster requires a readable TrueType font")
+    # Minimal fallback keeps poster rendering available on slim cloud images.
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:
+        return ImageFont.load_default()
 
 
 def _sanitize(value: object) -> str:
@@ -58,15 +62,22 @@ def _wrap(text: str, font, width: int) -> list[str]:
 
 
 def _fit_title(title: str, max_width: int, max_height: int):
-    for size in range(98, 47, -2):
+    for size in range(98, 34, -2):
         font = _font(size)
         lines = _wrap(title, font, max_width)
-        if len(lines) <= 5 and len(lines) * (size + 11) <= max_height and all(
+        line_height = size + 8
+        if len(lines) <= 6 and len(lines) * line_height <= max_height and all(
             ImageDraw.Draw(Image.new("RGB", (1, 1))).textbbox((0, 0), line, font=font)[2] <= max_width
             for line in lines
         ):
             return font, lines
-    raise ValueError("Headline too long for a readable editorial graphic")
+    # Keep the image available even for unusually long source headlines.
+    font = _font(34)
+    words = title.split()
+    while words and len(_wrap(" ".join(words), font, max_width)) > 6:
+        words.pop()
+    lines = _wrap(" ".join(words).rstrip(" .,:;") + ("..." if words else ""), font, max_width)
+    return font, lines
 
 
 def _source_image(row: dict):
