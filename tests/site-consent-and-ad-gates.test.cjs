@@ -9,6 +9,7 @@ const monetization=fs.readFileSync('app/monetization.py','utf8');
 
 test('consent controls remain user-accessible after making a choice',()=>{
   assert.match(html,/href="\/cookies\.html" data-open-consent>Site preferences/);
+  assert.match(html,/data-consent-choice="essential">Reject All<\/button>/);
   assert.match(site,/\[data-open-consent\]/);
   assert.match(site,/function showConsentBanner\(force=false\)/);
   assert.match(staticUI,/const showSitePreferences = \(\) =>/);
