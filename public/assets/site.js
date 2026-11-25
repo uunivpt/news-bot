@@ -44,7 +44,7 @@ function showConsentBanner(force=false){
   return;
  }
  const box=document.createElement('section');box.id='privacyConsent';box.className='privacy-consent';box.setAttribute('role','region');box.setAttribute('aria-label','Privacy choices');
- box.innerHTML='<div><strong>Site preferences</strong><p>PoliticsHub.in uses essential storage for your privacy choice. Optional storage keeps theme, article text size and saved-story links. This does not grant advertising consent. Google manages separate advertising privacy messages where applicable.</p><a href="/cookies.html">Cookie Policy</a> · <a href="/privacy.html">Privacy Policy</a></div><div class="privacy-actions"><button type="button" class="btn secondary" data-consent-choice="essential">Essential Only</button><button type="button" class="btn secondary" data-consent-choice="essential">Reject All</button><button type="button" class="btn" data-consent-choice="preferences">Allow All</button></div>';
+ box.innerHTML='<div><strong>Site preferences</strong><p>PoliticsHub.in uses essential storage for your privacy choice. Optional storage keeps theme, article text size and saved-story links. This does not grant advertising consent. Google manages separate advertising privacy messages where applicable.</p><a href="/cookies.html">Cookie Policy</a> · <a href="/privacy.html">Privacy Policy</a></div><div class="privacy-actions"><button type="button" class="btn secondary" data-consent-choice="essential">Essential Only</button><button type="button" class="btn secondary" data-consent-choice="essential">Reject All</button><button type="button" class="btn" data-consent-choice="preferences">Allow preferences</button></div>';
  document.body.append(box);
 }
 document.addEventListener('click',e=>{
